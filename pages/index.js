@@ -3,10 +3,13 @@ import mapboxgl from 'mapbox-gl';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
+const WINTER_STYLE_URL = 'mapbox://styles/mapbox/light-v11';
 const DESTINATIONS_SOURCE_ID = 'destinations';
 const DESTINATIONS_LAYER_ID = 'destinations-layer';
 const TRAILS_SOURCE_ID = 'trails';
 const TRAILS_LAYER_ID = 'trails-layer';
+const DEM_SOURCE_ID = 'mapbox-dem';
+const BUILDINGS_LAYER_ID = '3d-buildings';
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -73,6 +76,63 @@ function getDestinationSummary(feature) {
   };
 }
 
+function applyThreeDimensionalMode(map, isEnabled) {
+  if (!map.getSource(DEM_SOURCE_ID)) {
+    map.addSource(DEM_SOURCE_ID, {
+      type: 'raster-dem',
+      url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+      tileSize: 512,
+      maxzoom: 14,
+    });
+  }
+
+  if (isEnabled) {
+    map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.2 });
+    map.setFog({
+      color: '#f2f6fb',
+      'high-color': '#d9e8f7',
+      'horizon-blend': 0.05,
+      'space-color': '#edf4fb',
+      'star-intensity': 0,
+    });
+
+    if (!map.getLayer(BUILDINGS_LAYER_ID)) {
+      const labelLayer = map
+        .getStyle()
+        .layers?.find((layer) => layer.type === 'symbol' && layer.layout?.['text-field']);
+
+      map.addLayer(
+        {
+          id: BUILDINGS_LAYER_ID,
+          source: 'composite',
+          'source-layer': 'building',
+          filter: ['==', ['get', 'extrude'], 'true'],
+          type: 'fill-extrusion',
+          minzoom: 12,
+          paint: {
+            'fill-extrusion-color': '#dbe7ef',
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'min_height'],
+            'fill-extrusion-opacity': 0.45,
+          },
+        },
+        labelLayer?.id
+      );
+    }
+
+    map.easeTo({ pitch: 58, bearing: 18, duration: 900 });
+    return;
+  }
+
+  if (map.getLayer(BUILDINGS_LAYER_ID)) {
+    map.removeLayer(BUILDINGS_LAYER_ID);
+  }
+
+  map.setTerrain(null);
+  map.setFog(null);
+  map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
+}
+
 export default function Home() {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
@@ -85,6 +145,7 @@ export default function Home() {
   const [destinationsGeoJson, setDestinationsGeoJson] = useState(null);
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrail, setSelectedTrail] = useState(null);
+  const [isThreeDimensional, setIsThreeDimensional] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
@@ -101,7 +162,7 @@ export default function Home() {
 
     const map = new mapboxgl.Map({
       container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/outdoors-v12',
+      style: WINTER_STYLE_URL,
       center: DEFAULT_CENTER,
       zoom: 7,
     });
@@ -133,6 +194,16 @@ export default function Home() {
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map) {
+      return;
+    }
+
+    applyThreeDimensionalMode(map, isThreeDimensional);
+  }, [mapReady, isThreeDimensional]);
 
   useEffect(() => {
     if (!mapReady) {
@@ -341,6 +412,20 @@ export default function Home() {
           Browse active ski destinations first, then load trails on demand for a selected area.
         </p>
 
+        <section className="detail-card detail-card-compact">
+          <p className="detail-label">Map mode</p>
+          <p>Winter base map is the default. Enable 3D only when you want terrain depth.</p>
+          <label className="toggle-row" htmlFor="three-d-toggle">
+            <span>3D terrain and buildings</span>
+            <input
+              id="three-d-toggle"
+              type="checkbox"
+              checked={isThreeDimensional}
+              onChange={(event) => setIsThreeDimensional(event.target.checked)}
+            />
+          </label>
+        </section>
+
         <label className="field-label" htmlFor="destination-select">
           Destination
         </label>
@@ -509,8 +594,30 @@ export default function Home() {
           color: #284638;
         }
 
+        .detail-card-compact p:last-of-type {
+          margin-top: 0.35rem;
+        }
+
         .detail-card :global(p + p) {
           margin-top: 0.25rem;
+        }
+
+        .toggle-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-top: 0.75rem;
+          font-size: 0.95rem;
+          font-weight: 600;
+          color: #234236;
+        }
+
+        .toggle-row input {
+          width: 1.1rem;
+          height: 1.1rem;
+          accent-color: #1f7f59;
+          flex: 0 0 auto;
         }
 
         .status-error {
