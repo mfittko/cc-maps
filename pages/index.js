@@ -80,6 +80,8 @@ const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const GEOLOCATE_MAX_ZOOM = 13.5;
 const TERRAIN_SAMPLE_SPACING_METERS = 25;
+// NEXT_PUBLIC_* values are compiled into the client bundle, so choosing the
+// real or mock Mapbox implementation at module load is intentional.
 const isMapboxMockEnabled = process.env.NEXT_PUBLIC_ENABLE_MAPBOX_MOCK === '1';
 const mapboxApi = isMapboxMockEnabled ? mapboxglMock : mapboxgl;
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)

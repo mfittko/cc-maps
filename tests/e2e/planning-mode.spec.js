@@ -93,7 +93,7 @@ async function stubAppApi(page) {
 test.describe('planning mode interactions', () => {
   test('desktop quick action opens and closes planning mode with desktop hint text', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubAppApi(page);
     await page.goto('/');
 
@@ -104,7 +104,10 @@ test.describe('planning mode interactions', () => {
 
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
     await expect(page.getByText('Ctrl+click a trail section to add it to your route.')).toBeVisible();
-    await page.screenshot({ path: 'test-results/planning-mode-desktop.png', fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('planning-mode-desktop.png'),
+      fullPage: true,
+    });
 
     await page.getByRole('button', { name: 'Exit planning mode' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
