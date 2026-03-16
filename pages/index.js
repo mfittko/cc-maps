@@ -1388,6 +1388,26 @@ export default function Home() {
       } else {
         map.addLayer(suggestedTrailsLayer);
       }
+
+      map.on('click', SUGGESTED_TRAILS_LAYER_ID, (event) => {
+        const feature = event.features?.[0];
+        const destinationId = feature?.properties?.destinationid;
+
+        if (!destinationId) {
+          return;
+        }
+
+        skipNextTrailFitRef.current = true;
+        updateSelectedDestination(String(destinationId), { manual: true });
+      });
+
+      map.on('mouseenter', SUGGESTED_TRAILS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+
+      map.on('mouseleave', SUGGESTED_TRAILS_LAYER_ID, () => {
+        map.getCanvas().style.cursor = '';
+      });
     }
 
     if (map.getLayer(SUGGESTED_TRAILS_LAYER_ID)) {
