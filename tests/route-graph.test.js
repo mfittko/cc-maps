@@ -512,6 +512,7 @@ describe('buildRouteGraph — disambiguation suffix for shared node pairs', () =
     const unsuffixed = ids.filter((id) => !/:\d+$/.test(id));
     expect(suffixed).toHaveLength(1);
     expect(unsuffixed).toHaveLength(1);
+    expect(suffixed[0].endsWith(':2')).toBe(true);
   });
 });
 
