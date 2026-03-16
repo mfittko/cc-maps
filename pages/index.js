@@ -3,7 +3,7 @@ import mapboxgl from 'mapbox-gl';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
-const WINTER_STYLE_URL = 'mapbox://styles/mapbox/light-v11';
+const WINTER_STYLE_URL = 'mapbox://styles/mapbox/outdoors-v12';
 const DESTINATIONS_SOURCE_ID = 'destinations';
 const DESTINATIONS_LAYER_ID = 'destinations-layer';
 const TRAILS_SOURCE_ID = 'trails';
@@ -74,6 +74,66 @@ function getDestinationSummary(feature) {
     prepSymbol: feature.properties.prepsymbol,
     coordinates: feature.geometry?.coordinates || DEFAULT_CENTER,
   };
+}
+
+function setLayerPaintIfPresent(map, layerId, property, value) {
+  const layer = map.getLayer(layerId);
+
+  if (!layer) {
+    return;
+  }
+
+  try {
+    map.setPaintProperty(layerId, property, value);
+  } catch (error) {
+    console.warn(`Skipped winter paint override for ${layerId}.${property}`, error);
+  }
+}
+
+function applyWinterBasemap(map) {
+  const layers = map.getStyle().layers || [];
+
+  layers.forEach((layer) => {
+    const layerId = layer.id;
+
+    if (layer.type === 'background') {
+      setLayerPaintIfPresent(map, layerId, 'background-color', '#eef4f8');
+    }
+
+    if (layer.type === 'fill' && /(park|forest|wood|grass|landuse|nature|wetland)/i.test(layerId)) {
+      setLayerPaintIfPresent(map, layerId, 'fill-color', '#e7eff2');
+      setLayerPaintIfPresent(map, layerId, 'fill-opacity', 0.85);
+    }
+
+    if (layer.type === 'fill' && /(snow|glacier|ice|water)/i.test(layerId)) {
+      setLayerPaintIfPresent(map, layerId, 'fill-color', layerId.includes('water') ? '#c8dced' : '#f7fbfe');
+      setLayerPaintIfPresent(map, layerId, 'fill-opacity', layerId.includes('water') ? 0.9 : 0.95);
+    }
+
+    if (layer.type === 'line' && /(contour|terrain|hillshade)/i.test(layerId)) {
+      setLayerPaintIfPresent(map, layerId, 'line-color', '#b7c6cf');
+      setLayerPaintIfPresent(map, layerId, 'line-opacity', 0.45);
+    }
+
+    if (layer.type === 'line' && /(path|road|street|track)/i.test(layerId)) {
+      setLayerPaintIfPresent(map, layerId, 'line-color', '#ffffff');
+      setLayerPaintIfPresent(map, layerId, 'line-opacity', 0.5);
+    }
+  });
+
+  if (map.getLayer('hillshade')) {
+    setLayerPaintIfPresent(map, 'hillshade', 'hillshade-highlight-color', '#f8fbfd');
+    setLayerPaintIfPresent(map, 'hillshade', 'hillshade-shadow-color', '#b9cad5');
+    setLayerPaintIfPresent(map, 'hillshade', 'hillshade-accent-color', '#d9e6ee');
+  }
+
+  map.setFog({
+    color: '#f5f8fb',
+    'high-color': '#e5eef5',
+    'horizon-blend': 0.04,
+    'space-color': '#edf3f8',
+    'star-intensity': 0,
+  });
 }
 
 function applyThreeDimensionalMode(map, isEnabled) {
@@ -180,6 +240,12 @@ export default function Home() {
     );
 
     map.on('load', () => {
+      try {
+        applyWinterBasemap(map);
+      } catch (error) {
+        console.error('Failed to apply winter basemap styling', error);
+      }
+
       setMapReady(true);
     });
 
@@ -665,39 +731,90 @@ export default function Home() {
             bottom: 0.75rem;
             left: 0.75rem;
             width: auto;
-            max-height: min(44vh, 360px);
-            padding: 0.85rem;
-            border-radius: 18px;
+            max-height: min(40vh, 320px);
+            padding: 0.75rem 0.8rem;
+            border: 1px solid rgba(29, 50, 42, 0.08);
+            border-radius: 14px;
+            background: rgba(248, 251, 248, 0.84);
+            box-shadow: 0 10px 24px rgba(47, 74, 61, 0.1);
+            backdrop-filter: blur(10px);
           }
 
           h1 {
-            font-size: 1.45rem;
+            font-size: 1.2rem;
+            letter-spacing: -0.02em;
           }
 
           .panel-copy {
-            margin-top: 0.45rem;
-            font-size: 0.95rem;
-            line-height: 1.35;
+            margin-top: 0.3rem;
+            font-size: 0.84rem;
+            line-height: 1.25;
             max-width: none;
           }
 
+          .eyebrow,
+          .detail-label {
+            margin-bottom: 0.2rem;
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
+          }
+
           .field-label {
-            margin-top: 0.75rem;
+            margin-top: 0.6rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.78rem;
           }
 
           .select-input {
-            padding: 0.75rem 0.85rem;
+            padding: 0.68rem 0.75rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
           }
 
           .detail-card,
           .status-card {
-            margin-top: 0.6rem;
-            padding: 0.7rem 0.8rem;
+            margin-top: 0.45rem;
+            padding: 0.55rem 0;
+            border-radius: 0;
+            background: transparent;
+            border-top: 1px solid rgba(35, 66, 54, 0.08);
           }
 
           .legend-list {
-            gap: 0.4rem;
+            gap: 0.3rem;
+            margin-top: 0.4rem;
+          }
+
+          .legend-item {
+            gap: 0.5rem;
+            font-size: 0.84rem;
+          }
+
+          .legend-swatch {
+            width: 0.8rem;
+            height: 0.8rem;
+          }
+
+          .toggle-row {
             margin-top: 0.55rem;
+            font-size: 0.82rem;
+            font-weight: 500;
+          }
+
+          .toggle-row input {
+            width: 1rem;
+            height: 1rem;
+          }
+
+          h2 {
+            font-size: 0.92rem;
+          }
+
+          p,
+          .status-card,
+          .detail-card {
+            font-size: 0.82rem;
+            line-height: 1.3;
           }
         }
       `}</style>
