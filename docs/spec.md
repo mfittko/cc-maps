@@ -4,7 +4,7 @@
 
 Cross-Country maps, shipped as `cc-maps`, is a Next.js and Mapbox GL JS web app for browsing cross-country ski destinations and their trail networks from the public Sporet ArcGIS service.
 
-The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, an optional 3D terrain mode, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, and trail crossing analysis in a dedicated trail details sheet.
+The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, always-on terrain rendering, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, and trail crossing analysis in a dedicated trail details sheet.
 
 The app exposes minimal PWA metadata through a manifest and icons, but it does not currently ship with a service worker or offline-first caching strategy.
 
@@ -26,7 +26,7 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 | Layer | Current implementation |
 | --- | --- |
 | Presentation | `pages/index.js` composes the map shell while `components/ControlPanel.js`, `components/InfoPanel.js`, and `components/TrailDetailsPanel.js` contain the extracted overlay UI. |
-| Hooks | `hooks/useMapPersistence.js` synchronizes destination, terrain mode, color mode, and map view with URL query parameters and local storage. |
+| Hooks | `hooks/useMapPersistence.js` synchronizes destination, color mode, and map view with URL query parameters and local storage. |
 | App shell | `pages/_app.js` imports Mapbox CSS, global CSS, title and meta tags, and manifest references. |
 | API proxy | `pages/api/destinations.js` and `pages/api/trails.js` proxy the Sporet REST service and keep request rules centralized. |
 | Shared domain logic | `lib/map-domain.js`, `lib/map-persistence.js`, and `lib/sporet.js` define the extracted geometry, persistence, validation, and Sporet request helpers. |
@@ -37,9 +37,10 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 ### Map bootstrap
 
 1. The page initializes a Mapbox map centered on the Oslo region by default.
-2. The app restores destination, color mode, terrain mode, and map view from URL query parameters or local storage when available.
-3. A winter-themed basemap treatment is applied after the map loads.
-4. Navigation and geolocation controls are added to the map.
+2. The app restores destination, color mode, and map view from URL query parameters or local storage when available.
+3. Terrain rendering is part of the default map presentation and is no longer user-toggleable.
+4. A winter-themed basemap treatment is applied after the map loads.
+5. Navigation and geolocation controls are added to the map.
 
 ### Destination-first flow
 
@@ -73,7 +74,7 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 ### Persistence and shareability
 
-1. The selected destination, color mode, terrain toggle, and current map view are written back to the URL with shallow routing.
+1. The selected destination, color mode, and current map view are written back to the URL with shallow routing.
 2. The same state is mirrored to local storage so the last view can be restored on a later visit.
 
 ### Mobile and installability

@@ -1,7 +1,6 @@
 import {
   FaCircleInfo,
   FaLocationDot,
-  FaMountain,
   FaXmark,
 } from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES } from '../lib/sporet';
@@ -10,8 +9,6 @@ export default function ControlPanel({
   isOverlay = false,
   onClose,
   onOpenInfo,
-  isThreeDimensional,
-  onToggleThreeDimensional,
   trailColorMode,
   onTrailColorModeChange,
   selectedDestinationId,
@@ -57,18 +54,6 @@ export default function ControlPanel({
             <FaCircleInfo />
             <span>Guide</span>
           </button>
-          <label className="icon-toggle" htmlFor={`three-d-toggle${isOverlay ? '-overlay' : ''}`}>
-            <span className="icon-toggle-copy">
-              <FaMountain />
-              <span>3D</span>
-            </span>
-            <input
-              id={`three-d-toggle${isOverlay ? '-overlay' : ''}`}
-              type="checkbox"
-              checked={isThreeDimensional}
-              onChange={(event) => onToggleThreeDimensional(event.target.checked)}
-            />
-          </label>
         </div>
 
         <div className="display-mode-block">

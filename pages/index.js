@@ -253,7 +253,6 @@ function applyThreeDimensionalMode(map, isEnabled) {
       );
     }
 
-    map.easeTo({ pitch: 58, bearing: 18, duration: 900 });
     return;
   }
 
@@ -296,7 +295,6 @@ export default function Home() {
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
   const [selectedTrailElevationMetrics, setSelectedTrailElevationMetrics] = useState(null);
   const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
-  const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [mapView, setMapView] = useState(null);
   const [nearbyDestinationIds, setNearbyDestinationIds] = useState([]);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
@@ -361,11 +359,9 @@ export default function Home() {
     shouldPreserveMapViewRef,
     selectedDestinationId,
     trailColorMode,
-    isThreeDimensional,
     mapView,
     setSelectedDestinationId,
     setTrailColorMode,
-    setIsThreeDimensional,
     setMapView,
   });
 
@@ -459,8 +455,8 @@ export default function Home() {
       return;
     }
 
-    applyThreeDimensionalMode(map, isThreeDimensional);
-  }, [mapReady, isThreeDimensional]);
+    applyThreeDimensionalMode(map, true);
+  }, [mapReady]);
 
   useEffect(() => {
     if (!mapReady) {
@@ -1407,8 +1403,6 @@ export default function Home() {
     <div className="page-shell">
       <ControlPanel
         onOpenInfo={() => setIsInfoPanelOpen(true)}
-        isThreeDimensional={isThreeDimensional}
-        onToggleThreeDimensional={setIsThreeDimensional}
         trailColorMode={trailColorMode}
         onTrailColorModeChange={setTrailColorMode}
         selectedDestinationId={selectedDestinationId}
@@ -1453,8 +1447,6 @@ export default function Home() {
               setIsSettingsPanelOpen(false);
               setIsInfoPanelOpen(true);
             }}
-            isThreeDimensional={isThreeDimensional}
-            onToggleThreeDimensional={setIsThreeDimensional}
             trailColorMode={trailColorMode}
             onTrailColorModeChange={setTrailColorMode}
             selectedDestinationId={selectedDestinationId}
