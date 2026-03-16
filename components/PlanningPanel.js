@@ -1,4 +1,10 @@
-import { FaArrowDownLong, FaArrowUpLong, FaArrowsRotate, FaXmark } from 'react-icons/fa6';
+import {
+  FaArrowDownLong,
+  FaArrowUpLong,
+  FaArrowsRotate,
+  FaFileArrowDown,
+  FaXmark,
+} from 'react-icons/fa6';
 import { formatDistance } from '../lib/map-domain';
 
 /**
@@ -28,6 +34,7 @@ export default function PlanningPanel({
   isMobileHint,
   onExitPlanning,
   onClearPlan,
+  onExportGpx,
   onReverseRoute,
   onRemoveAnchor,
 }) {
@@ -135,15 +142,25 @@ export default function PlanningPanel({
           </ol>
 
           <div className="planning-actions">
-            {anchorCount > 1 ? (
-              <button type="button" className="icon-chip" onClick={onReverseRoute}>
-                <FaArrowsRotate aria-hidden="true" />
-                <span>Reverse</span>
+            <div className="planning-actions-slot planning-actions-slot-start">
+              {anchorCount > 1 ? (
+                <button type="button" className="icon-chip" onClick={onReverseRoute}>
+                  <FaArrowsRotate aria-hidden="true" />
+                  <span>Reverse</span>
+                </button>
+              ) : null}
+            </div>
+            <div className="planning-actions-slot planning-actions-slot-center">
+              <button type="button" className="icon-chip planning-export-btn" onClick={onExportGpx}>
+                <FaFileArrowDown aria-hidden="true" />
+                <span>GPX</span>
               </button>
-            ) : null}
-            <button type="button" className="icon-chip planning-clear-btn" onClick={onClearPlan}>
-              Clear
-            </button>
+            </div>
+            <div className="planning-actions-slot planning-actions-slot-end">
+              <button type="button" className="icon-chip planning-clear-btn" onClick={onClearPlan}>
+                Clear
+              </button>
+            </div>
           </div>
         </>
       )}

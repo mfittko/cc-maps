@@ -45,6 +45,7 @@ import {
   readStoredRoutePlan,
   writeStoredRoutePlan,
 } from '../lib/route-plan';
+import { createGpxFileName, createGpxFromRouteFeatures } from '../lib/route-export';
 import { getSingleQueryValue } from '../lib/map-persistence';
 import { buildRouteGraph } from '../lib/route-graph';
 import { resolveRoute } from '../lib/route-planner';
@@ -562,6 +563,33 @@ export default function Home() {
     }
 
     setRoutePlan((currentPlan) => removeRoutePlanAnchor(currentPlan, selectedDestinationId, index));
+  }
+
+  function handleExportGpx() {
+    if (!selectedDestination || typeof window === 'undefined') {
+      return;
+    }
+
+    const routeFeatures = createRoutePlanGeoJson(routePlan, routeResult, routeGraph).traversal.features;
+    const routeName = `${selectedDestination.name} route`;
+    const gpxContent = createGpxFromRouteFeatures(routeFeatures, { name: routeName });
+
+    if (!gpxContent) {
+      return;
+    }
+
+    const blob = new window.Blob([gpxContent], {
+      type: 'application/gpx+xml;charset=utf-8',
+    });
+    const objectUrl = window.URL.createObjectURL(blob);
+    const downloadLink = window.document.createElement('a');
+
+    downloadLink.href = objectUrl;
+    downloadLink.download = createGpxFileName(routeName);
+    window.document.body.appendChild(downloadLink);
+    downloadLink.click();
+    downloadLink.remove();
+    window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
   }
 
   function handlePlanningAnchorSelection(feature, clickedCoordinates) {
@@ -2158,6 +2186,7 @@ export default function Home() {
         isMobileHint={isMobileInteraction}
         onExitPlanning={() => setIsPlanning(false)}
         onClearPlan={handleClearPlan}
+        onExportGpx={handleExportGpx}
         onReverseRoute={handleReverseRoute}
         onRemoveAnchor={handleRemoveAnchor}
       />

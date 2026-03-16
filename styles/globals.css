@@ -777,15 +777,40 @@ h2 {
 }
 
 .planning-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.75rem;
-  flex-wrap: wrap;
+}
+
+.planning-actions-slot {
+  display: flex;
+  min-width: 0;
+}
+
+.planning-actions-slot-start {
+  justify-content: flex-start;
+}
+
+.planning-actions-slot-center {
+  justify-content: center;
+}
+
+.planning-actions-slot-end {
+  justify-content: flex-end;
+}
+
+.planning-export-btn {
+  background: #e9f1f8;
+  color: #1c4564;
+}
+
+.planning-export-btn:hover {
+  background: #dbe9f4;
 }
 
 .planning-clear-btn {
-  margin-left: auto;
   background: #f7ece6;
   color: #7a3520;
 }
