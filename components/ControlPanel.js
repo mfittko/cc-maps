@@ -57,6 +57,17 @@ export default function ControlPanel({
             <FaCircleInfo />
             <span>Guide</span>
           </button>
+          {selectedDestination ? (
+            <button
+              type="button"
+              className="icon-chip"
+              onClick={onEnterPlanning}
+              aria-pressed={isPlanningMode}
+            >
+              <FaRoute />
+              <span>{isPlanningMode ? 'Planning' : 'Plan route'}</span>
+            </button>
+          ) : null}
         </div>
 
         <div className="display-mode-block">

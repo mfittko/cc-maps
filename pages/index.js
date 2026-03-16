@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
 import ControlPanel from '../components/ControlPanel';
 import InfoPanel from '../components/InfoPanel';
+import PlanningPanel from '../components/PlanningPanel';
 import TrailDetailsPanel from '../components/TrailDetailsPanel';
 import { useMapPersistence } from '../hooks/useMapPersistence';
 import {
@@ -24,6 +25,17 @@ import {
   readCachedTrailGeoJson,
   writeCachedTrailGeoJson,
 } from '../lib/map-persistence';
+import {
+  appendRoutePlanAnchor,
+  createRoutePlanGeoJson,
+  findNearestRouteGraphEdgeId,
+  isPlanningSelectionInteraction,
+  removeRoutePlanAnchor,
+  reverseRoutePlan,
+} from '../lib/planning-mode';
+import { createRoutePlan } from '../lib/route-plan';
+import { buildRouteGraph } from '../lib/route-graph';
+import { resolveRoute } from '../lib/route-planner';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
@@ -47,6 +59,10 @@ const SUGGESTED_TRAILS_HIT_LAYER_ID = 'suggested-trails-hit-layer';
 const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
 const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
+const ROUTE_PLAN_ANCHORS_SOURCE_ID = 'route-plan-anchors';
+const ROUTE_PLAN_ANCHORS_LAYER_ID = 'route-plan-anchors-layer';
+const ROUTE_PLAN_CONNECTORS_SOURCE_ID = 'route-plan-connectors';
+const ROUTE_PLAN_CONNECTORS_LAYER_ID = 'route-plan-connectors-layer';
 const DEM_SOURCE_ID = 'mapbox-dem';
 const BUILDINGS_LAYER_ID = '3d-buildings';
 const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
@@ -277,6 +293,11 @@ export default function Home() {
   const shouldPreserveMapViewRef = useRef(false);
   const skipNextTrailFitRef = useRef(false);
   const lastAutoLocationRef = useRef(null);
+  const isPlanningRef = useRef(false);
+  const routeGraphRef = useRef(null);
+  const selectedDestinationIdRef = useRef('');
+  const isMacOSRef = useRef(false);
+  const isMobileInteractionRef = useRef(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [isInitialMapViewSettled, setIsInitialMapViewSettled] = useState(false);
   const [mapReady, setMapReady] = useState(false);
@@ -299,6 +320,12 @@ export default function Home() {
   const [nearbyDestinationIds, setNearbyDestinationIds] = useState([]);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [routePlan, setRoutePlan] = useState(null);
+  const [routeResult, setRouteResult] = useState(null);
+  const [routeGraph, setRouteGraph] = useState(null);
+  const [isMacOS, setIsMacOS] = useState(false);
+  const [isMobileInteraction, setIsMobileInteraction] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
@@ -315,6 +342,73 @@ export default function Home() {
   useEffect(() => {
     trailColorModeRef.current = trailColorMode;
   }, [trailColorMode]);
+
+  useEffect(() => {
+    isPlanningRef.current = isPlanning;
+  }, [isPlanning]);
+
+  useEffect(() => {
+    routeGraphRef.current = routeGraph;
+  }, [routeGraph]);
+
+  useEffect(() => {
+    selectedDestinationIdRef.current = selectedDestinationId;
+  }, [selectedDestinationId]);
+
+  useEffect(() => {
+    isMacOSRef.current = isMacOS;
+  }, [isMacOS]);
+
+  useEffect(() => {
+    isMobileInteractionRef.current = isMobileInteraction;
+  }, [isMobileInteraction]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return undefined;
+    }
+
+    const mobileMediaQuery = window.matchMedia('(max-width: 640px)');
+    const coarsePointerMediaQuery = window.matchMedia('(pointer: coarse)');
+    const updateInteractionEnvironment = () => {
+      setIsMacOS(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent));
+      setIsMobileInteraction(
+        mobileMediaQuery.matches ||
+          coarsePointerMediaQuery.matches ||
+          Number(navigator.maxTouchPoints) > 0
+      );
+    };
+
+    updateInteractionEnvironment();
+
+    const addListener = (mediaQuery) => {
+      if (typeof mediaQuery.addEventListener === 'function') {
+        mediaQuery.addEventListener('change', updateInteractionEnvironment);
+        return () => mediaQuery.removeEventListener('change', updateInteractionEnvironment);
+      }
+
+      mediaQuery.addListener(updateInteractionEnvironment);
+      return () => mediaQuery.removeListener(updateInteractionEnvironment);
+    };
+
+    const removeMobileListener = addListener(mobileMediaQuery);
+    const removeCoarseListener = addListener(coarsePointerMediaQuery);
+    window.addEventListener('resize', updateInteractionEnvironment);
+
+    return () => {
+      removeMobileListener();
+      removeCoarseListener();
+      window.removeEventListener('resize', updateInteractionEnvironment);
+    };
+  }, []);
+
+  function clearSelectedTrail() {
+    setSelectedTrailFeature(null);
+    setSelectedTrailSectionFeature(null);
+    setSelectedTrailClickCoordinates(null);
+    setSelectedTrailCrossings(null);
+    setSelectedTrailElevationMetrics(null);
+  }
 
   function applyTrailGeoJsonToPrimaryLayer(geojson) {
     const map = mapRef.current;
@@ -340,13 +434,69 @@ export default function Home() {
     }
 
     setSelectedDestinationId(destinationId);
-    setSelectedTrailFeature(null);
-    setSelectedTrailSectionFeature(null);
-    setSelectedTrailClickCoordinates(null);
-    setSelectedTrailCrossings(null);
-    setSelectedTrailElevationMetrics(null);
+    clearSelectedTrail();
     setNearbyDestinationIds([]);
     setSuggestedTrailsGeoJson(null);
+    setIsPlanning(false);
+    setRoutePlan(null);
+    setRouteResult(null);
+  }
+
+  function handleEnterPlanning() {
+    if (!selectedDestinationId) {
+      return;
+    }
+
+    clearSelectedTrail();
+    setIsSettingsPanelOpen(false);
+    setIsInfoPanelOpen(false);
+    setIsPlanning(true);
+    setRoutePlan((currentPlan) =>
+      currentPlan?.destinationId === selectedDestinationId
+        ? currentPlan
+        : createRoutePlan(selectedDestinationId, [])
+    );
+  }
+
+  function handleClearPlan() {
+    if (!selectedDestinationId) {
+      return;
+    }
+
+    setRoutePlan(createRoutePlan(selectedDestinationId, []));
+  }
+
+  function handleReverseRoute() {
+    if (!selectedDestinationId) {
+      return;
+    }
+
+    setRoutePlan((currentPlan) => reverseRoutePlan(currentPlan, selectedDestinationId));
+  }
+
+  function handleRemoveAnchor(index) {
+    if (!selectedDestinationId) {
+      return;
+    }
+
+    setRoutePlan((currentPlan) => removeRoutePlanAnchor(currentPlan, selectedDestinationId, index));
+  }
+
+  function handlePlanningAnchorSelection(feature, clickedCoordinates) {
+    const destinationId = selectedDestinationIdRef.current;
+    const edgeId = findNearestRouteGraphEdgeId(
+      routeGraphRef.current,
+      feature?.properties?.id,
+      clickedCoordinates
+    );
+
+    if (!destinationId || !edgeId) {
+      return false;
+    }
+
+    clearSelectedTrail();
+    setRoutePlan((currentPlan) => appendRoutePlanAnchor(currentPlan, destinationId, edgeId));
+    return true;
   }
 
   useMapPersistence({
@@ -385,6 +535,24 @@ export default function Home() {
     setIsInitialMapViewSettled(true);
     setMapReady(true);
   }, [router.isReady, isMapLoaded, isInitialMapViewSettled, mapView]);
+
+  useEffect(() => {
+    if (!trailsGeoJson?.features?.length) {
+      setRouteGraph(null);
+      return;
+    }
+
+    setRouteGraph(buildRouteGraph(trailsGeoJson));
+  }, [trailsGeoJson]);
+
+  useEffect(() => {
+    if (!routePlan || routePlan.destinationId !== selectedDestinationId || !routeGraph) {
+      setRouteResult(null);
+      return;
+    }
+
+    setRouteResult(resolveRoute(routeGraph, routePlan.anchorEdgeIds));
+  }, [routeGraph, routePlan, selectedDestinationId]);
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -861,10 +1029,26 @@ export default function Home() {
               return;
             }
 
+            const clickedCoordinates = [event.lngLat.lng, event.lngLat.lat];
+
+            if (
+              isPlanningSelectionInteraction({
+                isPlanning: isPlanningRef.current,
+                isMobileInteraction: isMobileInteractionRef.current,
+                isMacOS: isMacOSRef.current,
+                originalEvent: event.originalEvent,
+              }) &&
+              handlePlanningAnchorSelection(feature, clickedCoordinates)
+            ) {
+              setIsSettingsPanelOpen(false);
+              setIsInfoPanelOpen(false);
+              return;
+            }
+
             setIsSettingsPanelOpen(false);
             setIsInfoPanelOpen(false);
             setSelectedTrailFeature(feature);
-            setSelectedTrailClickCoordinates([event.lngLat.lng, event.lngLat.lat]);
+            setSelectedTrailClickCoordinates(clickedCoordinates);
           });
 
           map.on('mouseenter', TRAILS_HIT_LAYER_ID, () => {
@@ -1082,6 +1266,83 @@ export default function Home() {
 
     return undefined;
   }, [mapReady, suggestedTrailsGeoJson, trailColorMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map) {
+      return undefined;
+    }
+
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+
+    if (map.getSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID)) {
+      map.getSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID).setData(routePlanGeoJson.connectors);
+    } else {
+      map.addSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID, {
+        type: 'geojson',
+        data: routePlanGeoJson.connectors,
+      });
+
+      map.addLayer({
+        id: ROUTE_PLAN_CONNECTORS_LAYER_ID,
+        type: 'line',
+        source: ROUTE_PLAN_CONNECTORS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#0f6ea8',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 11, 5],
+          'line-opacity': 0.85,
+          'line-dasharray': [1.4, 1],
+        },
+      });
+    }
+
+    if (map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID)) {
+      map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID).setData(routePlanGeoJson.anchors);
+    } else {
+      map.addSource(ROUTE_PLAN_ANCHORS_SOURCE_ID, {
+        type: 'geojson',
+        data: routePlanGeoJson.anchors,
+      });
+
+      map.addLayer({
+        id: ROUTE_PLAN_ANCHORS_LAYER_ID,
+        type: 'line',
+        source: ROUTE_PLAN_ANCHORS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#f08b32',
+          'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 11, 6],
+          'line-opacity': 0.95,
+        },
+      });
+    }
+
+    if (map.getLayer(ROUTE_PLAN_CONNECTORS_LAYER_ID)) {
+      map.moveLayer(ROUTE_PLAN_CONNECTORS_LAYER_ID);
+    }
+
+    if (map.getLayer(ROUTE_PLAN_ANCHORS_LAYER_ID)) {
+      map.moveLayer(ROUTE_PLAN_ANCHORS_LAYER_ID);
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);
+    }
+
+    return undefined;
+  }, [mapReady, routeGraph, routePlan, routeResult]);
 
   useEffect(() => {
     if (!selectedDestinationId || !destinations.length || !selectedDestination) {
@@ -1416,20 +1677,34 @@ export default function Home() {
         destinations={destinations}
         selectedDestination={selectedDestination}
         activeTrailLegendItems={activeTrailLegendItems}
+        isPlanningMode={isPlanning}
+        onEnterPlanning={handleEnterPlanning}
       />
 
       {!isSettingsPanelOpen && !isInfoPanelOpen ? (
-        <button
-          type="button"
-          className="map-overlay-icon-button"
-          onClick={() => {
-            setIsInfoPanelOpen(false);
-            setIsSettingsPanelOpen(true);
-          }}
-          aria-label="Open map settings"
-        >
-          <img src="/icon.svg" alt="" className="map-overlay-icon-image" />
-        </button>
+        <>
+          <button
+            type="button"
+            className="map-overlay-icon-button"
+            onClick={() => {
+              setIsInfoPanelOpen(false);
+              setIsSettingsPanelOpen(true);
+            }}
+            aria-label="Open map settings"
+          >
+            <img src="/icon.svg" alt="" className="map-overlay-icon-image" />
+          </button>
+          {selectedDestination && !isPlanning ? (
+            <button
+              type="button"
+              className="map-overlay-icon-button map-plan-button"
+              onClick={handleEnterPlanning}
+              aria-label={isPlanning ? 'Open route planning' : 'Plan route'}
+            >
+              Plan
+            </button>
+          ) : null}
+        </>
       ) : null}
 
       {isSettingsPanelOpen ? (
@@ -1461,9 +1736,27 @@ export default function Home() {
             destinations={destinations}
             selectedDestination={selectedDestination}
             activeTrailLegendItems={activeTrailLegendItems}
+            isPlanningMode={isPlanning}
+            onEnterPlanning={() => {
+              handleEnterPlanning();
+              setIsSettingsPanelOpen(false);
+            }}
           />
         </>
       ) : null}
+
+      <PlanningPanel
+        isPlanning={isPlanning}
+        routePlan={routePlan}
+        routeResult={routeResult}
+        routeGraph={routeGraph}
+        isMacOS={isMacOS}
+        isMobileHint={isMobileInteraction}
+        onExitPlanning={() => setIsPlanning(false)}
+        onClearPlan={handleClearPlan}
+        onReverseRoute={handleReverseRoute}
+        onRemoveAnchor={handleRemoveAnchor}
+      />
 
       {selectedTrail ? (
         <TrailDetailsPanel
@@ -1471,13 +1764,7 @@ export default function Home() {
           selectedTrailLengthKm={selectedTrailLengthKm}
           selectedTrailElevationMetrics={selectedTrailElevationMetrics}
           formatDistance={formatDistance}
-          onClose={() => {
-            setSelectedTrailFeature(null);
-            setSelectedTrailSectionFeature(null);
-            setSelectedTrailClickCoordinates(null);
-            setSelectedTrailCrossings(null);
-            setSelectedTrailElevationMetrics(null);
-          }}
+          onClose={clearSelectedTrail}
         />
       ) : null}
 
