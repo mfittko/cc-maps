@@ -37,7 +37,7 @@ p {
   position: absolute;
   top: 1rem;
   left: 1rem;
-  z-index: 1;
+  z-index: 2;
   width: min(340px, calc(100% - 2rem));
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
@@ -49,9 +49,8 @@ p {
   backdrop-filter: blur(14px);
 }
 
-.control-panel-collapsed {
-  width: auto;
-  max-width: min(260px, calc(100% - 2rem));
+.control-panel-overlay {
+  z-index: 4;
 }
 
 .panel-header {
@@ -61,26 +60,23 @@ p {
   gap: 0.75rem;
 }
 
-.panel-collapse-button {
+.panel-close-button,
+.trail-details-close-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
   border: 0;
   border-radius: 999px;
   background: #dfeae2;
   color: #1d4236;
-  padding: 0.45rem 0.7rem;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
   cursor: pointer;
 }
 
-.panel-collapse-button:hover {
+.panel-close-button:hover,
+.trail-details-close-button:hover {
   background: #d2e2d7;
-}
-
-.panel-collapsed-summary {
-  margin-top: 0.6rem;
-  color: #284638;
-  font-size: 0.92rem;
 }
 
 .quick-actions {
@@ -132,7 +128,7 @@ p {
   position: absolute;
   top: 1rem;
   right: 1rem;
-  z-index: 1;
+  z-index: 4;
   width: min(320px, calc(100% - 2rem));
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
@@ -335,6 +331,41 @@ h2 {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
 }
 
+.trail-details-panel {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 3;
+  width: min(360px, calc(100% - 2rem));
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  padding: 1rem;
+  border: 1px solid rgba(29, 50, 42, 0.1);
+  border-radius: 20px;
+  background: rgba(252, 253, 251, 0.94);
+  box-shadow: 0 24px 48px rgba(47, 74, 61, 0.16);
+  backdrop-filter: blur(14px);
+}
+
+.trail-details-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.trail-details-body {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+  color: #284638;
+}
+
+.map-overlay-icon-button,
+.mobile-overlay-backdrop {
+  display: none;
+}
+
 .map-stage,
 .map-container {
   width: 100%;
@@ -363,13 +394,17 @@ h2 {
 }
 
 @media (max-width: 640px) {
+  .control-panel-desktop {
+    display: none;
+  }
+
   .control-panel {
     top: auto;
     right: 0.75rem;
     bottom: 0.75rem;
     left: 0.75rem;
     width: auto;
-    max-height: min(40vh, 320px);
+    max-height: min(44vh, 360px);
     padding: 0.75rem 0.8rem;
     border: 1px solid rgba(29, 50, 42, 0.08);
     border-radius: 14px;
@@ -378,8 +413,42 @@ h2 {
     backdrop-filter: blur(10px);
   }
 
-  .control-panel-collapsed {
-    max-width: calc(100% - 1.5rem);
+  .control-panel-overlay {
+    z-index: 4;
+  }
+
+  .mobile-overlay-backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border: 0;
+    background: rgba(13, 27, 21, 0.08);
+  }
+
+  .map-overlay-icon-button {
+    display: inline-flex;
+    position: absolute;
+    top: 0.75rem;
+    left: 0.75rem;
+    z-index: 3;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border: 1px solid rgba(29, 50, 42, 0.12);
+    border-radius: 999px;
+    background: rgba(252, 253, 251, 0.94);
+    color: #1d4236;
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(47, 74, 61, 0.14);
+    backdrop-filter: blur(10px);
+  }
+
+  .map-overlay-icon-image {
+    display: block;
+    width: 1.35rem;
+    height: 1.35rem;
   }
 
   .info-panel {
@@ -423,6 +492,10 @@ h2 {
   .icon-toggle {
     padding: 0.45rem 0.6rem;
     font-size: 0.76rem;
+  }
+
+  .icon-chip {
+    flex: 0 0 auto;
   }
 
   .select-input {
@@ -482,9 +555,14 @@ h2 {
     font-size: 0.92rem;
   }
 
-  .panel-collapse-button {
-    padding: 0.35rem 0.6rem;
-    font-size: 0.74rem;
+  .trail-details-panel {
+    right: 0.75rem;
+    bottom: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    max-height: min(34vh, 300px);
+    padding: 0.8rem;
+    border-radius: 14px;
   }
 
   h2 {

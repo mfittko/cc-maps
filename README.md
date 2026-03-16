@@ -2,7 +2,7 @@
 
 This repository contains Cross-Country maps, shipped under the `cc-maps` package and deployment alias. It is a Next.js and Mapbox GL JS application that loads active ski destinations from the public Sporet service, then fetches trail data on demand for the selected area.
 
-The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, optional 3D terrain, URL and local storage map-state persistence, client-side trail caching, nearby destination suggestions, and trail crossing analysis in the details panel.
+The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, optional 3D terrain, URL and local storage map-state persistence, client-side trail caching, nearby destination suggestions, live current-location destination matching when the user is skiing on a nearby track, a mobile-first settings overlay, and trail crossing analysis in a dedicated trail details sheet.
 
 ## Current implementation state
 
@@ -14,7 +14,7 @@ The codebase is no longer just at the original MVP baseline. In addition to the 
 ## Main files
 
 - `pages/index.js` now focuses on map orchestration, state wiring, and layer lifecycle effects.
-- `components/ControlPanel.js` and `components/InfoPanel.js` contain the extracted side-panel presentation.
+- `components/ControlPanel.js`, `components/InfoPanel.js`, and `components/TrailDetailsPanel.js` contain the extracted map overlay presentation.
 - `hooks/useMapPersistence.js` handles URL and local-storage synchronization for destination, terrain mode, color mode, and map view.
 - `lib/map-domain.js` contains extracted map-domain helpers such as distance calculations, nearby-destination selection, trail crossing analysis, and segment-label shaping.
 - `lib/map-persistence.js` contains extracted storage and query-parsing helpers plus trail-cache shaping.
@@ -65,10 +65,12 @@ npm run test:coverage
 
 1. The app initializes the map, restores persisted map state when available, and loads active destinations.
 2. If possible, it auto-selects the closest destination to the user or falls back to the default Oslo-centered view.
-3. Selecting a destination loads only that destination's trails and fits the map to the returned geometry.
-4. Trail colors can be switched between trail type and grooming freshness.
-5. Clicking a trail opens detail metadata, including grooming flags, warnings, total length, and detected crossing segments.
-6. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
+3. While the app is still following the user's current location, it can switch to the destination whose trail geometry is within 0.05 km of the reported position.
+4. Manual destination selection still wins for planning and disables automatic switching.
+5. Selecting a destination loads only that destination's trails and fits the map to the returned geometry.
+6. Trail colors can be switched between trail type and grooming freshness.
+7. Clicking a trail selects the exact interval represented by the section-distance labels, then opens its detail metadata.
+8. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
 
 ## Deferred work
 

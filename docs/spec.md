@@ -4,7 +4,7 @@
 
 Cross-Country maps, shipped as `cc-maps`, is a Next.js and Mapbox GL JS web app for browsing cross-country ski destinations and their trail networks from the public Sporet ArcGIS service.
 
-The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, an optional 3D terrain mode, nearby destination suggestions, trail segment labels, and trail crossing analysis in the details panel.
+The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, an optional 3D terrain mode, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, and trail crossing analysis in a dedicated trail details sheet.
 
 The app exposes minimal PWA metadata through a manifest and icons, but it does not currently ship with a service worker or offline-first caching strategy.
 
@@ -25,7 +25,7 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 | Layer | Current implementation |
 | --- | --- |
-| Presentation | `pages/index.js` composes the map shell while `components/ControlPanel.js` and `components/InfoPanel.js` contain the extracted panel UI. |
+| Presentation | `pages/index.js` composes the map shell while `components/ControlPanel.js`, `components/InfoPanel.js`, and `components/TrailDetailsPanel.js` contain the extracted overlay UI. |
 | Hooks | `hooks/useMapPersistence.js` synchronizes destination, terrain mode, color mode, and map view with URL query parameters and local storage. |
 | App shell | `pages/_app.js` imports Mapbox CSS, global CSS, title and meta tags, and manifest references. |
 | API proxy | `pages/api/destinations.js` and `pages/api/trails.js` proxy the Sporet REST service and keep request rules centralized. |
@@ -46,7 +46,8 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 1. The client fetches active destinations from `/api/destinations`.
 2. If the user has not already selected a destination, the app tries to auto-select the nearest destination based on foreground geolocation.
 3. If geolocation is unavailable or denied, the app falls back to the destination nearest the default center.
-4. Users can also select destinations from the panel dropdown or by clicking destination markers on the map.
+4. While the destination is still being auto-followed, subsequent geolocation updates can switch to the destination whose trail geometry is within 0.05 km of the reported position.
+5. A manual destination choice from URL state, storage, the desktop settings panel, the mobile settings overlay, or the map disables automatic destination switching so planning stays stable.
 
 ### Trail loading and rendering
 
@@ -59,9 +60,16 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 1. Trail colors can be toggled between trail type and grooming freshness.
 2. A legend updates to match the selected color mode.
-3. Clicking a trail shows detail metadata including trail type, classic and skating flags, grooming freshness, optional warning text, and computed network length.
-4. Crossing analysis detects where the selected trail intersects other loaded trail geometry and derives segment distances between endpoints and crossings.
-5. Segment-distance labels are rendered directly on the map at higher zoom levels.
+3. On mobile, the settings surface is minimized to a single icon under the map controls by default so the map remains unobstructed.
+
+### Trail details panel
+
+1. Clicking a loaded trail opens a dedicated trail details panel instead of expanding the general settings controls.
+2. The trail details panel shows grooming type, freshness, crossing counts, and segment intervals when they are available.
+3. On mobile, the trail details panel sits as a separate bottom sheet so the settings overlay and trail selection stay decoupled.
+4. Clicking a trail selects the exact interval between crossings or endpoints that contains the click location, then shows detail metadata including trail type, classic and skating flags, grooming freshness, optional warning text, and computed section length.
+5. Crossing analysis detects where the selected trail intersects other loaded trail geometry and derives segment distances between endpoints and crossings.
+6. Segment-distance labels are rendered directly on the map at higher zoom levels.
 
 ### Persistence and shareability
 
@@ -97,8 +105,10 @@ Behavior:
 
 - Only `GET` is allowed.
 - `destinationid` must be a positive integer when provided.
+- `lng` and `lat` may be provided together to run a bounded proximity query around the current location.
 - Invalid `destinationid` values return `400` without calling Sporet.
 - The primary product flow is destination-scoped: `where=destinationid=<id>`.
+- Current-location trail matching uses a bounded point-distance query with `distance=0.05 km` and `resultRecordCount=25`.
 - If `destinationid` is omitted, the proxy falls back to a limited unfiltered request with `resultRecordCount=250`. This exists as a bounded fallback and is not the intended UI flow.
 - Responses are cacheable with `s-maxage=900` and `stale-while-revalidate=1800`.
 

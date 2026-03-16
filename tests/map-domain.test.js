@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  findClosestDestinationByTrailProximity,
   findClosestDestination,
   formatDistance,
   getAllTrailSegmentLabelsGeoJson,
+  getClickedTrailSection,
   getCrossingMetrics,
   getDestinationSummary,
   getDestinationsWithinRadius,
   getDistanceInKilometers,
   getSuggestedDestinationGeoJson,
+  getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
 
 const oslo = [10.7522, 59.9139];
@@ -49,6 +52,83 @@ const trailsGeoJson = {
   ],
 };
 
+const trailProximityGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 303, destinationid: '1' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.7518, 59.9137],
+          [10.7528, 59.9142],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 404, destinationid: '3' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [11.19, 60.1],
+          [11.21, 60.1],
+        ],
+      },
+    },
+  ],
+};
+
+const clickedSectionGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: {
+        id: 1,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.0, 59.0],
+          [10.01, 59.0],
+          [10.02, 59.0],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        id: 2,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.01, 58.99],
+          [10.01, 59.01],
+        ],
+      },
+    },
+  ],
+};
+
 describe('map-domain', () => {
   it('builds destination summaries with a fallback center', () => {
     const summary = getDestinationSummary(
@@ -84,6 +164,40 @@ describe('map-domain', () => {
     expect(getDistanceInKilometers(oslo, nearby)).toBeGreaterThan(0);
     expect(findClosestDestination(destinations, [10.761, 59.9139]).id).toBe('2');
     expect(findClosestDestination([], oslo)).toBeNull();
+  });
+
+  it('matches destinations by trail proximity within a threshold', () => {
+    expect(
+      findClosestDestinationByTrailProximity(
+        destinations,
+        trailProximityGeoJson,
+        [10.7524, 59.91395],
+        0.05
+      )?.id
+    ).toBe('1');
+
+    expect(
+      findClosestDestinationByTrailProximity(destinations, trailProximityGeoJson, [10.9, 59.9], 0.05)
+    ).toBeNull();
+  });
+
+  it('selects the clicked distance interval on a trail', () => {
+    const selectedSection = getClickedTrailSection(
+      clickedSectionGeoJson.features[0],
+      [10.004, 59.0],
+      clickedSectionGeoJson,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(selectedSection.segment).toBeTruthy();
+    expect(selectedSection.segment.fromLabel).toBe('Trail start');
+    expect(selectedSection.segment.toLabel).toBe('Crossing 1');
+    expect(getTrailSelectionLengthInKilometers(selectedSection.feature)).toBeCloseTo(
+      selectedSection.segment.distanceKm,
+      6
+    );
   });
 
   it('computes crossing metrics and segment labels', () => {
