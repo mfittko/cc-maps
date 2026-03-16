@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
+import { FaRoute } from 'react-icons/fa6';
 import mapboxglMock from '../lib/mapbox-gl-mock';
 import ControlPanel from '../components/ControlPanel';
 import InfoPanel from '../components/InfoPanel';
@@ -92,6 +93,8 @@ const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const GEOLOCATE_MAX_ZOOM = 13.5;
 const TERRAIN_SAMPLE_SPACING_METERS = 25;
+const ELEVATION_RETRY_DELAY_MS = 180;
+const MAX_ELEVATION_RETRIES = 6;
 // NEXT_PUBLIC_* values are compiled into the client bundle, so choosing the
 // real or mock Mapbox implementation at module load is intentional.
 const isMapboxMockEnabled = process.env.NEXT_PUBLIC_ENABLE_MAPBOX_MOCK === '1';
@@ -175,6 +178,59 @@ function getFeatureCollectionGeoJson(features) {
   return {
     type: 'FeatureCollection',
     features,
+  };
+}
+
+function sampleTerrainElevations(map, sampledCoordinates) {
+  return sampledCoordinates.map((coordinates) =>
+    map.queryTerrainElevation(coordinates, { exaggerated: false })
+  );
+}
+
+function scheduleElevationRead({
+  map,
+  sampledCoordinates,
+  getResult,
+  onSuccess,
+  onFailure,
+  shouldRetry,
+  maxRetries = MAX_ELEVATION_RETRIES,
+  retryDelayMs = ELEVATION_RETRY_DELAY_MS,
+}) {
+  let isCancelled = false;
+  let retryTimeoutId = null;
+  let attempts = 0;
+
+  const run = () => {
+    if (isCancelled) {
+      return;
+    }
+
+    try {
+      const elevations = sampleTerrainElevations(map, sampledCoordinates);
+      const result = getResult(elevations);
+
+      if (result || !shouldRetry(elevations) || attempts >= maxRetries) {
+        onSuccess(result);
+        return;
+      }
+    } catch (error) {
+      onFailure(error);
+      return;
+    }
+
+    attempts += 1;
+    retryTimeoutId = window.setTimeout(run, retryDelayMs);
+  };
+
+  run();
+
+  return () => {
+    isCancelled = true;
+
+    if (retryTimeoutId !== null) {
+      window.clearTimeout(retryTimeoutId);
+    }
   };
 }
 
@@ -1588,49 +1644,66 @@ export default function Home() {
 
     let isCancelled = false;
     let shouldRestoreTerrain = false;
+    let cleanupElevationRead = null;
 
     const readElevationMetrics = () => {
       if (isCancelled) {
         return;
       }
 
-      try {
-        const elevations = sampledCoordinates.map((coordinates) =>
-          map.queryTerrainElevation(coordinates, { exaggerated: false })
-        );
-        const nextRouteAnchorElevationMetrics = routeAnchorFeatures.map((feature) => {
-          const anchorCoordinates = getSampledCoordinatesAlongFeature(
-            feature,
-            TERRAIN_SAMPLE_SPACING_METERS
-          );
+      cleanupElevationRead = scheduleElevationRead({
+        map,
+        sampledCoordinates,
+        getResult: (elevations) => {
+          const totalMetrics = getElevationChangeMetrics(elevations);
 
-          if (anchorCoordinates.length < 2) {
+          if (!totalMetrics) {
             return null;
           }
 
-          const anchorElevations = anchorCoordinates.map((coordinates) =>
-            map.queryTerrainElevation(coordinates, { exaggerated: false })
-          );
+          const nextRouteAnchorElevationMetrics = routeAnchorFeatures.map((feature) => {
+            const anchorCoordinates = getSampledCoordinatesAlongFeature(
+              feature,
+              TERRAIN_SAMPLE_SPACING_METERS
+            );
 
-          return getElevationChangeMetrics(anchorElevations);
-        });
+            if (anchorCoordinates.length < 2) {
+              return null;
+            }
 
-        if (!isCancelled) {
-          setRouteElevationMetrics(getElevationChangeMetrics(elevations));
-          setRouteAnchorElevationMetrics(nextRouteAnchorElevationMetrics);
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          console.warn('Skipped route ascent/descent calculation', error);
-          setRouteElevationMetrics(null);
-          setRouteAnchorElevationMetrics([]);
-        }
-      } finally {
-        if (shouldRestoreTerrain) {
-          map.setTerrain(null);
-          shouldRestoreTerrain = false;
-        }
-      }
+            return getElevationChangeMetrics(sampleTerrainElevations(map, anchorCoordinates));
+          });
+
+          return {
+            totalMetrics,
+            nextRouteAnchorElevationMetrics,
+          };
+        },
+        shouldRetry: (elevations) => elevations.filter(Number.isFinite).length < 2,
+        onSuccess: (result) => {
+          if (!isCancelled) {
+            setRouteElevationMetrics(result?.totalMetrics || null);
+            setRouteAnchorElevationMetrics(result?.nextRouteAnchorElevationMetrics || []);
+          }
+
+          if (shouldRestoreTerrain) {
+            map.setTerrain(null);
+            shouldRestoreTerrain = false;
+          }
+        },
+        onFailure: (error) => {
+          if (!isCancelled) {
+            console.warn('Skipped route ascent/descent calculation', error);
+            setRouteElevationMetrics(null);
+            setRouteAnchorElevationMetrics([]);
+          }
+
+          if (shouldRestoreTerrain) {
+            map.setTerrain(null);
+            shouldRestoreTerrain = false;
+          }
+        },
+      });
     };
 
     if (map.getTerrain()) {
@@ -1643,6 +1716,11 @@ export default function Home() {
 
     return () => {
       isCancelled = true;
+
+      if (cleanupElevationRead) {
+        cleanupElevationRead();
+        cleanupElevationRead = null;
+      }
 
       if (shouldRestoreTerrain) {
         map.setTerrain(null);
@@ -2024,7 +2102,8 @@ export default function Home() {
               onClick={handleEnterPlanning}
               aria-label={isPlanning ? 'Open route planning' : 'Plan route'}
             >
-              Plan
+              <FaRoute aria-hidden="true" />
+              <span className="sr-only">Plan route</span>
             </button>
           ) : null}
         </>
