@@ -105,6 +105,161 @@ function getDistanceInKilometers(fromCoordinates, toCoordinates) {
   return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function getLineStrings(geometry) {
+  if (!geometry) {
+    return [];
+  }
+
+  if (geometry.type === 'LineString') {
+    return [geometry.coordinates || []];
+  }
+
+  if (geometry.type === 'MultiLineString') {
+    return geometry.coordinates || [];
+  }
+
+  return [];
+}
+
+function getLineLengthInKilometers(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return 0;
+  }
+
+  return coordinates.reduce((total, coordinate, index) => {
+    if (index === 0) {
+      return total;
+    }
+
+    return total + getDistanceInKilometers(coordinates[index - 1], coordinate);
+  }, 0);
+}
+
+function getFeatureLengthInKilometers(feature) {
+  return getLineStrings(feature?.geometry).reduce(
+    (total, coordinates) => total + getLineLengthInKilometers(coordinates),
+    0
+  );
+}
+
+function getSegmentIntersection(firstStart, firstEnd, secondStart, secondEnd) {
+  const firstDeltaLng = firstEnd[0] - firstStart[0];
+  const firstDeltaLat = firstEnd[1] - firstStart[1];
+  const secondDeltaLng = secondEnd[0] - secondStart[0];
+  const secondDeltaLat = secondEnd[1] - secondStart[1];
+  const denominator = firstDeltaLng * secondDeltaLat - firstDeltaLat * secondDeltaLng;
+
+  if (Math.abs(denominator) < 1e-12) {
+    return null;
+  }
+
+  const startDeltaLng = secondStart[0] - firstStart[0];
+  const startDeltaLat = secondStart[1] - firstStart[1];
+  const firstFactor =
+    (startDeltaLng * secondDeltaLat - startDeltaLat * secondDeltaLng) / denominator;
+  const secondFactor =
+    (startDeltaLng * firstDeltaLat - startDeltaLat * firstDeltaLng) / denominator;
+
+  if (firstFactor < 0 || firstFactor > 1 || secondFactor < 0 || secondFactor > 1) {
+    return null;
+  }
+
+  return {
+    coordinates: [
+      firstStart[0] + firstFactor * firstDeltaLng,
+      firstStart[1] + firstFactor * firstDeltaLat,
+    ],
+    firstFactor,
+  };
+}
+
+function dedupeCrossings(crossings) {
+  const sortedCrossings = [...crossings].sort(
+    (left, right) => left.distanceFromStartKm - right.distanceFromStartKm
+  );
+
+  return sortedCrossings.reduce((uniqueCrossings, crossing) => {
+    const lastCrossing = uniqueCrossings[uniqueCrossings.length - 1];
+
+    if (
+      lastCrossing &&
+      Math.abs(lastCrossing.distanceFromStartKm - crossing.distanceFromStartKm) < 0.02 &&
+      getDistanceInKilometers(lastCrossing.coordinates, crossing.coordinates) < 0.02
+    ) {
+      return uniqueCrossings;
+    }
+
+    uniqueCrossings.push(crossing);
+    return uniqueCrossings;
+  }, []);
+}
+
+function getCrossingMetrics(selectedTrailFeature, trailsGeoJson) {
+  if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
+    return null;
+  }
+
+  const selectedTrailId = selectedTrailFeature.properties?.id;
+  const crossings = [];
+  let traversedDistanceKm = 0;
+
+  getLineStrings(selectedTrailFeature.geometry).forEach((selectedCoordinates) => {
+    for (let index = 1; index < selectedCoordinates.length; index += 1) {
+      const selectedStart = selectedCoordinates[index - 1];
+      const selectedEnd = selectedCoordinates[index];
+      const selectedSegmentLengthKm = getDistanceInKilometers(selectedStart, selectedEnd);
+
+      trailsGeoJson.features.forEach((candidateFeature) => {
+        if (candidateFeature.properties?.id === selectedTrailId) {
+          return;
+        }
+
+        getLineStrings(candidateFeature.geometry).forEach((candidateCoordinates) => {
+          for (let candidateIndex = 1; candidateIndex < candidateCoordinates.length; candidateIndex += 1) {
+            const candidateStart = candidateCoordinates[candidateIndex - 1];
+            const candidateEnd = candidateCoordinates[candidateIndex];
+            const intersection = getSegmentIntersection(
+              selectedStart,
+              selectedEnd,
+              candidateStart,
+              candidateEnd
+            );
+
+            if (!intersection) {
+              continue;
+            }
+
+            crossings.push({
+              coordinates: intersection.coordinates,
+              distanceFromStartKm:
+                traversedDistanceKm + selectedSegmentLengthKm * intersection.firstFactor,
+            });
+          }
+        });
+      });
+
+      traversedDistanceKm += selectedSegmentLengthKm;
+    }
+  });
+
+  const uniqueCrossings = dedupeCrossings(crossings);
+  const crossingIntervals = uniqueCrossings.slice(1).map((crossing, index) => ({
+    fromCrossing: index + 1,
+    toCrossing: index + 2,
+    distanceKm: crossing.distanceFromStartKm - uniqueCrossings[index].distanceFromStartKm,
+  }));
+
+  return {
+    crossings: uniqueCrossings,
+    crossingIntervals,
+    totalLengthKm: getFeatureLengthInKilometers(selectedTrailFeature),
+  };
+}
+
+function formatDistance(distanceKm) {
+  return `${distanceKm.toFixed(2)} km`;
+}
+
 function findClosestDestination(destinations, referenceCoordinates) {
   if (!destinations.length) {
     return null;
@@ -254,14 +409,17 @@ export default function Home() {
   const [requestError, setRequestError] = useState('');
   const [destinations, setDestinations] = useState([]);
   const [destinationsGeoJson, setDestinationsGeoJson] = useState(null);
+  const [trailsGeoJson, setTrailsGeoJson] = useState(null);
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
-  const [selectedTrail, setSelectedTrail] = useState(null);
+  const [selectedTrailFeature, setSelectedTrailFeature] = useState(null);
+  const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
+  const selectedTrail = selectedTrailFeature?.properties || null;
 
   function updateSelectedDestination(destinationId, options = {}) {
     const { manual = false } = options;
@@ -271,7 +429,8 @@ export default function Home() {
     }
 
     setSelectedDestinationId(destinationId);
-    setSelectedTrail(null);
+    setSelectedTrailFeature(null);
+    setSelectedTrailCrossings(null);
   }
 
   useEffect(() => {
@@ -529,6 +688,8 @@ export default function Home() {
           return;
         }
 
+        setTrailsGeoJson(geojson);
+
         if (map.getSource(TRAILS_SOURCE_ID)) {
           map.getSource(TRAILS_SOURCE_ID).setData(geojson);
         } else {
@@ -559,7 +720,7 @@ export default function Home() {
               return;
             }
 
-            setSelectedTrail(feature.properties);
+            setSelectedTrailFeature(feature);
           });
 
           map.on('mouseenter', TRAILS_LAYER_ID, () => {
@@ -589,6 +750,15 @@ export default function Home() {
       isCancelled = true;
     };
   }, [mapReady, selectedDestinationId, selectedDestination]);
+
+  useEffect(() => {
+    if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
+      setSelectedTrailCrossings(null);
+      return;
+    }
+
+    setSelectedTrailCrossings(getCrossingMetrics(selectedTrailFeature, trailsGeoJson));
+  }, [selectedTrailFeature, trailsGeoJson]);
 
   return (
     <div className="page-shell">
@@ -704,7 +874,35 @@ export default function Home() {
                   Classic: {selectedTrail.has_classic ? 'Yes' : 'No'} · Skating:{' '}
                   {selectedTrail.has_skating ? 'Yes' : 'No'}
                 </p>
+                {selectedTrailCrossings ? (
+                  <p>
+                    Length: {formatDistance(selectedTrailCrossings.totalLengthKm)} · Crossings:{' '}
+                    {selectedTrailCrossings.crossings.length}
+                  </p>
+                ) : null}
                 {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
+                {selectedTrailCrossings?.crossingIntervals?.length ? (
+                  <div className="crossing-list-block">
+                    <p className="detail-label">Distance between crossings</p>
+                    <ul className="crossing-list">
+                      {selectedTrailCrossings.crossingIntervals.map((interval) => (
+                        <li
+                          key={`${interval.fromCrossing}-${interval.toCrossing}`}
+                          className="crossing-item"
+                        >
+                          <span>
+                            Crossing {interval.fromCrossing} to {interval.toCrossing}
+                          </span>
+                          <strong>{formatDistance(interval.distanceKm)}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : selectedTrailCrossings?.crossings?.length === 1 ? (
+                  <p>Only one crossing was found on this trail, so no interval can be shown yet.</p>
+                ) : selectedTrailCrossings ? (
+                  <p>No crossings were found for this trail within the loaded destination network.</p>
+                ) : null}
               </section>
             ) : null}
           </div>
@@ -1048,6 +1246,26 @@ export default function Home() {
           gap: 0.65rem;
         }
 
+        .crossing-list-block {
+          margin-top: 0.8rem;
+        }
+
+        .crossing-list {
+          display: grid;
+          gap: 0.4rem;
+          margin: 0.45rem 0 0;
+          padding: 0;
+          list-style: none;
+        }
+
+        .crossing-item {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 0.75rem;
+          color: #284638;
+        }
+
         .legend-swatch {
           width: 0.95rem;
           height: 0.95rem;
@@ -1162,6 +1380,10 @@ export default function Home() {
           .legend-item {
             gap: 0.5rem;
             font-size: 0.84rem;
+          }
+
+          .crossing-item {
+            font-size: 0.8rem;
           }
 
           .legend-swatch {
