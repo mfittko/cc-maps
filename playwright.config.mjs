@@ -18,6 +18,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       NEXT_PUBLIC_MAPBOX_TOKEN: process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '',
+      NEXT_PUBLIC_ENABLE_MAPBOX_MOCK: '1',
       SPORET_API_BASE_URL: process.env.SPORET_API_BASE_URL || '',
     },
   },

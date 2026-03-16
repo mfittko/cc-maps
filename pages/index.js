@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
+import mapboxglMock from '../lib/mapbox-gl-mock';
 import ControlPanel from '../components/ControlPanel';
 import InfoPanel from '../components/InfoPanel';
 import PlanningPanel from '../components/PlanningPanel';
@@ -79,6 +80,8 @@ const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const GEOLOCATE_MAX_ZOOM = 13.5;
 const TERRAIN_SAMPLE_SPACING_METERS = 25;
+const isMapboxMockEnabled = process.env.NEXT_PUBLIC_ENABLE_MAPBOX_MOCK === '1';
+const mapboxApi = isMapboxMockEnabled ? mapboxglMock : mapboxgl;
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
   .map(([key, value]) => ({ code: Number(key), ...value }));
@@ -125,7 +128,7 @@ function extendBounds(bounds, coordinates) {
 }
 
 function fitMapToGeoJson(map, geojson, fallbackCenter) {
-  const bounds = new mapboxgl.LngLatBounds();
+  const bounds = new mapboxApi.LngLatBounds();
   let hasCoordinates = false;
 
   geojson.features.forEach((feature) => {
@@ -557,14 +560,16 @@ export default function Home() {
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
-    if (!accessToken) {
+    if (!accessToken && !isMapboxMockEnabled) {
       setMapError('Set NEXT_PUBLIC_MAPBOX_TOKEN in .env.local to load the map.');
       return undefined;
     }
 
-    mapboxgl.accessToken = accessToken;
+    if (!isMapboxMockEnabled) {
+      mapboxApi.accessToken = accessToken;
+    }
 
-    const map = new mapboxgl.Map({
+    const map = new mapboxApi.Map({
       container: mapContainer.current,
       style: WINTER_STYLE_URL,
       center: DEFAULT_CENTER,
@@ -573,8 +578,8 @@ export default function Home() {
 
     mapRef.current = map;
 
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    geolocateControlRef.current = new mapboxgl.GeolocateControl({
+    map.addControl(new mapboxApi.NavigationControl(), 'top-right');
+    geolocateControlRef.current = new mapboxApi.GeolocateControl({
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: true,
       showUserHeading: true,

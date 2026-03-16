@@ -98,12 +98,13 @@ test.describe('planning mode interactions', () => {
     await page.goto('/');
 
     await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByText('Nordmarka')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
 
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
     await expect(page.getByText('Ctrl+click a trail section to add it to your route.')).toBeVisible();
+    await page.screenshot({ path: 'test-results/planning-mode-desktop.png', fullPage: true });
 
     await page.getByRole('button', { name: 'Exit planning mode' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
