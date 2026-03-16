@@ -436,7 +436,7 @@ function getCrossingMetrics(selectedTrailFeature, trailsGeoJson, destinations) {
 }
 
 function formatDistance(distanceKm) {
-  return `${distanceKm.toFixed(2)} km`;
+  return `${distanceKm.toFixed(1)} km`;
 }
 
 function findClosestDestination(destinations, referenceCoordinates) {
@@ -592,7 +592,7 @@ export default function Home() {
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrailFeature, setSelectedTrailFeature] = useState(null);
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
-  const [trailColorMode, setTrailColorMode] = useState('type');
+  const [trailColorMode, setTrailColorMode] = useState('freshness');
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
@@ -1244,7 +1244,7 @@ export default function Home() {
               <FaLayerGroup className="info-icon" />
               <div>
                 <p className="detail-label">Trail colors</p>
-                <p>Blue is floodlit, green is machine groomed, orange is scooter, and purple is historic.</p>
+                <p>Freshness is the default view. Switch to type colors when you want trail categories instead.</p>
               </div>
             </section>
           </div>
