@@ -17,8 +17,14 @@ const DESTINATIONS_SOURCE_ID = 'destinations';
 const DESTINATIONS_LAYER_ID = 'destinations-layer';
 const TRAILS_SOURCE_ID = 'trails';
 const TRAILS_LAYER_ID = 'trails-layer';
+const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
+const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
+const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
 const DEM_SOURCE_ID = 'mapbox-dem';
 const BUILDINGS_LAYER_ID = '3d-buildings';
+const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
+const MIN_SEGMENT_DISTANCE_KM = 0.05;
+const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -154,6 +160,163 @@ function getFeatureLengthInKilometers(feature) {
   );
 }
 
+function getCoordinateAlongTrail(feature, targetDistanceKm) {
+  const lineStrings = getLineStrings(feature?.geometry);
+  let traversedDistanceKm = 0;
+
+  for (const coordinates of lineStrings) {
+    for (let index = 1; index < coordinates.length; index += 1) {
+      const start = coordinates[index - 1];
+      const end = coordinates[index];
+      const segmentLengthKm = getDistanceInKilometers(start, end);
+
+      if (traversedDistanceKm + segmentLengthKm >= targetDistanceKm) {
+        const remainingDistanceKm = targetDistanceKm - traversedDistanceKm;
+        const segmentRatio = segmentLengthKm === 0 ? 0 : remainingDistanceKm / segmentLengthKm;
+
+        return [
+          start[0] + (end[0] - start[0]) * segmentRatio,
+          start[1] + (end[1] - start[1]) * segmentRatio,
+        ];
+      }
+
+      traversedDistanceKm += segmentLengthKm;
+    }
+  }
+
+  const endpoints = getTrailEndpoints(feature);
+  return endpoints.end || endpoints.start || null;
+}
+
+function getTrailEndpoints(feature) {
+  const lineStrings = getLineStrings(feature?.geometry).filter((coordinates) => coordinates.length);
+
+  if (!lineStrings.length) {
+    return { start: null, end: null };
+  }
+
+  const firstLine = lineStrings[0];
+  const lastLine = lineStrings[lineStrings.length - 1];
+
+  return {
+    start: firstLine[0],
+    end: lastLine[lastLine.length - 1],
+  };
+}
+
+function getNearestDestinationLabel(referenceCoordinates, destinations) {
+  if (!referenceCoordinates || !destinations.length) {
+    return null;
+  }
+
+  const closestDestination = findClosestDestination(destinations, referenceCoordinates);
+
+  if (!closestDestination) {
+    return null;
+  }
+
+  const distanceKm = getDistanceInKilometers(referenceCoordinates, closestDestination.coordinates);
+
+  return distanceKm <= DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM ? closestDestination.name : null;
+}
+
+function normalizePathPoints(pathPoints) {
+  return pathPoints.reduce((normalizedPoints, point) => {
+    const previousPoint = normalizedPoints[normalizedPoints.length - 1];
+
+    if (!previousPoint) {
+      normalizedPoints.push(point);
+      return normalizedPoints;
+    }
+
+    if (
+      Math.abs(point.distanceFromStartKm - previousPoint.distanceFromStartKm) < MIN_SEGMENT_DISTANCE_KM
+    ) {
+      if (point.kind === 'end') {
+        normalizedPoints[normalizedPoints.length - 1] = point;
+      }
+
+      return normalizedPoints;
+    }
+
+    normalizedPoints.push(point);
+    return normalizedPoints;
+  }, []);
+}
+
+function buildTrailSegments(selectedTrailFeature, crossingMetrics, destinations) {
+  if (!selectedTrailFeature || !crossingMetrics) {
+    return [];
+  }
+
+  const endpoints = getTrailEndpoints(selectedTrailFeature);
+  const pathPoints = normalizePathPoints([
+    {
+      kind: 'start',
+      label: getNearestDestinationLabel(endpoints.start, destinations) || 'Trail start',
+      distanceFromStartKm: 0,
+    },
+    ...crossingMetrics.crossings.map((crossing, index) => ({
+      kind: 'crossing',
+      label: `Crossing ${index + 1}`,
+      distanceFromStartKm: crossing.distanceFromStartKm,
+    })),
+    {
+      kind: 'end',
+      label: getNearestDestinationLabel(endpoints.end, destinations) || 'Trail end',
+      distanceFromStartKm: crossingMetrics.totalLengthKm,
+    },
+  ]);
+
+  return pathPoints.slice(1).map((point, index) => {
+    const startDistanceKm = pathPoints[index].distanceFromStartKm;
+    const endDistanceKm = point.distanceFromStartKm;
+
+    return {
+      fromLabel: pathPoints[index].label,
+      toLabel: point.label,
+      distanceKm: endDistanceKm - startDistanceKm,
+      midpointCoordinates: getCoordinateAlongTrail(
+        selectedTrailFeature,
+        startDistanceKm + (endDistanceKm - startDistanceKm) / 2
+      ),
+    };
+  }).filter((segment) => segment.distanceKm >= MIN_SEGMENT_DISTANCE_KM);
+}
+
+function getTrailSegmentLabelsGeoJson(segments) {
+  return {
+    type: 'FeatureCollection',
+    features: segments
+      .filter((segment) => Array.isArray(segment.midpointCoordinates))
+      .map((segment, index) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: segment.midpointCoordinates,
+        },
+        properties: {
+          id: String(index),
+          label: formatDistance(segment.distanceKm),
+          route: `${segment.fromLabel} to ${segment.toLabel}`,
+        },
+      })),
+  };
+}
+
+function getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations) {
+  if (!trailsGeoJson?.features?.length) {
+    return getTrailSegmentLabelsGeoJson([]);
+  }
+
+  const allSegments = trailsGeoJson.features.flatMap((feature) => {
+    const crossingMetrics = getCrossingMetrics(feature, trailsGeoJson, destinations);
+    return crossingMetrics?.segments || [];
+  });
+
+  return getTrailSegmentLabelsGeoJson(allSegments);
+}
+
 function getSegmentIntersection(firstStart, firstEnd, secondStart, secondEnd) {
   const firstDeltaLng = firstEnd[0] - firstStart[0];
   const firstDeltaLat = firstEnd[1] - firstStart[1];
@@ -206,7 +369,7 @@ function dedupeCrossings(crossings) {
   }, []);
 }
 
-function getCrossingMetrics(selectedTrailFeature, trailsGeoJson) {
+function getCrossingMetrics(selectedTrailFeature, trailsGeoJson, destinations) {
   if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
     return null;
   }
@@ -264,6 +427,10 @@ function getCrossingMetrics(selectedTrailFeature, trailsGeoJson) {
   return {
     crossings: uniqueCrossings,
     crossingIntervals,
+    segments: buildTrailSegments(selectedTrailFeature, {
+      crossings: uniqueCrossings,
+      totalLengthKm: getFeatureLengthInKilometers(selectedTrailFeature),
+    }, destinations),
     totalLengthKm: getFeatureLengthInKilometers(selectedTrailFeature),
   };
 }
@@ -782,8 +949,79 @@ export default function Home() {
       return;
     }
 
-    setSelectedTrailCrossings(getCrossingMetrics(selectedTrailFeature, trailsGeoJson));
-  }, [selectedTrailFeature, trailsGeoJson]);
+    setSelectedTrailCrossings(getCrossingMetrics(selectedTrailFeature, trailsGeoJson, destinations));
+  }, [selectedTrailFeature, trailsGeoJson, destinations]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map) {
+      return undefined;
+    }
+
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations);
+
+    if (map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID)) {
+      map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID).setData(labelsGeoJson);
+    } else {
+      map.addSource(TRAIL_SEGMENT_LABELS_SOURCE_ID, {
+        type: 'geojson',
+        data: labelsGeoJson,
+      });
+
+      map.addLayer({
+        id: TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID,
+        type: 'circle',
+        source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
+        minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 13, 12, 18],
+          'circle-color': 'rgba(248, 252, 248, 0.82)',
+          'circle-blur': 0.75,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': 'rgba(255, 255, 255, 0.95)',
+          'circle-opacity': 0.95,
+        },
+      });
+
+      map.addLayer({
+        id: TRAIL_SEGMENT_LABELS_LAYER_ID,
+        type: 'symbol',
+        source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
+        minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
+        layout: {
+          'text-field': ['get', 'label'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 12, 13],
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+          'text-offset': [0, 0],
+          'text-anchor': 'center',
+          'text-allow-overlap': true,
+          'text-ignore-placement': true,
+          'symbol-placement': 'point',
+        },
+        paint: {
+          'text-color': '#173127',
+          'text-halo-color': 'rgba(250, 252, 250, 0.98)',
+          'text-halo-width': 2.75,
+          'text-halo-blur': 1,
+        },
+      });
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);
+    }
+
+    return () => {
+      if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
+        map.setLayoutProperty(TRAIL_SEGMENT_LABELS_LAYER_ID, 'visibility', 'visible');
+      }
+    };
+  }, [mapReady, trailsGeoJson, destinations]);
 
   return (
     <div className="page-shell">
@@ -935,19 +1173,19 @@ export default function Home() {
                   </p>
                 ) : null}
                 {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
-                {selectedTrailCrossings?.crossingIntervals?.length ? (
+                {selectedTrailCrossings?.segments?.length ? (
                   <div className="crossing-list-block">
-                    <p className="detail-label">Distance between crossings</p>
+                    <p className="detail-label">Trail segments</p>
                     <ul className="crossing-list">
-                      {selectedTrailCrossings.crossingIntervals.map((interval) => (
+                      {selectedTrailCrossings.segments.map((segment, index) => (
                         <li
-                          key={`${interval.fromCrossing}-${interval.toCrossing}`}
+                          key={`${segment.fromLabel}-${segment.toLabel}-${index}`}
                           className="crossing-item"
                         >
                           <span>
-                            Crossing {interval.fromCrossing} to {interval.toCrossing}
+                            {segment.fromLabel} to {segment.toLabel}
                           </span>
-                          <strong>{formatDistance(interval.distanceKm)}</strong>
+                          <strong>{formatDistance(segment.distanceKm)}</strong>
                         </li>
                       ))}
                     </ul>
