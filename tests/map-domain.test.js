@@ -591,6 +591,47 @@ describe('map-domain', () => {
     expect(sampledCoordinates.length).toBeGreaterThanOrEqual(4);
   });
 
+  it('handles sampling edge cases for missing and zero-length geometry', () => {
+    expect(getSampledCoordinatesAlongFeature(null)).toEqual([]);
+
+    const zeroLengthFeature = {
+      type: 'Feature',
+      properties: { id: 77, destinationid: '1' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.0, 59.0],
+          [10.0, 59.0],
+        ],
+      },
+    };
+
+    expect(getSampledCoordinatesAlongFeature(zeroLengthFeature)).toEqual([[10.0, 59.0]]);
+  });
+
+  it('matches trail proximity for degenerate segments', () => {
+    const degenerateTrailGeoJson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 606, destinationid: '1' },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [10.7522, 59.9139],
+              [10.7522, 59.9139],
+            ],
+          },
+        },
+      ],
+    };
+
+    expect(
+      findClosestDestinationByTrailProximity(destinations, degenerateTrailGeoJson, oslo, 0.05)?.id
+    ).toBe('1');
+  });
+
   it('computes ascent and descent from sampled elevations', () => {
     expect(getElevationChangeMetrics([100, 125, 118, 140, 135])).toEqual({
       ascentMeters: 47,
