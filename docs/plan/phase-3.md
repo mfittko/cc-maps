@@ -4,6 +4,17 @@
 
 Make the MVP practical on mobile by adding the minimum app shell work required for correct Mapbox rendering, environment clarity, and home-screen install metadata.
 
+## Status
+
+Complete at the intended MVP level.
+
+This phase is satisfied in the current implementation:
+
+- `/pages/_app.js` imports Mapbox GL CSS and app-wide metadata.
+- `.env.local.example` documents the required runtime variables.
+- `public/manifest.json` and the icon assets under `public/` provide install metadata.
+- Offline support remains explicitly deferred, which matches the intended scope of this phase.
+
 ## Scope
 
 1. Add `/pages/_app.js` to import Mapbox GL CSS and any global styles required by the app shell.

@@ -1,47 +1,78 @@
 # Cross-Country maps
 
-This repository contains `Cross-Country maps`, with `cc-maps` as the working alias for the codebase and deployment setup. The app uses **Next.js** and **Mapbox GL JS** to present an interactive map overlaid with ski trails from the public **Sporet** service. It is designed as a Progressive Web App (PWA) that works on iPhones and modern browsers.
+This repository contains Cross-Country maps, shipped under the `cc-maps` package and deployment alias. It is a Next.js and Mapbox GL JS application that loads active ski destinations from the public Sporet service, then fetches trail data on demand for the selected area.
 
-The current MVP loads active ski destinations first, then fetches trails on demand for the selected area. Trail segments are color-coded by trail type, and the UI includes a legend plus basic trail detail feedback.
+The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, optional 3D terrain, URL and local storage map-state persistence, client-side trail caching, nearby destination suggestions, and trail crossing analysis in the details panel.
 
-## Structure
+## Current implementation state
 
-* `pages/index.js` - renders the full-screen Mapbox map, loads active destinations, and fetches trails for the selected ski area.
-* `pages/api/trails.js` - API route that proxies requests to the Sporet REST service for cross-country trail GeoJSON.
-* `pages/api/destinations.js` - API route that proxies active ski destinations from the Sporet service.
-* `lib/sporet.js` - shared Sporet layer IDs, API helpers, and trail and destination style mappings.
-* `docs/spec.md` - complete specification of the application and API documentation extracted from the Sporet service.
-* `docs/PLAN.md` and `docs/plan/` - implementation plan and phase breakdown.
-* `package.json` / `next.config.js` - project configuration and dependencies.
+- Phase 0 through Phase 4 from the buildout plan are materially complete.
+- The primary flow is destination-first and does not depend on an unbounded trail fetch.
+- Minimal PWA metadata is present through the manifest and app icons, but there is no service worker or offline caching layer.
+- A few map UX improvements shipped outside the original written phase scope and are now documented in this repository.
 
-## Usage
+## Main files
 
-1. Install dependencies:
+- `pages/index.js` now focuses on map orchestration, state wiring, and layer lifecycle effects.
+- `components/ControlPanel.js` and `components/InfoPanel.js` contain the extracted side-panel presentation.
+- `hooks/useMapPersistence.js` handles URL and local-storage synchronization for destination, terrain mode, color mode, and map view.
+- `lib/map-domain.js` contains extracted map-domain helpers such as distance calculations, nearby-destination selection, trail crossing analysis, and segment-label shaping.
+- `lib/map-persistence.js` contains extracted storage and query-parsing helpers plus trail-cache shaping.
+- `pages/api/destinations.js` proxies active destination data from Sporet layer 4.
+- `pages/api/trails.js` validates `destinationid` and proxies trail data from Sporet layer 6.
+- `lib/sporet.js` contains shared Sporet layer IDs, query helpers, and trail and grooming style mappings.
+- `pages/_app.js` wires in global styles, Mapbox CSS, and manifest metadata.
+- `public/manifest.json` and the SVG icons under `public/` provide install metadata for mobile home-screen use.
+- `docs/spec.md` documents the current product behavior and API contract.
+- `docs/PLAN.md` and `docs/plan/` record the implementation phases and their completion status.
+
+## Local setup
+
+1. Install dependencies.
 
 ```bash
 npm install
 ```
 
-2. Copy `.env.local.example` to `.env.local` and set the environment variables (see `docs/spec.md` for details).
+2. Create `.env.local` from `.env.local.example`.
 
-3. Start the development server:
+```bash
+cp .env.local.example .env.local
+```
+
+3. Set the required values.
+
+```bash
+NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxxYourMapboxAccessTokenxxx
+SPORET_API_BASE_URL=https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapServer
+```
+
+4. Start the development server.
 
 ```bash
 npm run dev
 ```
 
-4. Open `http://localhost:3000` to view the app. On iPhone Safari you can add the app to the home screen for a more native experience.
+5. Open `http://localhost:3000`.
 
-## MVP Behavior
+6. Run the coverage-gated tests when changing extracted logic.
 
-1. Load the map and wait for destinations to appear.
-2. Choose a destination from the dropdown or click a destination marker on the map.
-3. The app fetches trails only for that destination and fits the map to the returned extent.
-4. Trail colors indicate trail type, and clicking a trail updates the details panel.
+```bash
+npm run test:coverage
+```
 
-## Deferred Work
+## Runtime behavior
 
-- Points of interest, transport stops, and warning polling are intentionally postponed.
-- Offline caching and service worker support are not part of the current MVP.
+1. The app initializes the map, restores persisted map state when available, and loads active destinations.
+2. If possible, it auto-selects the closest destination to the user or falls back to the default Oslo-centered view.
+3. Selecting a destination loads only that destination's trails and fits the map to the returned geometry.
+4. Trail colors can be switched between trail type and grooming freshness.
+5. Clicking a trail opens detail metadata, including grooming flags, warnings, total length, and detected crossing segments.
+6. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
 
-For a detailed API specification and workflow description, see [`docs/spec.md`](docs/spec.md).
+## Deferred work
+
+- POIs, transport stops, and warning polling are still intentionally deferred.
+- Service worker support and offline-first behavior are still out of scope.
+
+The up-to-date implementation reference is in `docs/spec.md`.

@@ -1,64 +1,76 @@
 # Cross-Country maps MVP Buildout Plan
 
-Bring the scaffold from a demo map into a usable MVP by adding destination-driven trail browsing, production-safe data fetching, clear map styling, and minimal mobile/PWA shell support. The recommended path is to complete the core ski-area flow first, then add UX and installability work, while explicitly deferring non-essential overlay layers.
+This document now serves as a buildout record and status snapshot for the original MVP plan.
 
-## Phase Documents
+## Current status
 
-- See `/docs/plan/phase-0.md` for repository bootstrap, naming, CI, and GitHub setup.
-- See `/docs/plan/README.md` for the phase index.
-- See `/docs/plan/phase-1.md` for API stabilization and shared data setup.
-- See `/docs/plan/phase-2.md` for the core map and interaction work.
-- See `/docs/plan/phase-3.md` for mobile shell and PWA metadata work.
-- See `/docs/plan/phase-4.md` for documentation completion and release alignment.
+- Phase 0 is complete: the repository is initialized, tracked as `mfittko/cc-maps`, and has baseline CI.
+- Phase 1 is complete: the API routes exist, `destinationid` validation is in place, and shared Sporet mappings live in `lib/sporet.js`.
+- Phase 2 is complete: the app loads destinations first, fetches trails on demand, renders legends and details, and exposes loading and error states.
+- Phase 3 is complete at the intended MVP level: Mapbox CSS is global, `.env.local.example` exists, and manifest plus icon metadata are wired in.
+- Phase 4 is now complete: the repository docs reflect the shipped behavior and current intentional exclusions.
+- Phase 5 is complete retroactive documentation of the post-MVP enhancements that shipped after the original handoff plan.
+- Phase 6 is complete: structural cleanup, responsibility splitting, and unit-test setup landed without changing product scope.
 
-## Steps
+## Improvements that landed beyond the original written phase scope
 
-1. Phase 0: Bootstrap the repository for delivery. Initialize git, rename the working title to `cc-maps`, add git hygiene files, configure CI, create the GitHub repository, and push the initial branch so implementation can proceed in a tracked project.
-2. Phase 1: Stabilize the current data path. Update `/pages/api/trails.js` to validate `destinationid`, return a clear error for malformed input, and avoid relying on an unbounded `1=1` production flow as the primary loading strategy. This blocks the rest of the MVP because all trail loading depends on a predictable API contract.
-3. Phase 1: Add shared map and data constants in a new file such as `/lib/sporet.js` for trail type labels, trail colors keyed by `trailtypesymbol`, and destination prep colors keyed by `prepsymbol`. This can run in parallel with step 2.
-4. Phase 1: Add a destinations API route in `/pages/api/destinations.js` that proxies Sporet layer 4, filters to active destinations, and returns the fields needed for marker rendering and selection. This depends on the request and response conventions established in step 2.
-5. Phase 2: Rework `/pages/index.js` so the initial map load fetches destinations first rather than all trails, renders destination markers or a destination layer, and lets the user select a destination to load trails for that area. This depends on steps 3 and 4.
-6. Phase 2: Replace the placeholder single-color line styling in `/pages/index.js` with data-driven styling based on `trailtypesymbol`, and add a small legend or inline explanation for the color mapping. This depends on step 3 and can be completed alongside step 5.
-7. Phase 2: Add essential interaction states in `/pages/index.js` and new UI components under `/components/` for loading, fetch failure, empty destination result, and selected destination metadata. This depends on step 5.
-8. Phase 2: Add click behavior for destination selection and optional trail click popups or a compact details panel showing core trail metadata such as type, grooming flags, and warning text when present. This depends on steps 5 and 6.
-9. Phase 3: Add app shell support required for a practical mobile MVP: import Mapbox GL CSS via `/pages/_app.js`, add a global stylesheet if needed, and add a minimal `.env.local.example` documenting required variables. This can run in parallel with step 7 once the core map flow is stable.
-10. Phase 3: Add minimal PWA metadata in `/public/manifest.json` plus required icons or placeholders and corresponding head metadata so the app can be added to the home screen. This depends on step 9.
-11. Phase 3: Review whether service worker and offline behavior should be included in MVP. If yes, add a lightweight PWA integration after the core flow is complete. If no, explicitly defer offline caching to post-MVP to avoid unnecessary complexity.
-12. Phase 4: Update `/README.md` to reflect the actual MVP flow, environment setup, and any intentional omissions such as POIs, transport stops, and warnings polling being postponed.
+- Winter-specific basemap paint overrides after the Mapbox style loads.
+- Optional 3D terrain and building extrusion mode.
+- URL and local storage persistence for destination, color mode, terrain mode, and map view.
+- Client-side trail response caching with a 15-minute TTL.
+- Nearby destination suggestions with preview trails.
+- Trail crossing analysis and on-map segment-distance labels.
 
-## Relevant Files
+## Latest completed phase
 
-- `/pages/index.js` - Main map entry point. It currently loads all trails on map load and will need to own destination-first loading, data-driven styling, selection, and user feedback states.
-- `/pages/api/trails.js` - Existing proxy route. It should be hardened with query validation and a cleaner contract for destination-scoped trail loading.
-- `/pages/api/destinations.js` - New proxy route for Sporet destination data from layer 4.
-- `/pages/_app.js` - New app shell file to import Mapbox GL CSS and shared global styles.
-- `/components/` - New presentational components for destination picker, loading and error banners, legend, and trail details.
-- `/lib/sporet.js` - New shared constants and helpers for symbol-to-color mappings and response shaping.
-- `/public/manifest.json` - New install metadata for mobile PWA support.
-- `/public/` - New icons and any minimal static assets required by the manifest.
-- `/package.json` - May need updates if PWA support or additional small UI dependencies are introduced.
-- `/README.md` - Should be updated after implementation so setup instructions match the actual feature set.
+Phase 6 delivered the cleanup and maintainability split: `/pages/index.js` now focuses on orchestration, panel presentation moved into components, persistence moved into a hook, pure geometry and storage helpers moved into `lib/`, and the repository now has a Vitest coverage gate for the extracted logic and API contract surface.
 
-## Verification
+Guiding principles for that phase:
 
-1. Install dependencies and run the app locally to confirm the map renders successfully with valid `NEXT_PUBLIC_MAPBOX_TOKEN` and `SPORET_API_BASE_URL` values.
-2. Verify that the initial app load shows destinations before trails and does not fetch an unbounded trail dataset by default.
-3. Select at least one destination and confirm that `/api/trails?destinationid=...` returns GeoJSON and the map updates to the expected trail extent.
-4. Confirm trail lines render with distinct colors for the expected `trailtypesymbol` values and that unknown values degrade gracefully.
-5. Confirm user-visible loading and error states appear for missing env vars, failed destination fetches, and failed trail fetches.
-6. Confirm Mapbox controls are styled correctly, which implicitly verifies that Mapbox GL CSS is imported globally.
-7. Confirm the mobile viewport experience on Safari-sized dimensions, including destination selection, geolocation control placement, and legibility of overlays.
-8. If PWA metadata is included in scope, verify that the manifest is served correctly and the app exposes the expected install metadata on mobile.
+- SRP: give data fetching, map initialization, panel UI, trail analysis, and persistence separate homes.
+- KISS: remove accidental complexity and avoid introducing abstraction layers that are not justified by repeated usage.
+- DRY: consolidate repeated layer setup, state synchronization, and GeoJSON handling patterns.
+- Add tests where logic becomes pure and isolated, so the cleanup improves maintainability rather than only reshuffling files.
+- Behavior preservation first: the refactor should not expand scope unless a small fix is required to make the split safe.
 
-## Decisions
+The current engineering baseline after Phase 6:
 
-- Included in MVP: destination discovery and selection, destination-scoped trail loading, trail type styling, loading and error states, and minimal mobile app shell work.
-- Deliberately excluded from MVP unless scope changes: POIs, transport stops, periodic warnings polling, advanced map style switching, and sophisticated offline caching.
-- Preferred loading strategy: destination-first rather than loading all trails on startup, because the current unfiltered trail query is likely too broad and brittle.
-- Preferred architecture: keep external Sporet access in Next.js API routes so the client map code stays thin and query behavior remains centralized.
+1. `npm run test:coverage` is part of CI and enforces 90% coverage for lines, statements, branches, and functions across the covered modules.
+2. Coverage is intended to surface dead code so it can be removed, not preserved with artificial tests.
+3. Future work after this point should mostly be maintenance, targeted fixes, or newly scoped feature work.
 
-## Further Considerations
+## Phase documents
 
-1. If the goal is the absolute smallest MVP, trail click details can be reduced to a popup and a simple destination list instead of a richer side panel.
-2. If the Sporet API returns unexpectedly large destination or trail payloads, add request field narrowing and light response shaping before introducing heavier caching.
-3. If installability is important but offline is not, include manifest and icons now and defer service worker work to a later phase.
+- See `/docs/plan/phase-0.md` for the repository bootstrap scope.
+- See `/docs/plan/phase-1.md` for the API stabilization scope.
+- See `/docs/plan/phase-2.md` for the destination-first map scope.
+- See `/docs/plan/phase-3.md` for the mobile shell and PWA metadata scope.
+- See `/docs/plan/phase-4.md` for the documentation alignment scope.
+- See `/docs/plan/phase-5.md` for the retroactive record of shipped post-MVP enhancements.
+- See `/docs/plan/phase-6.md` for the planned cleanup and architecture split.
+- See `/docs/plan/README.md` for the phase index and completion notes.
+
+## Relevant files in the current implementation
+
+- `/pages/index.js` owns the map UI, state restoration, destination suggestions, preview trails, and trail analysis behavior.
+- `/pages/api/trails.js` validates `destinationid` and proxies bounded trail queries to Sporet layer 6.
+- `/pages/api/destinations.js` proxies active destinations from layer 4.
+- `/lib/sporet.js` contains the layer IDs, query helper, and shared style mappings.
+- `/pages/_app.js` imports Mapbox CSS and app metadata.
+- `/public/manifest.json` and `/public/*.svg` provide install metadata.
+- `/README.md` and `/docs/spec.md` describe the shipped behavior.
+
+## Current verification checklist
+
+1. `npm run build` succeeds with valid environment variables.
+2. Initial app load fetches destinations before destination-scoped trails.
+3. Selecting a destination issues `/api/trails?destinationid=...` and fits to the returned network.
+4. Trail colors switch correctly between type and grooming freshness modes.
+5. Map state survives reloads through URL query parameters and local storage.
+6. Manifest metadata is served, while offline support remains explicitly unimplemented.
+7. `npm run test:coverage` covers the extracted pure helpers and API contract surface and fails CI if coverage drops below 90%.
+
+## Scope decisions still in effect
+
+- Included: destination selection, destination-scoped trails, trail legends, trail detail metadata, mobile shell metadata, and the extra map UX enhancements listed above.
+- Deferred: POIs, transport stops, warning polling, service worker support, and offline-first behavior.

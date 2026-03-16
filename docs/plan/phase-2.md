@@ -4,6 +4,16 @@
 
 Turn the scaffold into a usable MVP by making destinations the primary entry point, loading trails on demand for a selected ski area, and presenting the map with meaningful styling and user feedback.
 
+## Status
+
+Complete.
+
+This phase is satisfied and has since been expanded by later shipped enhancements:
+
+- The app loads destinations first and uses destination-scoped trail fetches as the intended product flow.
+- Destination markers, selection behavior, loading states, legends, and trail details are all present.
+- The core map experience delivered here became the foundation for the post-MVP improvements recorded in Phase 5.
+
 ## Scope
 
 1. Rework `/pages/index.js` so the map loads destinations first instead of loading all trails immediately.

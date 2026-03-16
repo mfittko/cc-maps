@@ -4,6 +4,17 @@
 
 Establish a predictable data contract for the MVP by hardening the trail API, introducing destination fetching, and centralizing symbol-to-style mappings used by the client.
 
+## Status
+
+Complete.
+
+This phase is satisfied in the current implementation:
+
+- `/pages/api/trails.js` validates `destinationid` and bounds the unfiltered fallback path.
+- `/pages/api/destinations.js` proxies active destination data from Sporet layer 4.
+- `/lib/sporet.js` centralizes shared layer IDs, query helpers, and style mappings.
+- The documented client contract is now part of the shipped runtime, not a planned backend change.
+
 ## Scope
 
 1. Update `/pages/api/trails.js` to validate `destinationid` and reject malformed input with a clear client error.

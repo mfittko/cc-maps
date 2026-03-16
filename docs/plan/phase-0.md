@@ -4,6 +4,17 @@
 
 Prepare the project for implementation by turning the local scaffold into a tracked GitHub repository for `Cross-Country maps`, using `cc-maps` as the repository and deployment alias, with baseline CI and the files needed for safe collaboration.
 
+## Status
+
+Complete.
+
+This phase is satisfied in the current repository state:
+
+- The repository is tracked on `main` and connected to `mfittko/cc-maps`.
+- `package.json` and repository-facing docs use the `cc-maps` alias.
+- `.gitignore`, `.env.local.example`, and GitHub Actions CI are present.
+- The bootstrap work should now be treated as historical context rather than pending work.
+
 ## Scope
 
 1. Initialize the project as a git repository with a `main` branch.
