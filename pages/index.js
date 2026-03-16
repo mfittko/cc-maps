@@ -28,6 +28,7 @@ const MIN_SEGMENT_DISTANCE_KM = 0.05;
 const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
 const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
+const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -454,6 +455,27 @@ function isTrailColorMode(value) {
   return value === 'type' || value === 'freshness';
 }
 
+function parseMapViewValue(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
+function getMapViewFromValues(longitudeValue, latitudeValue, zoomValue) {
+  const longitude = parseMapViewValue(longitudeValue);
+  const latitude = parseMapViewValue(latitudeValue);
+  const zoom = parseMapViewValue(zoomValue);
+
+  if (longitude === null || latitude === null || zoom === null) {
+    return null;
+  }
+
+  return { longitude, latitude, zoom };
+}
+
 function readStoredMapSettings() {
   if (typeof window === 'undefined') {
     return null;
@@ -617,6 +639,10 @@ export default function Home() {
   const hasManualDestinationSelectionRef = useRef(false);
   const hasAutoSelectedDestinationRef = useRef(false);
   const hasInitializedFromUrlRef = useRef(false);
+  const shouldPreserveMapViewRef = useRef(false);
+  const skipNextTrailFitRef = useRef(false);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
+  const [isInitialMapViewSettled, setIsInitialMapViewSettled] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState('');
   const [destinationsStatus, setDestinationsStatus] = useState('idle');
@@ -630,11 +656,16 @@ export default function Home() {
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
   const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
+  const [mapView, setMapView] = useState(null);
+  const [suggestedDestinationId, setSuggestedDestinationId] = useState('');
+  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
+  const suggestedDestination =
+    destinations.find((destination) => destination.id === suggestedDestinationId) || null;
   const selectedTrail = selectedTrailFeature?.properties || null;
   const activeTrailLegendItems =
     trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
@@ -649,6 +680,7 @@ export default function Home() {
     setSelectedDestinationId(destinationId);
     setSelectedTrailFeature(null);
     setSelectedTrailCrossings(null);
+    setSuggestedDestinationId('');
   }
 
   useEffect(() => {
@@ -660,13 +692,23 @@ export default function Home() {
     const destinationFromUrl = getSingleQueryValue(router.query.destination);
     const colorModeFromUrl = getSingleQueryValue(router.query.colors);
     const threeDimensionalFromUrl = getSingleQueryValue(router.query.terrain);
+    const longitudeFromUrl = getSingleQueryValue(router.query.lng);
+    const latitudeFromUrl = getSingleQueryValue(router.query.lat);
+    const zoomFromUrl = getSingleQueryValue(router.query.zoom);
     const destinationFromStorage = getSingleQueryValue(storedSettings?.destination);
     const colorModeFromStorage = getSingleQueryValue(storedSettings?.colors);
     const threeDimensionalFromStorage = getSingleQueryValue(storedSettings?.terrain);
+    const mapViewFromUrl = getMapViewFromValues(longitudeFromUrl, latitudeFromUrl, zoomFromUrl);
+    const mapViewFromStorage = getMapViewFromValues(
+      storedSettings?.lng,
+      storedSettings?.lat,
+      storedSettings?.zoom
+    );
 
     const initialDestination = destinationFromUrl || destinationFromStorage;
     const initialColorMode = colorModeFromUrl || colorModeFromStorage;
     const initialTerrain = threeDimensionalFromUrl || threeDimensionalFromStorage;
+    const initialMapView = mapViewFromUrl || mapViewFromStorage;
 
     if (typeof initialDestination === 'string' && /^\d+$/.test(initialDestination)) {
       hasManualDestinationSelectionRef.current = true;
@@ -682,8 +724,42 @@ export default function Home() {
       setIsThreeDimensional(true);
     }
 
+    if (initialMapView) {
+      shouldPreserveMapViewRef.current = true;
+      setMapView(initialMapView);
+    }
+
     hasInitializedFromUrlRef.current = true;
-  }, [router.isReady, router.query.destination, router.query.colors, router.query.terrain]);
+  }, [
+    router.isReady,
+    router.query.destination,
+    router.query.colors,
+    router.query.terrain,
+    router.query.lng,
+    router.query.lat,
+    router.query.zoom,
+  ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!router.isReady || !isMapLoaded || !map || isInitialMapViewSettled) {
+      return;
+    }
+
+    if (shouldPreserveMapViewRef.current && mapView) {
+      map.jumpTo({
+        center: [mapView.longitude, mapView.latitude],
+        zoom: mapView.zoom,
+      });
+
+      skipNextTrailFitRef.current = true;
+      shouldPreserveMapViewRef.current = false;
+    }
+
+    setIsInitialMapViewSettled(true);
+    setMapReady(true);
+  }, [router.isReady, isMapLoaded, isInitialMapViewSettled, mapView]);
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -721,13 +797,23 @@ export default function Home() {
         console.error('Failed to apply winter basemap styling', error);
       }
 
-      setMapReady(true);
+      setIsMapLoaded(true);
     });
 
     map.on('error', (event) => {
       if (event?.error?.message) {
         setMapError(event.error.message);
       }
+    });
+
+    map.on('moveend', () => {
+      const center = map.getCenter();
+
+      setMapView({
+        longitude: Number(center.lng.toFixed(5)),
+        latitude: Number(center.lat.toFixed(5)),
+        zoom: Number(map.getZoom().toFixed(2)),
+      });
     });
 
     return () => {
@@ -984,7 +1070,11 @@ export default function Home() {
           });
         }
 
-        fitMapToGeoJson(map, geojson, selectedDestination?.coordinates || DEFAULT_CENTER);
+        if (skipNextTrailFitRef.current) {
+          skipNextTrailFitRef.current = false;
+        } else {
+          fitMapToGeoJson(map, geojson, selectedDestination?.coordinates || DEFAULT_CENTER);
+        }
         setTrailsStatus('success');
       } catch (error) {
         if (isCancelled) {
@@ -1012,6 +1102,38 @@ export default function Home() {
 
     map.setPaintProperty(TRAILS_LAYER_ID, 'line-color', getTrailColorExpression(trailColorMode));
   }, [mapReady, trailColorMode]);
+
+  useEffect(() => {
+    if (!mapView || !selectedDestinationId || !destinations.length) {
+      setSuggestedDestinationId('');
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const nearestDestination = findClosestDestination(destinations, [
+        mapView.longitude,
+        mapView.latitude,
+      ]);
+
+      if (!nearestDestination || nearestDestination.id === selectedDestinationId) {
+        setSuggestedDestinationId('');
+        return;
+      }
+
+      const suggestionKey = `${selectedDestinationId}:${nearestDestination.id}`;
+
+      if (dismissedSuggestionKey === suggestionKey) {
+        setSuggestedDestinationId('');
+        return;
+      }
+
+      setSuggestedDestinationId(nearestDestination.id);
+    }, DESTINATION_SUGGESTION_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [mapView, selectedDestinationId, destinations, dismissedSuggestionKey]);
 
   useEffect(() => {
     if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
@@ -1118,17 +1240,36 @@ export default function Home() {
       delete nextQuery.terrain;
     }
 
+    if (mapView) {
+      nextQuery.lng = mapView.longitude.toFixed(5);
+      nextQuery.lat = mapView.latitude.toFixed(5);
+      nextQuery.zoom = mapView.zoom.toFixed(2);
+    } else {
+      delete nextQuery.lng;
+      delete nextQuery.lat;
+      delete nextQuery.zoom;
+    }
+
     const currentDestination = getSingleQueryValue(router.query.destination) || '';
     const currentColors = getSingleQueryValue(router.query.colors) || '';
     const currentTerrain = getSingleQueryValue(router.query.terrain) || '';
+    const currentLongitude = getSingleQueryValue(router.query.lng) || '';
+    const currentLatitude = getSingleQueryValue(router.query.lat) || '';
+    const currentZoom = getSingleQueryValue(router.query.zoom) || '';
     const nextDestination = getSingleQueryValue(nextQuery.destination) || '';
     const nextColors = getSingleQueryValue(nextQuery.colors) || '';
     const nextTerrain = getSingleQueryValue(nextQuery.terrain) || '';
+    const nextLongitude = getSingleQueryValue(nextQuery.lng) || '';
+    const nextLatitude = getSingleQueryValue(nextQuery.lat) || '';
+    const nextZoom = getSingleQueryValue(nextQuery.zoom) || '';
 
     if (
       currentDestination === nextDestination &&
       currentColors === nextColors &&
-      currentTerrain === nextTerrain
+      currentTerrain === nextTerrain &&
+      currentLongitude === nextLongitude &&
+      currentLatitude === nextLatitude &&
+      currentZoom === nextZoom
     ) {
       return;
     }
@@ -1146,6 +1287,7 @@ export default function Home() {
     selectedDestinationId,
     trailColorMode,
     isThreeDimensional,
+    mapView,
   ]);
 
   useEffect(() => {
@@ -1160,12 +1302,15 @@ export default function Home() {
           destination: selectedDestinationId || '',
           colors: trailColorMode,
           terrain: isThreeDimensional ? '1' : '',
+          lng: mapView?.longitude?.toFixed(5) || '',
+          lat: mapView?.latitude?.toFixed(5) || '',
+          zoom: mapView?.zoom?.toFixed(2) || '',
         })
       );
     } catch (error) {
       console.warn('Failed to persist map settings', error);
     }
-  }, [selectedDestinationId, trailColorMode, isThreeDimensional]);
+  }, [selectedDestinationId, trailColorMode, isThreeDimensional, mapView]);
 
   return (
     <div className="page-shell">
@@ -1277,6 +1422,36 @@ export default function Home() {
                   {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
                     DESTINATION_PREP_STYLES.default.label}
                 </p>
+              </section>
+            ) : null}
+
+            {suggestedDestination ? (
+              <section className="detail-card detail-card-compact">
+                <p className="detail-label">Nearby suggestion</p>
+                <h2>{suggestedDestination.name}</h2>
+                <p>The current map center is closer to this destination.</p>
+                <div className="suggestion-actions">
+                  <button
+                    type="button"
+                    className="suggestion-button"
+                    onClick={() => {
+                      setDismissedSuggestionKey('');
+                      updateSelectedDestination(suggestedDestination.id, { manual: true });
+                    }}
+                  >
+                    Switch destination
+                  </button>
+                  <button
+                    type="button"
+                    className="suggestion-button suggestion-button-secondary"
+                    onClick={() => {
+                      setDismissedSuggestionKey(`${selectedDestinationId}:${suggestedDestination.id}`);
+                      setSuggestedDestinationId('');
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </section>
             ) : null}
 
@@ -1396,7 +1571,10 @@ export default function Home() {
       ) : null}
 
       <main className="map-stage">
-        <div ref={mapContainer} className="map-container" />
+        <div
+          ref={mapContainer}
+          className={`map-container${isInitialMapViewSettled ? ' map-container-ready' : ''}`}
+        />
       </main>
 
       <style jsx>{`
@@ -1699,6 +1877,29 @@ export default function Home() {
           color: #8d2d2d;
         }
 
+        .suggestion-actions {
+          display: flex;
+          gap: 0.5rem;
+          margin-top: 0.75rem;
+        }
+
+        .suggestion-button {
+          border: 0;
+          border-radius: 999px;
+          background: #1f7f59;
+          color: #ffffff;
+          padding: 0.45rem 0.75rem;
+          font: inherit;
+          font-size: 0.8rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .suggestion-button-secondary {
+          background: #e7efea;
+          color: #274538;
+        }
+
         .legend-list {
           display: grid;
           gap: 0.55rem;
@@ -1744,6 +1945,15 @@ export default function Home() {
         .map-container {
           width: 100%;
           height: 100vh;
+        }
+
+        .map-container {
+          opacity: 0;
+          transition: opacity 180ms ease;
+        }
+
+        .map-container-ready {
+          opacity: 1;
         }
 
         @media (max-width: 840px) {
@@ -1882,6 +2092,17 @@ export default function Home() {
           .toggle-row input {
             width: 1rem;
             height: 1rem;
+          }
+
+          .suggestion-actions {
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+          }
+
+          .suggestion-button {
+            padding: 0.38rem 0.6rem;
+            font-size: 0.72rem;
           }
 
           .info-title {
