@@ -135,6 +135,7 @@ Expected output:
 - parallelization guidance,
 - owner recommendations,
 - review path,
+- board-state guidance, including when an issue is truly ready to move to `In Review`,
 - blocker tracking plan.
 
 ### 3. Run coding work
@@ -167,6 +168,9 @@ Use `pm` again when:
 - follow-up issues need to be created,
 - closure readiness needs a final evidence check,
 - multiple child issues need coordinated completion handling.
+
+Issue-level board note:
+- Move an issue to `In Review` only after the first code-review round has happened and the PM has run the system-wide `review` agent for the issue or delivery PR.
 
 ## Decision Rules
 
