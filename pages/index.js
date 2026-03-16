@@ -24,6 +24,10 @@ const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
   .map(([key, value]) => ({ code: Number(key), ...value }));
 
+const freshnessLegendItems = Object.entries(DESTINATION_PREP_STYLES)
+  .filter(([key]) => key !== 'default')
+  .map(([key, value]) => ({ code: Number(key), ...value }));
+
 function buildMatchExpression(propertyName, styles) {
   const expression = ['match', ['coalesce', ['to-number', ['get', propertyName]], -1]];
 
@@ -38,6 +42,14 @@ function buildMatchExpression(propertyName, styles) {
   expression.push(styles.default.color);
 
   return expression;
+}
+
+function getTrailColorExpression(colorMode) {
+  if (colorMode === 'freshness') {
+    return buildMatchExpression('prepsymbol', DESTINATION_PREP_STYLES);
+  }
+
+  return buildMatchExpression('trailtypesymbol', TRAIL_TYPE_STYLES);
 }
 
 function extendBounds(bounds, coordinates) {
@@ -413,6 +425,7 @@ export default function Home() {
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrailFeature, setSelectedTrailFeature] = useState(null);
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
+  const [trailColorMode, setTrailColorMode] = useState('type');
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
@@ -420,6 +433,8 @@ export default function Home() {
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
   const selectedTrail = selectedTrailFeature?.properties || null;
+  const activeTrailLegendItems =
+    trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
 
   function updateSelectedDestination(destinationId, options = {}) {
     const { manual = false } = options;
@@ -707,7 +722,7 @@ export default function Home() {
               'line-join': 'round',
             },
             paint: {
-              'line-color': buildMatchExpression('trailtypesymbol', TRAIL_TYPE_STYLES),
+              'line-color': getTrailColorExpression(trailColorMode),
               'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 11, 5],
               'line-opacity': 0.85,
             },
@@ -749,7 +764,17 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [mapReady, selectedDestinationId, selectedDestination]);
+  }, [mapReady, selectedDestinationId, selectedDestination, trailColorMode]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map || !map.getLayer(TRAILS_LAYER_ID)) {
+      return;
+    }
+
+    map.setPaintProperty(TRAILS_LAYER_ID, 'line-color', getTrailColorExpression(trailColorMode));
+  }, [mapReady, trailColorMode]);
 
   useEffect(() => {
     if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
@@ -805,6 +830,28 @@ export default function Home() {
               </label>
             </div>
 
+            <div className="display-mode-block">
+              <p className="detail-label">Trail colors</p>
+              <div className="segmented-control" role="tablist" aria-label="Trail color mode">
+                <button
+                  type="button"
+                  className={`segment-button${trailColorMode === 'type' ? ' segment-button-active' : ''}`}
+                  onClick={() => setTrailColorMode('type')}
+                  aria-pressed={trailColorMode === 'type'}
+                >
+                  Type
+                </button>
+                <button
+                  type="button"
+                  className={`segment-button${trailColorMode === 'freshness' ? ' segment-button-active' : ''}`}
+                  onClick={() => setTrailColorMode('freshness')}
+                  aria-pressed={trailColorMode === 'freshness'}
+                >
+                  Freshness
+                </button>
+              </div>
+            </div>
+
             <label className="field-label" htmlFor="destination-select">
               <span className="field-label-content">
                 <FaLocationDot />
@@ -852,9 +899,11 @@ export default function Home() {
             ) : null}
 
             <section className="detail-card detail-card-compact">
-              <p className="detail-label">Trail legend</p>
+              <p className="detail-label">
+                {trailColorMode === 'freshness' ? 'Grooming freshness legend' : 'Trail type legend'}
+              </p>
               <ul className="legend-list">
-                {trailLegendItems.map((item) => (
+                {activeTrailLegendItems.map((item) => (
                   <li key={item.code} className="legend-item">
                     <span className="legend-swatch" style={{ backgroundColor: item.color }} />
                     <span>{item.label}</span>
@@ -873,6 +922,11 @@ export default function Home() {
                 <p>
                   Classic: {selectedTrail.has_classic ? 'Yes' : 'No'} · Skating:{' '}
                   {selectedTrail.has_skating ? 'Yes' : 'No'}
+                </p>
+                <p>
+                  Freshness:{' '}
+                  {DESTINATION_PREP_STYLES[selectedTrail.prepsymbol]?.label ||
+                    DESTINATION_PREP_STYLES.default.label}
                 </p>
                 {selectedTrailCrossings ? (
                   <p>
@@ -1176,6 +1230,37 @@ export default function Home() {
           color: #234236;
         }
 
+        .display-mode-block {
+          margin-top: 0.85rem;
+        }
+
+        .segmented-control {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 0.35rem;
+          padding: 0.25rem;
+          border-radius: 12px;
+          background: #eef4ef;
+        }
+
+        .segment-button {
+          border: 0;
+          border-radius: 10px;
+          background: transparent;
+          color: #2f5142;
+          padding: 0.55rem 0.7rem;
+          font: inherit;
+          font-size: 0.82rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .segment-button-active {
+          background: #ffffff;
+          color: #163127;
+          box-shadow: 0 1px 3px rgba(30, 49, 39, 0.12);
+        }
+
         .select-input {
           width: 100%;
           padding: 0.85rem 0.9rem;
@@ -1346,6 +1431,10 @@ export default function Home() {
             font-size: 0.78rem;
           }
 
+          .display-mode-block {
+            margin-top: 0.6rem;
+          }
+
           .quick-actions {
             margin-top: 0.55rem;
             gap: 0.45rem;
@@ -1361,6 +1450,17 @@ export default function Home() {
             padding: 0.68rem 0.75rem;
             border-radius: 10px;
             font-size: 0.9rem;
+          }
+
+          .segmented-control {
+            gap: 0.25rem;
+            padding: 0.2rem;
+            border-radius: 10px;
+          }
+
+          .segment-button {
+            padding: 0.45rem 0.55rem;
+            font-size: 0.74rem;
           }
 
           .detail-card,
