@@ -103,6 +103,7 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - Read the relevant phase docs before changing scope-sensitive behavior.
 - If you change runtime behavior, update `README.md`, `docs/spec.md`, and any affected phase docs.
 - Prefer focused changes over broad rewrites.
+- Prefer the built-in file edit tool for code changes instead of shell redirection, ad hoc scripting, or Python wrappers that write files indirectly.
 - If you notice undocumented shipped behavior, document it instead of leaving it implicit.
 - If you are refactoring, make the safety net stronger as you go: extract pure logic, then test it.
 - If the task is unclear about whether it is feature work or cleanup work, default to preserving current behavior and ask only if the distinction materially affects the outcome.
