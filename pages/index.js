@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
+import ControlPanel from '../components/ControlPanel';
+import InfoPanel from '../components/InfoPanel';
+import { useMapPersistence } from '../hooks/useMapPersistence';
 import {
-  FaCircleInfo,
-  FaLayerGroup,
-  FaLocationDot,
-  FaMountain,
-  FaPersonSkiingNordic,
-  FaSnowflake,
-  FaXmark,
-} from 'react-icons/fa6';
+  findClosestDestination,
+  formatDistance,
+  getAllTrailSegmentLabelsGeoJson,
+  getCrossingMetrics,
+  getDestinationSummary,
+  getDestinationsWithinRadius,
+  getDistanceInKilometers,
+  getSuggestedDestinationGeoJson,
+} from '../lib/map-domain';
+import {
+  readCachedTrailGeoJson,
+  writeCachedTrailGeoJson,
+} from '../lib/map-persistence';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
@@ -38,6 +46,7 @@ const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
 const SUGGESTED_DESTINATION_RADIUS_KM = 20;
+const MAX_NEARBY_DESTINATION_PREVIEWS = 3;
 const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
 const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18];
 
@@ -107,520 +116,6 @@ function fitMapToGeoJson(map, geojson, fallbackCenter) {
   if (fallbackCenter) {
     map.flyTo({ center: fallbackCenter, zoom: 11, duration: 900 });
   }
-}
-
-function getDestinationSummary(feature) {
-  return {
-    id: String(feature.properties.id),
-    name: feature.properties.name,
-    prepSymbol: feature.properties.prepsymbol,
-    coordinates: feature.geometry?.coordinates || DEFAULT_CENTER,
-  };
-}
-
-function getSuggestedDestinationGeoJson(destinations) {
-  if (!destinations?.length) {
-    return {
-      type: 'FeatureCollection',
-      features: [],
-    };
-  }
-
-  return {
-    type: 'FeatureCollection',
-    features: destinations.map((destination) => ({
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: destination.coordinates,
-      },
-      properties: {
-        id: destination.id,
-        name: destination.name,
-      },
-    })),
-  };
-}
-
-function getDestinationsWithinRadius(destinations, referenceCoordinates, radiusKm, excludedId) {
-  if (!referenceCoordinates) {
-    return [];
-  }
-
-  return destinations.filter((destination) => {
-    if (destination.id === excludedId) {
-      return false;
-    }
-
-    return getDistanceInKilometers(referenceCoordinates, destination.coordinates) <= radiusKm;
-  });
-}
-
-function toRadians(value) {
-  return (value * Math.PI) / 180;
-}
-
-function getDistanceInKilometers(fromCoordinates, toCoordinates) {
-  const [fromLng, fromLat] = fromCoordinates;
-  const [toLng, toLat] = toCoordinates;
-  const earthRadiusKm = 6371;
-  const deltaLat = toRadians(toLat - fromLat);
-  const deltaLng = toRadians(toLng - fromLng);
-  const a =
-    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-    Math.cos(toRadians(fromLat)) *
-      Math.cos(toRadians(toLat)) *
-      Math.sin(deltaLng / 2) *
-      Math.sin(deltaLng / 2);
-
-  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function getLineStrings(geometry) {
-  if (!geometry) {
-    return [];
-  }
-
-  if (geometry.type === 'LineString') {
-    return [geometry.coordinates || []];
-  }
-
-  if (geometry.type === 'MultiLineString') {
-    return geometry.coordinates || [];
-  }
-
-  return [];
-}
-
-function getLineLengthInKilometers(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 2) {
-    return 0;
-  }
-
-  return coordinates.reduce((total, coordinate, index) => {
-    if (index === 0) {
-      return total;
-    }
-
-    return total + getDistanceInKilometers(coordinates[index - 1], coordinate);
-  }, 0);
-}
-
-function getFeatureLengthInKilometers(feature) {
-  return getLineStrings(feature?.geometry).reduce(
-    (total, coordinates) => total + getLineLengthInKilometers(coordinates),
-    0
-  );
-}
-
-function getCoordinateAlongTrail(feature, targetDistanceKm) {
-  const lineStrings = getLineStrings(feature?.geometry);
-  let traversedDistanceKm = 0;
-
-  for (const coordinates of lineStrings) {
-    for (let index = 1; index < coordinates.length; index += 1) {
-      const start = coordinates[index - 1];
-      const end = coordinates[index];
-      const segmentLengthKm = getDistanceInKilometers(start, end);
-
-      if (traversedDistanceKm + segmentLengthKm >= targetDistanceKm) {
-        const remainingDistanceKm = targetDistanceKm - traversedDistanceKm;
-        const segmentRatio = segmentLengthKm === 0 ? 0 : remainingDistanceKm / segmentLengthKm;
-
-        return [
-          start[0] + (end[0] - start[0]) * segmentRatio,
-          start[1] + (end[1] - start[1]) * segmentRatio,
-        ];
-      }
-
-      traversedDistanceKm += segmentLengthKm;
-    }
-  }
-
-  const endpoints = getTrailEndpoints(feature);
-  return endpoints.end || endpoints.start || null;
-}
-
-function getTrailEndpoints(feature) {
-  const lineStrings = getLineStrings(feature?.geometry).filter((coordinates) => coordinates.length);
-
-  if (!lineStrings.length) {
-    return { start: null, end: null };
-  }
-
-  const firstLine = lineStrings[0];
-  const lastLine = lineStrings[lineStrings.length - 1];
-
-  return {
-    start: firstLine[0],
-    end: lastLine[lastLine.length - 1],
-  };
-}
-
-function getNearestDestinationLabel(referenceCoordinates, destinations) {
-  if (!referenceCoordinates || !destinations.length) {
-    return null;
-  }
-
-  const closestDestination = findClosestDestination(destinations, referenceCoordinates);
-
-  if (!closestDestination) {
-    return null;
-  }
-
-  const distanceKm = getDistanceInKilometers(referenceCoordinates, closestDestination.coordinates);
-
-  return distanceKm <= DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM ? closestDestination.name : null;
-}
-
-function normalizePathPoints(pathPoints) {
-  return pathPoints.reduce((normalizedPoints, point) => {
-    const previousPoint = normalizedPoints[normalizedPoints.length - 1];
-
-    if (!previousPoint) {
-      normalizedPoints.push(point);
-      return normalizedPoints;
-    }
-
-    if (
-      Math.abs(point.distanceFromStartKm - previousPoint.distanceFromStartKm) < MIN_SEGMENT_DISTANCE_KM
-    ) {
-      if (point.kind === 'end') {
-        normalizedPoints[normalizedPoints.length - 1] = point;
-      }
-
-      return normalizedPoints;
-    }
-
-    normalizedPoints.push(point);
-    return normalizedPoints;
-  }, []);
-}
-
-function buildTrailSegments(selectedTrailFeature, crossingMetrics, destinations) {
-  if (!selectedTrailFeature || !crossingMetrics) {
-    return [];
-  }
-
-  const endpoints = getTrailEndpoints(selectedTrailFeature);
-  const pathPoints = normalizePathPoints([
-    {
-      kind: 'start',
-      label: getNearestDestinationLabel(endpoints.start, destinations) || 'Trail start',
-      distanceFromStartKm: 0,
-    },
-    ...crossingMetrics.crossings.map((crossing, index) => ({
-      kind: 'crossing',
-      label: `Crossing ${index + 1}`,
-      distanceFromStartKm: crossing.distanceFromStartKm,
-    })),
-    {
-      kind: 'end',
-      label: getNearestDestinationLabel(endpoints.end, destinations) || 'Trail end',
-      distanceFromStartKm: crossingMetrics.totalLengthKm,
-    },
-  ]);
-
-  return pathPoints.slice(1).map((point, index) => {
-    const startDistanceKm = pathPoints[index].distanceFromStartKm;
-    const endDistanceKm = point.distanceFromStartKm;
-
-    return {
-      fromLabel: pathPoints[index].label,
-      toLabel: point.label,
-      distanceKm: endDistanceKm - startDistanceKm,
-      midpointCoordinates: getCoordinateAlongTrail(
-        selectedTrailFeature,
-        startDistanceKm + (endDistanceKm - startDistanceKm) / 2
-      ),
-    };
-  }).filter((segment) => segment.distanceKm >= MIN_SEGMENT_DISTANCE_KM);
-}
-
-function getTrailSegmentLabelsGeoJson(segments) {
-  return {
-    type: 'FeatureCollection',
-    features: segments
-      .filter((segment) => Array.isArray(segment.midpointCoordinates))
-      .map((segment, index) => ({
-        type: 'Feature',
-        geometry: {
-          type: 'Point',
-          coordinates: segment.midpointCoordinates,
-        },
-        properties: {
-          id: String(index),
-          label: formatDistance(segment.distanceKm),
-          route: `${segment.fromLabel} to ${segment.toLabel}`,
-        },
-      })),
-  };
-}
-
-function getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations) {
-  if (!trailsGeoJson?.features?.length) {
-    return getTrailSegmentLabelsGeoJson([]);
-  }
-
-  const allSegments = trailsGeoJson.features.flatMap((feature) => {
-    const crossingMetrics = getCrossingMetrics(feature, trailsGeoJson, destinations);
-    return crossingMetrics?.segments || [];
-  });
-
-  return getTrailSegmentLabelsGeoJson(allSegments);
-}
-
-function getSegmentIntersection(firstStart, firstEnd, secondStart, secondEnd) {
-  const firstDeltaLng = firstEnd[0] - firstStart[0];
-  const firstDeltaLat = firstEnd[1] - firstStart[1];
-  const secondDeltaLng = secondEnd[0] - secondStart[0];
-  const secondDeltaLat = secondEnd[1] - secondStart[1];
-  const denominator = firstDeltaLng * secondDeltaLat - firstDeltaLat * secondDeltaLng;
-
-  if (Math.abs(denominator) < 1e-12) {
-    return null;
-  }
-
-  const startDeltaLng = secondStart[0] - firstStart[0];
-  const startDeltaLat = secondStart[1] - firstStart[1];
-  const firstFactor =
-    (startDeltaLng * secondDeltaLat - startDeltaLat * secondDeltaLng) / denominator;
-  const secondFactor =
-    (startDeltaLng * firstDeltaLat - startDeltaLat * firstDeltaLng) / denominator;
-
-  if (firstFactor < 0 || firstFactor > 1 || secondFactor < 0 || secondFactor > 1) {
-    return null;
-  }
-
-  return {
-    coordinates: [
-      firstStart[0] + firstFactor * firstDeltaLng,
-      firstStart[1] + firstFactor * firstDeltaLat,
-    ],
-    firstFactor,
-  };
-}
-
-function dedupeCrossings(crossings) {
-  const sortedCrossings = [...crossings].sort(
-    (left, right) => left.distanceFromStartKm - right.distanceFromStartKm
-  );
-
-  return sortedCrossings.reduce((uniqueCrossings, crossing) => {
-    const lastCrossing = uniqueCrossings[uniqueCrossings.length - 1];
-
-    if (
-      lastCrossing &&
-      Math.abs(lastCrossing.distanceFromStartKm - crossing.distanceFromStartKm) < 0.02 &&
-      getDistanceInKilometers(lastCrossing.coordinates, crossing.coordinates) < 0.02
-    ) {
-      return uniqueCrossings;
-    }
-
-    uniqueCrossings.push(crossing);
-    return uniqueCrossings;
-  }, []);
-}
-
-function getCrossingMetrics(selectedTrailFeature, trailsGeoJson, destinations) {
-  if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
-    return null;
-  }
-
-  const selectedTrailId = selectedTrailFeature.properties?.id;
-  const crossings = [];
-  let traversedDistanceKm = 0;
-
-  getLineStrings(selectedTrailFeature.geometry).forEach((selectedCoordinates) => {
-    for (let index = 1; index < selectedCoordinates.length; index += 1) {
-      const selectedStart = selectedCoordinates[index - 1];
-      const selectedEnd = selectedCoordinates[index];
-      const selectedSegmentLengthKm = getDistanceInKilometers(selectedStart, selectedEnd);
-
-      trailsGeoJson.features.forEach((candidateFeature) => {
-        if (candidateFeature.properties?.id === selectedTrailId) {
-          return;
-        }
-
-        getLineStrings(candidateFeature.geometry).forEach((candidateCoordinates) => {
-          for (let candidateIndex = 1; candidateIndex < candidateCoordinates.length; candidateIndex += 1) {
-            const candidateStart = candidateCoordinates[candidateIndex - 1];
-            const candidateEnd = candidateCoordinates[candidateIndex];
-            const intersection = getSegmentIntersection(
-              selectedStart,
-              selectedEnd,
-              candidateStart,
-              candidateEnd
-            );
-
-            if (!intersection) {
-              continue;
-            }
-
-            crossings.push({
-              coordinates: intersection.coordinates,
-              distanceFromStartKm:
-                traversedDistanceKm + selectedSegmentLengthKm * intersection.firstFactor,
-            });
-          }
-        });
-      });
-
-      traversedDistanceKm += selectedSegmentLengthKm;
-    }
-  });
-
-  const uniqueCrossings = dedupeCrossings(crossings);
-  const crossingIntervals = uniqueCrossings.slice(1).map((crossing, index) => ({
-    fromCrossing: index + 1,
-    toCrossing: index + 2,
-    distanceKm: crossing.distanceFromStartKm - uniqueCrossings[index].distanceFromStartKm,
-  }));
-
-  return {
-    crossings: uniqueCrossings,
-    crossingIntervals,
-    segments: buildTrailSegments(selectedTrailFeature, {
-      crossings: uniqueCrossings,
-      totalLengthKm: getFeatureLengthInKilometers(selectedTrailFeature),
-    }, destinations),
-    totalLengthKm: getFeatureLengthInKilometers(selectedTrailFeature),
-  };
-}
-
-function formatDistance(distanceKm) {
-  return `${distanceKm.toFixed(1)} km`;
-}
-
-function getSingleQueryValue(value) {
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-
-  return value;
-}
-
-function isTrailColorMode(value) {
-  return value === 'type' || value === 'freshness';
-}
-
-function parseMapViewValue(value) {
-  if (typeof value !== 'string' || value.trim() === '') {
-    return null;
-  }
-
-  const parsedValue = Number(value);
-  return Number.isFinite(parsedValue) ? parsedValue : null;
-}
-
-function getMapViewFromValues(longitudeValue, latitudeValue, zoomValue) {
-  const longitude = parseMapViewValue(longitudeValue);
-  const latitude = parseMapViewValue(latitudeValue);
-  const zoom = parseMapViewValue(zoomValue);
-
-  if (longitude === null || latitude === null || zoom === null) {
-    return null;
-  }
-
-  return { longitude, latitude, zoom };
-}
-
-function readStoredMapSettings() {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(MAP_SETTINGS_STORAGE_KEY);
-
-    if (!rawValue) {
-      return null;
-    }
-
-    return JSON.parse(rawValue);
-  } catch (error) {
-    console.warn('Failed to read stored map settings', error);
-    return null;
-  }
-}
-
-function getTrailCacheStorageKey(destinationId) {
-  return `${MAP_SETTINGS_STORAGE_KEY}:trails:${destinationId}`;
-}
-
-function readCachedTrailGeoJson(destinationId) {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(getTrailCacheStorageKey(destinationId));
-
-    if (!rawValue) {
-      return null;
-    }
-
-    const parsedValue = JSON.parse(rawValue);
-
-    if (
-      !parsedValue?.cachedAt ||
-      !parsedValue?.data ||
-      Date.now() - parsedValue.cachedAt > TRAILS_CACHE_TTL_MS
-    ) {
-      window.localStorage.removeItem(getTrailCacheStorageKey(destinationId));
-      return null;
-    }
-
-    return parsedValue.data;
-  } catch (error) {
-    console.warn(`Failed to read cached trails for destination ${destinationId}`, error);
-    return null;
-  }
-}
-
-function writeCachedTrailGeoJson(destinationId, data) {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(
-      getTrailCacheStorageKey(destinationId),
-      JSON.stringify({
-        cachedAt: Date.now(),
-        data,
-      })
-    );
-  } catch (error) {
-    console.warn(`Failed to cache trails for destination ${destinationId}`, error);
-  }
-}
-
-function findClosestDestination(destinations, referenceCoordinates) {
-  if (!destinations.length) {
-    return null;
-  }
-
-  return destinations.reduce((closestDestination, candidate) => {
-    if (!closestDestination) {
-      return candidate;
-    }
-
-    const closestDistance = getDistanceInKilometers(
-      referenceCoordinates,
-      closestDestination.coordinates
-    );
-    const candidateDistance = getDistanceInKilometers(referenceCoordinates, candidate.coordinates);
-
-    return candidateDistance < closestDistance ? candidate : closestDestination;
-  }, null);
-}
-
-function findClosestAlternativeDestination(destinations, referenceCoordinates, excludedDestinationId) {
-  return findClosestDestination(
-    destinations.filter((destination) => destination.id !== excludedDestinationId),
-    referenceCoordinates
-  );
 }
 
 function setLayerPaintIfPresent(map, layerId, property, value) {
@@ -744,6 +239,7 @@ export default function Home() {
   const router = useRouter();
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const trailColorModeRef = useRef(DEFAULT_TRAIL_COLOR_MODE);
   const hasManualDestinationSelectionRef = useRef(false);
   const hasAutoSelectedDestinationRef = useRef(false);
   const hasInitializedFromUrlRef = useRef(false);
@@ -779,6 +275,10 @@ export default function Home() {
   const activeTrailLegendItems =
     trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
 
+  useEffect(() => {
+    trailColorModeRef.current = trailColorMode;
+  }, [trailColorMode]);
+
   function applyTrailGeoJsonToPrimaryLayer(geojson) {
     const map = mapRef.current;
 
@@ -809,62 +309,23 @@ export default function Home() {
     setSuggestedTrailsGeoJson(null);
   }
 
-  useEffect(() => {
-    if (!router.isReady || hasInitializedFromUrlRef.current) {
-      return;
-    }
-
-    const storedSettings = readStoredMapSettings();
-    const destinationFromUrl = getSingleQueryValue(router.query.destination);
-    const colorModeFromUrl = getSingleQueryValue(router.query.colors);
-    const threeDimensionalFromUrl = getSingleQueryValue(router.query.terrain);
-    const longitudeFromUrl = getSingleQueryValue(router.query.lng);
-    const latitudeFromUrl = getSingleQueryValue(router.query.lat);
-    const zoomFromUrl = getSingleQueryValue(router.query.zoom);
-    const destinationFromStorage = getSingleQueryValue(storedSettings?.destination);
-    const colorModeFromStorage = getSingleQueryValue(storedSettings?.colors);
-    const threeDimensionalFromStorage = getSingleQueryValue(storedSettings?.terrain);
-    const mapViewFromUrl = getMapViewFromValues(longitudeFromUrl, latitudeFromUrl, zoomFromUrl);
-    const mapViewFromStorage = getMapViewFromValues(
-      storedSettings?.lng,
-      storedSettings?.lat,
-      storedSettings?.zoom
-    );
-
-    const initialDestination = destinationFromUrl || destinationFromStorage;
-    const initialColorMode = colorModeFromUrl || colorModeFromStorage;
-    const initialTerrain = threeDimensionalFromUrl || threeDimensionalFromStorage;
-    const initialMapView = mapViewFromUrl || mapViewFromStorage;
-
-    if (typeof initialDestination === 'string' && /^\d+$/.test(initialDestination)) {
-      hasManualDestinationSelectionRef.current = true;
-      hasAutoSelectedDestinationRef.current = true;
-      setSelectedDestinationId(initialDestination);
-    }
-
-    if (isTrailColorMode(initialColorMode)) {
-      setTrailColorMode(initialColorMode);
-    }
-
-    if (initialTerrain === '1') {
-      setIsThreeDimensional(true);
-    }
-
-    if (initialMapView) {
-      shouldPreserveMapViewRef.current = true;
-      setMapView(initialMapView);
-    }
-
-    hasInitializedFromUrlRef.current = true;
-  }, [
-    router.isReady,
-    router.query.destination,
-    router.query.colors,
-    router.query.terrain,
-    router.query.lng,
-    router.query.lat,
-    router.query.zoom,
-  ]);
+  useMapPersistence({
+    router,
+    storageKey: MAP_SETTINGS_STORAGE_KEY,
+    defaultTrailColorMode: DEFAULT_TRAIL_COLOR_MODE,
+    hasInitializedFromUrlRef,
+    hasManualDestinationSelectionRef,
+    hasAutoSelectedDestinationRef,
+    shouldPreserveMapViewRef,
+    selectedDestinationId,
+    trailColorMode,
+    isThreeDimensional,
+    mapView,
+    setSelectedDestinationId,
+    setTrailColorMode,
+    setIsThreeDimensional,
+    setMapView,
+  });
 
   useEffect(() => {
     const map = mapRef.current;
@@ -983,7 +444,7 @@ export default function Home() {
         }
 
         const destinationOptions = geojson.features
-          .map(getDestinationSummary)
+          .map((feature) => getDestinationSummary(feature, DEFAULT_CENTER))
           .sort((left, right) => left.name.localeCompare(right.name));
 
         setDestinations(destinationOptions);
@@ -1216,7 +677,11 @@ export default function Home() {
       setRequestError('');
 
       try {
-        let geojson = readCachedTrailGeoJson(selectedDestinationId);
+        let geojson = readCachedTrailGeoJson(
+          selectedDestinationId,
+          MAP_SETTINGS_STORAGE_KEY,
+          TRAILS_CACHE_TTL_MS
+        );
 
         if (!geojson) {
           const response = await fetch(`/api/trails?destinationid=${selectedDestinationId}`);
@@ -1226,7 +691,7 @@ export default function Home() {
           }
 
           geojson = await response.json();
-          writeCachedTrailGeoJson(selectedDestinationId, geojson);
+          writeCachedTrailGeoJson(selectedDestinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
         }
 
         if (isCancelled) {
@@ -1252,7 +717,7 @@ export default function Home() {
               'line-join': 'round',
             },
             paint: {
-              'line-color': getTrailColorExpression(trailColorMode),
+              'line-color': getTrailColorExpression(trailColorModeRef.current),
               'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 11, 5],
               'line-opacity': 0.85,
             },
@@ -1313,7 +778,7 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [mapReady, selectedDestinationId, selectedDestination, trailColorMode]);
+  }, [mapReady, selectedDestinationId, selectedDestination]);
 
   useEffect(() => {
     if (!mapReady || !nearbyDestinationIds.length) {
@@ -1327,7 +792,11 @@ export default function Home() {
       try {
         const previewCollections = await Promise.all(
           nearbyDestinationIds.map(async (destinationId) => {
-            const cachedGeoJson = readCachedTrailGeoJson(destinationId);
+            const cachedGeoJson = readCachedTrailGeoJson(
+              destinationId,
+              MAP_SETTINGS_STORAGE_KEY,
+              TRAILS_CACHE_TTL_MS
+            );
 
             if (cachedGeoJson) {
               return cachedGeoJson;
@@ -1340,7 +809,7 @@ export default function Home() {
             }
 
             const geojson = await response.json();
-            writeCachedTrailGeoJson(destinationId, geojson);
+            writeCachedTrailGeoJson(destinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
             return geojson;
           })
         );
@@ -1452,7 +921,11 @@ export default function Home() {
           return;
         }
 
-        const prefetchedTrailsGeoJson = readCachedTrailGeoJson(String(destinationId));
+        const prefetchedTrailsGeoJson = readCachedTrailGeoJson(
+          String(destinationId),
+          MAP_SETTINGS_STORAGE_KEY,
+          TRAILS_CACHE_TTL_MS
+        );
 
         skipNextTrailFitRef.current = true;
         updateSelectedDestination(String(destinationId), {
@@ -1518,7 +991,11 @@ export default function Home() {
         return leftDistance - rightDistance;
       });
 
-      setNearbyDestinationIds(sortedNearbyAlternatives.map((destination) => destination.id));
+      setNearbyDestinationIds(
+        sortedNearbyAlternatives
+          .slice(0, MAX_NEARBY_DESTINATION_PREVIEWS)
+          .map((destination) => destination.id)
+      );
     }, DESTINATION_SUGGESTION_DEBOUNCE_MS);
 
     return () => {
@@ -1532,7 +1009,15 @@ export default function Home() {
       return;
     }
 
-    setSelectedTrailCrossings(getCrossingMetrics(selectedTrailFeature, trailsGeoJson, destinations));
+    setSelectedTrailCrossings(
+      getCrossingMetrics(
+        selectedTrailFeature,
+        trailsGeoJson,
+        destinations,
+        DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
+        MIN_SEGMENT_DISTANCE_KM
+      )
+    );
   }, [selectedTrailFeature, trailsGeoJson, destinations]);
 
   useEffect(() => {
@@ -1542,7 +1027,12 @@ export default function Home() {
       return undefined;
     }
 
-    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations);
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      trailsGeoJson,
+      destinations,
+      DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
+      MIN_SEGMENT_DISTANCE_KM
+    );
 
     if (map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID)) {
       map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID).setData(labelsGeoJson);
@@ -1606,330 +1096,33 @@ export default function Home() {
     };
   }, [mapReady, trailsGeoJson, destinations]);
 
-  useEffect(() => {
-    if (!router.isReady || !hasInitializedFromUrlRef.current) {
-      return;
-    }
-
-    const nextQuery = { ...router.query };
-
-    if (selectedDestinationId) {
-      nextQuery.destination = selectedDestinationId;
-    } else {
-      delete nextQuery.destination;
-    }
-
-    if (trailColorMode !== DEFAULT_TRAIL_COLOR_MODE) {
-      nextQuery.colors = trailColorMode;
-    } else {
-      delete nextQuery.colors;
-    }
-
-    if (isThreeDimensional) {
-      nextQuery.terrain = '1';
-    } else {
-      delete nextQuery.terrain;
-    }
-
-    if (mapView) {
-      nextQuery.lng = mapView.longitude.toFixed(5);
-      nextQuery.lat = mapView.latitude.toFixed(5);
-      nextQuery.zoom = mapView.zoom.toFixed(2);
-    } else {
-      delete nextQuery.lng;
-      delete nextQuery.lat;
-      delete nextQuery.zoom;
-    }
-
-    const currentDestination = getSingleQueryValue(router.query.destination) || '';
-    const currentColors = getSingleQueryValue(router.query.colors) || '';
-    const currentTerrain = getSingleQueryValue(router.query.terrain) || '';
-    const currentLongitude = getSingleQueryValue(router.query.lng) || '';
-    const currentLatitude = getSingleQueryValue(router.query.lat) || '';
-    const currentZoom = getSingleQueryValue(router.query.zoom) || '';
-    const nextDestination = getSingleQueryValue(nextQuery.destination) || '';
-    const nextColors = getSingleQueryValue(nextQuery.colors) || '';
-    const nextTerrain = getSingleQueryValue(nextQuery.terrain) || '';
-    const nextLongitude = getSingleQueryValue(nextQuery.lng) || '';
-    const nextLatitude = getSingleQueryValue(nextQuery.lat) || '';
-    const nextZoom = getSingleQueryValue(nextQuery.zoom) || '';
-
-    if (
-      currentDestination === nextDestination &&
-      currentColors === nextColors &&
-      currentTerrain === nextTerrain &&
-      currentLongitude === nextLongitude &&
-      currentLatitude === nextLatitude &&
-      currentZoom === nextZoom
-    ) {
-      return;
-    }
-
-    router.replace(
-      {
-        pathname: router.pathname,
-        query: nextQuery,
-      },
-      undefined,
-      { shallow: true, scroll: false }
-    );
-  }, [
-    router,
-    selectedDestinationId,
-    trailColorMode,
-    isThreeDimensional,
-    mapView,
-  ]);
-
-  useEffect(() => {
-    if (!hasInitializedFromUrlRef.current || typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(
-        MAP_SETTINGS_STORAGE_KEY,
-        JSON.stringify({
-          destination: selectedDestinationId || '',
-          colors: trailColorMode,
-          terrain: isThreeDimensional ? '1' : '',
-          lng: mapView?.longitude?.toFixed(5) || '',
-          lat: mapView?.latitude?.toFixed(5) || '',
-          zoom: mapView?.zoom?.toFixed(2) || '',
-        })
-      );
-    } catch (error) {
-      console.warn('Failed to persist map settings', error);
-    }
-  }, [selectedDestinationId, trailColorMode, isThreeDimensional, mapView]);
-
   return (
     <div className="page-shell">
-      <aside className={`control-panel${isPanelCollapsed ? ' control-panel-collapsed' : ''}`}>
-        <div className="panel-header">
-          <div>
-            <p className="eyebrow">cc-maps</p>
-            {!isPanelCollapsed ? <h1>Cross-Country maps</h1> : null}
-          </div>
-          <button
-            type="button"
-            className="panel-collapse-button"
-            onClick={() => setIsPanelCollapsed((current) => !current)}
-            aria-expanded={!isPanelCollapsed}
-            aria-controls="control-panel-body"
-          >
-            {isPanelCollapsed ? 'Open' : 'Minimize'}
-          </button>
-        </div>
+      <ControlPanel
+        isPanelCollapsed={isPanelCollapsed}
+        onToggleCollapse={() => setIsPanelCollapsed((current) => !current)}
+        onOpenInfo={() => setIsInfoPanelOpen(true)}
+        isThreeDimensional={isThreeDimensional}
+        onToggleThreeDimensional={setIsThreeDimensional}
+        trailColorMode={trailColorMode}
+        onTrailColorModeChange={setTrailColorMode}
+        selectedDestinationId={selectedDestinationId}
+        onDestinationChange={(destinationId) =>
+          updateSelectedDestination(destinationId, { manual: true })
+        }
+        destinationsStatus={destinationsStatus}
+        trailsStatus={trailsStatus}
+        mapError={mapError}
+        requestError={requestError}
+        destinations={destinations}
+        selectedDestination={selectedDestination}
+        activeTrailLegendItems={activeTrailLegendItems}
+        selectedTrail={selectedTrail}
+        selectedTrailCrossings={selectedTrailCrossings}
+        formatDistance={formatDistance}
+      />
 
-        {!isPanelCollapsed ? (
-          <div id="control-panel-body">
-            <div className="quick-actions">
-              <button
-                type="button"
-                className="icon-chip"
-                onClick={() => setIsInfoPanelOpen(true)}
-                aria-label="Open info panel"
-              >
-                <FaCircleInfo />
-                <span>Info</span>
-              </button>
-              <label className="icon-toggle" htmlFor="three-d-toggle">
-                <span className="icon-toggle-copy">
-                  <FaMountain />
-                  <span>3D</span>
-                </span>
-                <input
-                  id="three-d-toggle"
-                  type="checkbox"
-                  checked={isThreeDimensional}
-                  onChange={(event) => setIsThreeDimensional(event.target.checked)}
-                />
-              </label>
-            </div>
-
-            <div className="display-mode-block">
-              <p className="detail-label">Trail colors</p>
-              <div className="segmented-control" role="tablist" aria-label="Trail color mode">
-                <button
-                  type="button"
-                  className={`segment-button${trailColorMode === 'type' ? ' segment-button-active' : ''}`}
-                  onClick={() => setTrailColorMode('type')}
-                  aria-pressed={trailColorMode === 'type'}
-                >
-                  Type
-                </button>
-                <button
-                  type="button"
-                  className={`segment-button${trailColorMode === 'freshness' ? ' segment-button-active' : ''}`}
-                  onClick={() => setTrailColorMode('freshness')}
-                  aria-pressed={trailColorMode === 'freshness'}
-                >
-                  Freshness
-                </button>
-              </div>
-            </div>
-
-            <label className="field-label" htmlFor="destination-select">
-              <span className="field-label-content">
-                <FaLocationDot />
-                <span>Destination</span>
-              </span>
-            </label>
-            <select
-              id="destination-select"
-              className="select-input"
-              value={selectedDestinationId}
-              onChange={(event) => {
-                updateSelectedDestination(event.target.value, { manual: true });
-              }}
-              disabled={destinationsStatus !== 'success'}
-            >
-              <option value="">Choose a ski area</option>
-              {destinations.map((destination) => (
-                <option key={destination.id} value={destination.id}>
-                  {destination.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="status-stack">
-              {mapError ? <p className="status-card status-error">{mapError}</p> : null}
-              {destinationsStatus === 'loading' ? (
-                <p className="status-card">Loading destinations...</p>
-              ) : null}
-              {trailsStatus === 'loading' ? <p className="status-card">Loading trails...</p> : null}
-              {requestError ? <p className="status-card status-error">{requestError}</p> : null}
-              {destinationsStatus === 'success' && destinations.length === 0 ? (
-                <p className="status-card">No active destinations were returned by the API.</p>
-              ) : null}
-            </div>
-
-            {selectedDestination ? (
-              <section className="detail-card detail-card-compact">
-                <p className="detail-label">Selected destination</p>
-                <h2>{selectedDestination.name}</h2>
-                <p>
-                  {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
-                    DESTINATION_PREP_STYLES.default.label}
-                </p>
-              </section>
-            ) : null}
-
-            <section className="detail-card detail-card-compact">
-              <p className="detail-label">
-                {trailColorMode === 'freshness' ? 'Grooming freshness legend' : 'Trail type legend'}
-              </p>
-              <ul className="legend-list">
-                {activeTrailLegendItems.map((item) => (
-                  <li key={item.code} className="legend-item">
-                    <span className="legend-swatch" style={{ backgroundColor: item.color }} />
-                    <span>{item.label}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-
-            {selectedTrail ? (
-              <section className="detail-card detail-card-compact">
-                <p className="detail-label">Trail details</p>
-                <h2>
-                  {TRAIL_TYPE_STYLES[selectedTrail.trailtypesymbol]?.label ||
-                    TRAIL_TYPE_STYLES.default.label}
-                </h2>
-                <p>
-                  Classic: {selectedTrail.has_classic ? 'Yes' : 'No'} · Skating:{' '}
-                  {selectedTrail.has_skating ? 'Yes' : 'No'}
-                </p>
-                <p>
-                  Freshness:{' '}
-                  {DESTINATION_PREP_STYLES[selectedTrail.prepsymbol]?.label ||
-                    DESTINATION_PREP_STYLES.default.label}
-                </p>
-                {selectedTrailCrossings ? (
-                  <p>
-                    Length: {formatDistance(selectedTrailCrossings.totalLengthKm)} · Crossings:{' '}
-                    {selectedTrailCrossings.crossings.length}
-                  </p>
-                ) : null}
-                {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
-                {selectedTrailCrossings?.segments?.length ? (
-                  <div className="crossing-list-block">
-                    <p className="detail-label">Trail segments</p>
-                    <ul className="crossing-list">
-                      {selectedTrailCrossings.segments.map((segment, index) => (
-                        <li
-                          key={`${segment.fromLabel}-${segment.toLabel}-${index}`}
-                          className="crossing-item"
-                        >
-                          <span>
-                            {segment.fromLabel} to {segment.toLabel}
-                          </span>
-                          <strong>{formatDistance(segment.distanceKm)}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : selectedTrailCrossings?.crossings?.length === 1 ? (
-                  <p>Only one crossing was found on this trail, so no interval can be shown yet.</p>
-                ) : selectedTrailCrossings ? (
-                  <p>No crossings were found for this trail within the loaded destination network.</p>
-                ) : null}
-              </section>
-            ) : null}
-          </div>
-        ) : selectedDestination ? (
-          <div className="panel-collapsed-summary">
-            <p className="detail-label">Destination</p>
-            <p>{selectedDestination.name}</p>
-          </div>
-        ) : null}
-      </aside>
-
-      {isInfoPanelOpen ? (
-        <aside className="info-panel" aria-label="Map information">
-          <div className="info-panel-header">
-            <div>
-              <p className="eyebrow">Guide</p>
-              <h2 className="info-title">How to use the map</h2>
-            </div>
-            <button
-              type="button"
-              className="info-close-button"
-              onClick={() => setIsInfoPanelOpen(false)}
-              aria-label="Close info panel"
-            >
-              <FaXmark />
-            </button>
-          </div>
-
-          <div className="info-list">
-            <section className="info-item">
-              <FaPersonSkiingNordic className="info-icon" />
-              <div>
-                <p className="detail-label">Browse</p>
-                <p>Pick a ski area from the destination menu or tap a destination marker on the map.</p>
-              </div>
-            </section>
-
-            <section className="info-item">
-              <FaSnowflake className="info-icon" />
-              <div>
-                <p className="detail-label">Winter mode</p>
-                <p>The base map is winter-styled by default. Turn on 3D only when you want terrain depth.</p>
-              </div>
-            </section>
-
-            <section className="info-item">
-              <FaLayerGroup className="info-icon" />
-              <div>
-                <p className="detail-label">Trail colors</p>
-                <p>Freshness is the default view. Switch to type colors when you want trail categories instead.</p>
-              </div>
-            </section>
-          </div>
-        </aside>
-      ) : null}
+      {isInfoPanelOpen ? <InfoPanel onClose={() => setIsInfoPanelOpen(false)} /> : null}
 
       <main className="map-stage">
         <div
@@ -1937,564 +1130,6 @@ export default function Home() {
           className={`map-container${isInitialMapViewSettled ? ' map-container-ready' : ''}`}
         />
       </main>
-
-      <style jsx>{`
-        .page-shell {
-          position: relative;
-          height: 100vh;
-          overflow: hidden;
-          background: linear-gradient(145deg, #ebf4ef 0%, #dfe8ef 100%);
-        }
-
-        .control-panel {
-          position: absolute;
-          top: 1rem;
-          left: 1rem;
-          z-index: 1;
-          width: min(340px, calc(100% - 2rem));
-          max-height: calc(100vh - 2rem);
-          overflow-y: auto;
-          padding: 1rem;
-          border: 1px solid rgba(29, 50, 42, 0.1);
-          border-radius: 20px;
-          background: rgba(250, 252, 250, 0.92);
-          box-shadow: 0 24px 48px rgba(47, 74, 61, 0.16);
-          backdrop-filter: blur(14px);
-        }
-
-        .control-panel-collapsed {
-          width: auto;
-          max-width: min(260px, calc(100% - 2rem));
-        }
-
-        .panel-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 0.75rem;
-        }
-
-        .panel-collapse-button {
-          border: 0;
-          border-radius: 999px;
-          background: #dfeae2;
-          color: #1d4236;
-          padding: 0.45rem 0.7rem;
-          font: inherit;
-          font-size: 0.82rem;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .panel-collapse-button:hover {
-          background: #d2e2d7;
-        }
-
-        .panel-collapsed-summary {
-          margin-top: 0.6rem;
-          color: #284638;
-          font-size: 0.92rem;
-        }
-
-        .quick-actions {
-          display: flex;
-          align-items: center;
-          gap: 0.65rem;
-          margin-top: 0.75rem;
-        }
-
-        .icon-chip,
-        .icon-toggle {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          border-radius: 999px;
-          padding: 0.55rem 0.75rem;
-          background: #eef4ef;
-          color: #1f4235;
-          font: inherit;
-          font-size: 0.84rem;
-          font-weight: 700;
-        }
-
-        .icon-chip {
-          border: 0;
-          cursor: pointer;
-        }
-
-        .icon-toggle {
-          justify-content: space-between;
-          flex: 1;
-        }
-
-        .icon-toggle-copy,
-        .field-label-content {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.45rem;
-        }
-
-        .icon-toggle input {
-          width: 1rem;
-          height: 1rem;
-          margin: 0;
-          accent-color: #1f7f59;
-        }
-
-        .info-panel {
-          position: absolute;
-          top: 1rem;
-          right: 1rem;
-          z-index: 1;
-          width: min(320px, calc(100% - 2rem));
-          max-height: calc(100vh - 2rem);
-          overflow-y: auto;
-          padding: 1rem;
-          border: 1px solid rgba(29, 50, 42, 0.1);
-          border-radius: 20px;
-          background: rgba(252, 253, 251, 0.94);
-          box-shadow: 0 24px 48px rgba(47, 74, 61, 0.14);
-          backdrop-filter: blur(14px);
-        }
-
-        .info-panel-header {
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 0.75rem;
-        }
-
-        .info-title {
-          font-size: 1.15rem;
-        }
-
-        .info-close-button {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 2rem;
-          height: 2rem;
-          border: 0;
-          border-radius: 999px;
-          background: #eef3ee;
-          color: #234236;
-          cursor: pointer;
-        }
-
-        .info-list {
-          display: grid;
-          gap: 0.85rem;
-          margin-top: 1rem;
-        }
-
-        .info-item {
-          display: grid;
-          grid-template-columns: auto 1fr;
-          gap: 0.75rem;
-          align-items: flex-start;
-          padding-top: 0.75rem;
-          border-top: 1px solid rgba(35, 66, 54, 0.08);
-          color: #2a4639;
-        }
-
-        .info-item:first-child {
-          padding-top: 0;
-          border-top: 0;
-        }
-
-        .info-icon {
-          margin-top: 0.1rem;
-          font-size: 1rem;
-          color: #2f6d58;
-        }
-
-        .eyebrow,
-        .detail-label {
-          margin: 0 0 0.35rem;
-          font-size: 0.72rem;
-          font-weight: 700;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: #567261;
-        }
-
-        h1,
-        h2,
-        p {
-          margin: 0;
-        }
-
-        h1 {
-          font-size: 1.8rem;
-          line-height: 1.05;
-          color: #18352b;
-        }
-
-        h2 {
-          font-size: 1rem;
-          color: #163127;
-        }
-
-        .panel-copy {
-          margin-top: 0.7rem;
-          color: #385445;
-          line-height: 1.5;
-          max-width: 28ch;
-        }
-
-        .field-label {
-          display: block;
-          margin-top: 1rem;
-          margin-bottom: 0.4rem;
-          font-size: 0.9rem;
-          font-weight: 600;
-          color: #234236;
-        }
-
-        .display-mode-block {
-          margin-top: 0.85rem;
-        }
-
-        .segmented-control {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          gap: 0.35rem;
-          padding: 0.25rem;
-          border-radius: 12px;
-          background: #eef4ef;
-        }
-
-        .segment-button {
-          border: 0;
-          border-radius: 10px;
-          background: transparent;
-          color: #2f5142;
-          padding: 0.55rem 0.7rem;
-          font: inherit;
-          font-size: 0.82rem;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .segment-button-active {
-          background: #ffffff;
-          color: #163127;
-          box-shadow: 0 1px 3px rgba(30, 49, 39, 0.12);
-        }
-
-        .select-input {
-          width: 100%;
-          padding: 0.85rem 0.9rem;
-          border: 1px solid #c7d6cc;
-          border-radius: 12px;
-          background: #ffffff;
-          color: #143126;
-          font: inherit;
-        }
-
-        .status-stack {
-          display: grid;
-          gap: 0.5rem;
-          margin-top: 0.75rem;
-        }
-
-        .status-card,
-        .detail-card {
-          margin-top: 0.75rem;
-          padding: 0.75rem 0.85rem;
-          border-radius: 14px;
-          background: #f3f7f3;
-          color: #284638;
-        }
-
-        .detail-card-compact p:last-of-type {
-          margin-top: 0.35rem;
-        }
-
-        .detail-card :global(p + p) {
-          margin-top: 0.25rem;
-        }
-
-        .toggle-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 1rem;
-          margin-top: 0.75rem;
-          font-size: 0.95rem;
-          font-weight: 600;
-          color: #234236;
-        }
-
-        .toggle-row input {
-          width: 1.1rem;
-          height: 1.1rem;
-          accent-color: #1f7f59;
-          flex: 0 0 auto;
-        }
-
-        .status-error {
-          background: #fff0f0;
-          color: #8d2d2d;
-        }
-
-        .suggestion-actions {
-          display: flex;
-          gap: 0.5rem;
-          margin-top: 0.75rem;
-        }
-
-        .suggestion-button {
-          border: 0;
-          border-radius: 999px;
-          background: #1f7f59;
-          color: #ffffff;
-          padding: 0.45rem 0.75rem;
-          font: inherit;
-          font-size: 0.8rem;
-          font-weight: 700;
-          cursor: pointer;
-        }
-
-        .suggestion-button-secondary {
-          background: #e7efea;
-          color: #274538;
-        }
-
-        .legend-list {
-          display: grid;
-          gap: 0.55rem;
-          margin: 0.75rem 0 0;
-          padding: 0;
-          list-style: none;
-        }
-
-        .legend-item {
-          display: flex;
-          align-items: center;
-          gap: 0.65rem;
-        }
-
-        .crossing-list-block {
-          margin-top: 0.8rem;
-        }
-
-        .crossing-list {
-          display: grid;
-          gap: 0.4rem;
-          margin: 0.45rem 0 0;
-          padding: 0;
-          list-style: none;
-        }
-
-        .crossing-item {
-          display: flex;
-          align-items: baseline;
-          justify-content: space-between;
-          gap: 0.75rem;
-          color: #284638;
-        }
-
-        .legend-swatch {
-          width: 0.95rem;
-          height: 0.95rem;
-          border-radius: 999px;
-          box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-        }
-
-        .map-stage,
-        .map-container {
-          width: 100%;
-          height: 100vh;
-        }
-
-        .map-container {
-          opacity: 0;
-          transition: opacity 180ms ease;
-        }
-
-        .map-container-ready {
-          opacity: 1;
-        }
-
-        @media (max-width: 840px) {
-          .control-panel {
-            width: min(320px, calc(100% - 2rem));
-          }
-
-          .info-panel {
-            top: auto;
-            right: 1rem;
-            bottom: 1rem;
-          }
-        }
-
-        @media (max-width: 640px) {
-          .control-panel {
-            top: auto;
-            right: 0.75rem;
-            bottom: 0.75rem;
-            left: 0.75rem;
-            width: auto;
-            max-height: min(40vh, 320px);
-            padding: 0.75rem 0.8rem;
-            border: 1px solid rgba(29, 50, 42, 0.08);
-            border-radius: 14px;
-            background: rgba(248, 251, 248, 0.84);
-            box-shadow: 0 10px 24px rgba(47, 74, 61, 0.1);
-            backdrop-filter: blur(10px);
-          }
-
-          .control-panel-collapsed {
-            max-width: calc(100% - 1.5rem);
-          }
-
-          .info-panel {
-            right: 0.75rem;
-            bottom: 0.75rem;
-            left: 0.75rem;
-            width: auto;
-            max-height: min(42vh, 340px);
-            padding: 0.8rem;
-            border-radius: 14px;
-          }
-
-          h1 {
-            font-size: 1.2rem;
-            letter-spacing: -0.02em;
-          }
-
-          .panel-copy {
-            margin-top: 0.3rem;
-            font-size: 0.84rem;
-            line-height: 1.25;
-            max-width: none;
-          }
-
-          .eyebrow,
-          .detail-label {
-            margin-bottom: 0.2rem;
-            font-size: 0.62rem;
-            letter-spacing: 0.12em;
-          }
-
-          .field-label {
-            margin-top: 0.6rem;
-            margin-bottom: 0.3rem;
-            font-size: 0.78rem;
-          }
-
-          .display-mode-block {
-            margin-top: 0.6rem;
-          }
-
-          .quick-actions {
-            margin-top: 0.55rem;
-            gap: 0.45rem;
-          }
-
-          .icon-chip,
-          .icon-toggle {
-            padding: 0.45rem 0.6rem;
-            font-size: 0.76rem;
-          }
-
-          .select-input {
-            padding: 0.68rem 0.75rem;
-            border-radius: 10px;
-            font-size: 0.9rem;
-          }
-
-          .segmented-control {
-            gap: 0.25rem;
-            padding: 0.2rem;
-            border-radius: 10px;
-          }
-
-          .segment-button {
-            padding: 0.45rem 0.55rem;
-            font-size: 0.74rem;
-          }
-
-          .detail-card,
-          .status-card {
-            margin-top: 0.45rem;
-            padding: 0.55rem 0;
-            border-radius: 0;
-            background: transparent;
-            border-top: 1px solid rgba(35, 66, 54, 0.08);
-          }
-
-          .legend-list {
-            gap: 0.3rem;
-            margin-top: 0.4rem;
-          }
-
-          .legend-item {
-            gap: 0.5rem;
-            font-size: 0.84rem;
-          }
-
-          .crossing-item {
-            font-size: 0.8rem;
-          }
-
-          .legend-swatch {
-            width: 0.8rem;
-            height: 0.8rem;
-          }
-
-          .toggle-row {
-            margin-top: 0.55rem;
-            font-size: 0.82rem;
-            font-weight: 500;
-          }
-
-          .toggle-row input {
-            width: 1rem;
-            height: 1rem;
-          }
-
-          .suggestion-actions {
-            flex-wrap: wrap;
-            gap: 0.4rem;
-            margin-top: 0.5rem;
-          }
-
-          .suggestion-button {
-            padding: 0.38rem 0.6rem;
-            font-size: 0.72rem;
-          }
-
-          .info-title {
-            font-size: 1rem;
-          }
-
-          .info-item {
-            gap: 0.6rem;
-          }
-
-          .info-icon {
-            font-size: 0.92rem;
-          }
-
-          .panel-collapse-button {
-            padding: 0.35rem 0.6rem;
-            font-size: 0.74rem;
-          }
-
-          h2 {
-            font-size: 0.92rem;
-          }
-
-          p,
-          .status-card,
-          .detail-card {
-            font-size: 0.82rem;
-            line-height: 1.3;
-          }
-        }
-      `}</style>
     </div>
   );
 }
