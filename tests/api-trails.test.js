@@ -78,6 +78,26 @@ describe('/api/trails', () => {
     expect(res.headers['Cache-Control']).toBe('s-maxage=900, stale-while-revalidate=1800');
   });
 
+  it('uses a bounded proximity query when current location coordinates are provided', async () => {
+    fetchSporetGeoJson.mockResolvedValue({ type: 'FeatureCollection', features: [] });
+    const res = createRes();
+
+    await handler({ method: 'GET', query: { lng: '10.75', lat: '59.91' } }, res);
+
+    expect(fetchSporetGeoJson).toHaveBeenCalledWith(6, {
+      where: '1=1',
+      outFields:
+        'id,destinationid,trailtypesymbol,prepsymbol,warningtext,has_classic,has_skating,has_floodlight,is_scootertrail,st_length(shape)',
+      geometry: '10.75,59.91',
+      geometryType: 'esriGeometryPoint',
+      inSR: '4326',
+      spatialRel: 'esriSpatialRelIntersects',
+      distance: '0.05',
+      units: 'esriSRUnit_Kilometer',
+      resultRecordCount: '25',
+    });
+  });
+
   it('uses a destination-scoped query when destinationid is valid', async () => {
     fetchSporetGeoJson.mockResolvedValue({ type: 'FeatureCollection', features: [] });
     const res = createRes();
@@ -89,6 +109,20 @@ describe('/api/trails', () => {
       outFields:
         'id,destinationid,trailtypesymbol,prepsymbol,warningtext,has_classic,has_skating,has_floodlight,is_scootertrail,st_length(shape)',
     });
+  });
+
+  it('rejects partial or invalid proximity coordinates', async () => {
+    const partialRes = createRes();
+    await handler({ method: 'GET', query: { lng: '10.75' } }, partialRes);
+
+    expect(partialRes.statusCode).toBe(400);
+    expect(partialRes.body.error).toMatch(/provided together/);
+
+    const invalidRes = createRes();
+    await handler({ method: 'GET', query: { lng: '999', lat: '59.91' } }, invalidRes);
+
+    expect(invalidRes.statusCode).toBe(400);
+    expect(invalidRes.body.error).toMatch(/valid coordinates/);
   });
 
   it('returns a 500 when the upstream call fails', async () => {

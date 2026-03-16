@@ -18,6 +18,26 @@ const TRAIL_FIELDS = [
 ].join(',');
 
 const UNFILTERED_TRAIL_LIMIT = '250';
+const PROXIMITY_TRAIL_LIMIT = '25';
+const PROXIMITY_MATCH_DISTANCE_KM = '0.05';
+
+function parseCoordinateParam(value, min, max) {
+  if (Array.isArray(value)) {
+    return null;
+  }
+
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < min || parsedValue > max) {
+    return null;
+  }
+
+  return parsedValue;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -26,10 +46,24 @@ export default async function handler(req, res) {
   }
 
   const destinationId = parseIntegerParam(req.query.destinationid);
+  const longitude = parseCoordinateParam(req.query.lng, -180, 180);
+  const latitude = parseCoordinateParam(req.query.lat, -90, 90);
 
   if (destinationId === null) {
     return res.status(400).json({
       error: 'destinationid must be a positive integer when provided',
+    });
+  }
+
+  if (longitude === null || latitude === null) {
+    return res.status(400).json({
+      error: 'lng and lat must be valid coordinates when provided',
+    });
+  }
+
+  if ((longitude === undefined) !== (latitude === undefined)) {
+    return res.status(400).json({
+      error: 'lng and lat must be provided together',
     });
   }
 
@@ -38,7 +72,15 @@ export default async function handler(req, res) {
     outFields: TRAIL_FIELDS,
   };
 
-  if (destinationId === undefined) {
+  if (destinationId === undefined && longitude !== undefined && latitude !== undefined) {
+    queryParams.geometry = `${longitude},${latitude}`;
+    queryParams.geometryType = 'esriGeometryPoint';
+    queryParams.inSR = '4326';
+    queryParams.spatialRel = 'esriSpatialRelIntersects';
+    queryParams.distance = PROXIMITY_MATCH_DISTANCE_KM;
+    queryParams.units = 'esriSRUnit_Kilometer';
+    queryParams.resultRecordCount = PROXIMITY_TRAIL_LIMIT;
+  } else if (destinationId === undefined) {
     queryParams.resultRecordCount = UNFILTERED_TRAIL_LIMIT;
   }
 
