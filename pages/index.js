@@ -59,6 +59,7 @@ const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
 const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18];
 const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
+const GEOLOCATE_MAX_ZOOM = 13.5;
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
   .map(([key, value]) => ({ code: Number(key), ...value }));
@@ -404,6 +405,7 @@ export default function Home() {
       positionOptions: { enableHighAccuracy: true },
       trackUserLocation: true,
       showUserHeading: true,
+      fitBoundsOptions: { maxZoom: GEOLOCATE_MAX_ZOOM },
     });
 
     map.addControl(geolocateControlRef.current, 'top-right');
