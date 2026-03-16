@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Cross-Country maps icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4f7ef" />
+      <stop offset="100%" stop-color="#d8ead8" />
+    </linearGradient>
+    <linearGradient id="trail" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1c8f61" />
+      <stop offset="100%" stop-color="#2d7ff9" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+  <path d="M72 362c36-22 56-53 84-92 21-30 44-62 79-91 24 18 40 34 63 61 15 17 26 29 45 43 30-42 58-75 95-111l36 39c-32 29-55 58-83 96-23 31-47 64-79 97-24-15-42-32-65-58-15-17-29-33-47-48-24 24-42 50-63 80-14 19-28 39-45 57z" fill="#234236" opacity=".16"/>
+  <path d="M78 350c41-16 73-59 110-109 22-30 46-63 81-93 28 18 47 39 74 69 17 19 31 34 52 47" fill="none" stroke="url(#trail)" stroke-linecap="round" stroke-linejoin="round" stroke-width="28"/>
+  <circle cx="115" cy="359" r="22" fill="#2d7ff9" />
+  <circle cx="267" cy="149" r="18" fill="#20bf55" />
+  <circle cx="403" cy="264" r="18" fill="#7e57c2" />
+</svg>

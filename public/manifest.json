@@ -1,0 +1,23 @@
+{
+  "name": "Cross-Country maps",
+  "short_name": "cc-maps",
+  "description": "Browse active cross-country ski destinations and load trails on demand.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ebf4ef",
+  "theme_color": "#ebf4ef",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
