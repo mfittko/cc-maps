@@ -35,7 +35,7 @@ const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
 const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
-const SUGGESTED_DESTINATION_RADIUS_KM = 50;
+const SUGGESTED_DESTINATION_RADIUS_KM = 20;
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
