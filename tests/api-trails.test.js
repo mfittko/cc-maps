@@ -123,6 +123,12 @@ describe('/api/trails', () => {
 
     expect(invalidRes.statusCode).toBe(400);
     expect(invalidRes.body.error).toMatch(/valid coordinates/);
+
+    const arrayRes = createRes();
+    await handler({ method: 'GET', query: { lng: ['10.75'], lat: '59.91' } }, arrayRes);
+
+    expect(arrayRes.statusCode).toBe(400);
+    expect(arrayRes.body.error).toMatch(/valid coordinates/);
   });
 
   it('returns a 500 when the upstream call fails', async () => {

@@ -80,6 +80,24 @@ const trailProximityGeoJson = {
   ],
 };
 
+const multiSegmentProximityGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 505, destinationid: '1' },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.752, 59.914],
+          [10.7524, 59.914],
+          [10.76, 59.92],
+        ],
+      },
+    },
+  ],
+};
+
 const clickedSectionGeoJson = {
   type: 'FeatureCollection',
   features: [
@@ -123,6 +141,114 @@ const clickedSectionGeoJson = {
         coordinates: [
           [10.01, 58.99],
           [10.01, 59.01],
+        ],
+      },
+    },
+  ],
+};
+
+const multiLineSectionGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: {
+        id: 11,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [10.0, 59.0],
+            [10.01, 59.0],
+          ],
+          [
+            [10.01, 59.0],
+            [10.02, 59.0],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        id: 12,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.005, 58.99],
+          [10.005, 59.01],
+        ],
+      },
+    },
+  ],
+};
+
+const disjointMultiLineSectionGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: {
+        id: 21,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [10.0, 59.0],
+            [10.01, 59.0],
+          ],
+          [
+            [10.02, 59.0],
+            [10.03, 59.0],
+          ],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: {
+        id: 22,
+        destinationid: '1',
+        trailtypesymbol: 30,
+        prepsymbol: 20,
+        has_classic: true,
+        has_skating: true,
+        has_floodlight: false,
+        is_scootertrail: false,
+        warningtext: '',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.025, 58.99],
+          [10.025, 59.01],
         ],
       },
     },
@@ -179,6 +305,15 @@ describe('map-domain', () => {
     expect(
       findClosestDestinationByTrailProximity(destinations, trailProximityGeoJson, [10.9, 59.9], 0.05)
     ).toBeNull();
+
+    expect(
+      findClosestDestinationByTrailProximity(
+        destinations,
+        multiSegmentProximityGeoJson,
+        [10.7522, 59.914],
+        0.05
+      )?.id
+    ).toBe('1');
   });
 
   it('selects the clicked distance interval on a trail', () => {
@@ -198,6 +333,103 @@ describe('map-domain', () => {
       selectedSection.segment.distanceKm,
       6
     );
+  });
+
+  it('keeps a selected multiline interval within the overlapping part only', () => {
+    const selectedSection = getClickedTrailSection(
+      multiLineSectionGeoJson.features[0],
+      [10.002, 59.0],
+      multiLineSectionGeoJson,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(selectedSection.segment).toBeTruthy();
+    expect(selectedSection.feature.geometry.type).toBe('LineString');
+    expect(selectedSection.feature.geometry.coordinates).toEqual([
+      [10.0, 59.0],
+      [10.005, 59.0],
+    ]);
+  });
+
+  it('preserves discontinuous multiline interval boundaries in the selected geometry', () => {
+    const selectedSection = getClickedTrailSection(
+      disjointMultiLineSectionGeoJson.features[0],
+      [10.022, 59.0],
+      disjointMultiLineSectionGeoJson,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(selectedSection.segment).toBeTruthy();
+    expect(selectedSection.feature.geometry.type).toBe('LineString');
+    expect(selectedSection.feature.geometry.coordinates).toEqual([
+      [10.0, 59.0],
+      [10.01, 59.0],
+      [10.02, 59.0],
+      [10.025, 59.0],
+    ]);
+  });
+
+  it('falls back to the closest labeled interval when click coordinates are invalid', () => {
+    const selectedSection = getClickedTrailSection(
+      clickedSectionGeoJson.features[0],
+      [Number.NaN, Number.NaN],
+      clickedSectionGeoJson,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(selectedSection.segment).toBeTruthy();
+    expect(selectedSection.segment.fromLabel).toBe('Trail start');
+  });
+
+  it('handles clicked trail section fallback branches', () => {
+    expect(getClickedTrailSection(null, [10.0, 59.0], clickedSectionGeoJson, destinations, 0.01, 0.05)).toBeNull();
+
+    const noSegmentTrails = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 9 },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [10.0, 59.0],
+              [10.0002, 59.0],
+            ],
+          },
+        },
+      ],
+    };
+
+    const noSegmentSelection = getClickedTrailSection(
+      noSegmentTrails.features[0],
+      [10.0, 59.0],
+      noSegmentTrails,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(noSegmentSelection.segment).toBeNull();
+    expect(noSegmentSelection.feature).toBe(noSegmentTrails.features[0]);
+
+    const fallbackToClosestSegment = getClickedTrailSection(
+      clickedSectionGeoJson.features[0],
+      null,
+      clickedSectionGeoJson,
+      destinations,
+      0.01,
+      0.05
+    );
+
+    expect(fallbackToClosestSegment.segment).toBeTruthy();
+    expect(fallbackToClosestSegment.segment.fromLabel).toBe('Trail start');
   });
 
   it('computes crossing metrics and segment labels', () => {
@@ -338,6 +570,12 @@ describe('map-domain', () => {
     expect(metrics.crossings).toEqual([]);
     expect(metrics.segments).toEqual([]);
     expect(metrics.totalLengthKm).toBe(0);
+  });
+
+  it('handles trail proximity and selection length edge cases', () => {
+    expect(findClosestDestinationByTrailProximity([], trailProximityGeoJson, oslo, 0.05)).toBeNull();
+    expect(findClosestDestinationByTrailProximity(destinations, null, oslo, 0.05)).toBeNull();
+    expect(getTrailSelectionLengthInKilometers(null)).toBe(0);
   });
 
   it('formats distances consistently', () => {
