@@ -16,8 +16,14 @@ const DEFAULT_CENTER = [10.7522, 59.9139];
 const WINTER_STYLE_URL = 'mapbox://styles/mapbox/outdoors-v12';
 const DESTINATIONS_SOURCE_ID = 'destinations';
 const DESTINATIONS_LAYER_ID = 'destinations-layer';
+const SUGGESTED_DESTINATION_SOURCE_ID = 'suggested-destination';
+const SUGGESTED_DESTINATION_RING_LAYER_ID = 'suggested-destination-ring-layer';
+const SUGGESTED_DESTINATION_DOT_LAYER_ID = 'suggested-destination-dot-layer';
+const SUGGESTED_DESTINATION_LABEL_LAYER_ID = 'suggested-destination-label-layer';
 const TRAILS_SOURCE_ID = 'trails';
 const TRAILS_LAYER_ID = 'trails-layer';
+const SUGGESTED_TRAILS_SOURCE_ID = 'suggested-trails';
+const SUGGESTED_TRAILS_LAYER_ID = 'suggested-trails-layer';
 const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
 const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
@@ -29,6 +35,7 @@ const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
 const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
+const SUGGESTED_DESTINATION_RADIUS_KM = 50;
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -105,6 +112,44 @@ function getDestinationSummary(feature) {
     prepSymbol: feature.properties.prepsymbol,
     coordinates: feature.geometry?.coordinates || DEFAULT_CENTER,
   };
+}
+
+function getSuggestedDestinationGeoJson(destinations) {
+  if (!destinations?.length) {
+    return {
+      type: 'FeatureCollection',
+      features: [],
+    };
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features: destinations.map((destination) => ({
+      type: 'Feature',
+      geometry: {
+        type: 'Point',
+        coordinates: destination.coordinates,
+      },
+      properties: {
+        id: destination.id,
+        name: destination.name,
+      },
+    })),
+  };
+}
+
+function getDestinationsWithinRadius(destinations, referenceCoordinates, radiusKm, excludedId) {
+  if (!referenceCoordinates) {
+    return [];
+  }
+
+  return destinations.filter((destination) => {
+    if (destination.id === excludedId) {
+      return false;
+    }
+
+    return getDistanceInKilometers(referenceCoordinates, destination.coordinates) <= radiusKm;
+  });
 }
 
 function toRadians(value) {
@@ -515,6 +560,13 @@ function findClosestDestination(destinations, referenceCoordinates) {
   }, null);
 }
 
+function findClosestAlternativeDestination(destinations, referenceCoordinates, excludedDestinationId) {
+  return findClosestDestination(
+    destinations.filter((destination) => destination.id !== excludedDestinationId),
+    referenceCoordinates
+  );
+}
+
 function setLayerPaintIfPresent(map, layerId, property, value) {
   const layer = map.getLayer(layerId);
 
@@ -651,21 +703,22 @@ export default function Home() {
   const [destinations, setDestinations] = useState([]);
   const [destinationsGeoJson, setDestinationsGeoJson] = useState(null);
   const [trailsGeoJson, setTrailsGeoJson] = useState(null);
+  const [suggestedTrailsGeoJson, setSuggestedTrailsGeoJson] = useState(null);
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrailFeature, setSelectedTrailFeature] = useState(null);
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
   const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [mapView, setMapView] = useState(null);
-  const [suggestedDestinationId, setSuggestedDestinationId] = useState('');
-  const [dismissedSuggestionKey, setDismissedSuggestionKey] = useState('');
+  const [nearbyDestinationIds, setNearbyDestinationIds] = useState([]);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
-  const suggestedDestination =
-    destinations.find((destination) => destination.id === suggestedDestinationId) || null;
+  const nearbyDestinations = destinations.filter((destination) =>
+    nearbyDestinationIds.includes(destination.id)
+  );
   const selectedTrail = selectedTrailFeature?.properties || null;
   const activeTrailLegendItems =
     trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
@@ -680,7 +733,8 @@ export default function Home() {
     setSelectedDestinationId(destinationId);
     setSelectedTrailFeature(null);
     setSelectedTrailCrossings(null);
-    setSuggestedDestinationId('');
+    setNearbyDestinationIds([]);
+    setSuggestedTrailsGeoJson(null);
   }
 
   useEffect(() => {
@@ -1003,6 +1057,82 @@ export default function Home() {
   useEffect(() => {
     const map = mapRef.current;
 
+    if (!mapReady || !map) {
+      return undefined;
+    }
+
+    const suggestedGeoJson = getSuggestedDestinationGeoJson(nearbyDestinations);
+
+    if (map.getSource(SUGGESTED_DESTINATION_SOURCE_ID)) {
+      map.getSource(SUGGESTED_DESTINATION_SOURCE_ID).setData(suggestedGeoJson);
+    } else {
+      map.addSource(SUGGESTED_DESTINATION_SOURCE_ID, {
+        type: 'geojson',
+        data: suggestedGeoJson,
+      });
+
+      map.addLayer({
+        id: SUGGESTED_DESTINATION_RING_LAYER_ID,
+        type: 'circle',
+        source: SUGGESTED_DESTINATION_SOURCE_ID,
+        paint: {
+          'circle-radius': 13,
+          'circle-color': 'rgba(31, 127, 89, 0.12)',
+          'circle-stroke-color': '#1f7f59',
+          'circle-stroke-width': 2,
+        },
+      });
+
+      map.addLayer({
+        id: SUGGESTED_DESTINATION_DOT_LAYER_ID,
+        type: 'circle',
+        source: SUGGESTED_DESTINATION_SOURCE_ID,
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#1f7f59',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+        },
+      });
+
+      map.addLayer({
+        id: SUGGESTED_DESTINATION_LABEL_LAYER_ID,
+        type: 'symbol',
+        source: SUGGESTED_DESTINATION_SOURCE_ID,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-offset': [0, 1.35],
+          'text-anchor': 'top',
+          'text-allow-overlap': true,
+        },
+        paint: {
+          'text-color': '#173127',
+          'text-halo-color': 'rgba(250, 252, 250, 0.98)',
+          'text-halo-width': 2,
+        },
+      });
+    }
+
+    if (map.getLayer(SUGGESTED_DESTINATION_RING_LAYER_ID)) {
+      map.moveLayer(SUGGESTED_DESTINATION_RING_LAYER_ID);
+    }
+
+    if (map.getLayer(SUGGESTED_DESTINATION_DOT_LAYER_ID)) {
+      map.moveLayer(SUGGESTED_DESTINATION_DOT_LAYER_ID);
+    }
+
+    if (map.getLayer(SUGGESTED_DESTINATION_LABEL_LAYER_ID)) {
+      map.moveLayer(SUGGESTED_DESTINATION_LABEL_LAYER_ID);
+    }
+
+    return undefined;
+  }, [mapReady, nearbyDestinations]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
     if (!mapReady || !map || !selectedDestinationId) {
       return undefined;
     }
@@ -1094,6 +1224,51 @@ export default function Home() {
   }, [mapReady, selectedDestinationId, selectedDestination, trailColorMode]);
 
   useEffect(() => {
+    if (!mapReady || !nearbyDestinationIds.length) {
+      setSuggestedTrailsGeoJson(null);
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    async function loadSuggestedTrails() {
+      try {
+        const responses = await Promise.all(
+          nearbyDestinationIds.map((destinationId) => fetch(`/api/trails?destinationid=${destinationId}`))
+        );
+
+        if (responses.some((response) => !response.ok)) {
+          throw new Error('Failed to fetch trails for nearby destinations');
+        }
+
+        const previewCollections = await Promise.all(responses.map((response) => response.json()));
+        const geojson = {
+          type: 'FeatureCollection',
+          features: previewCollections.flatMap((collection) => collection.features || []),
+        };
+
+        if (isCancelled) {
+          return;
+        }
+
+        setSuggestedTrailsGeoJson(geojson);
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setSuggestedTrailsGeoJson(null);
+      }
+    }
+
+    loadSuggestedTrails();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mapReady, nearbyDestinationIds]);
+
+  useEffect(() => {
     const map = mapRef.current;
 
     if (!mapReady || !map || !map.getLayer(TRAILS_LAYER_ID)) {
@@ -1104,36 +1279,99 @@ export default function Home() {
   }, [mapReady, trailColorMode]);
 
   useEffect(() => {
-    if (!mapView || !selectedDestinationId || !destinations.length) {
-      setSuggestedDestinationId('');
+    const map = mapRef.current;
+
+    if (!mapReady || !map) {
+      return undefined;
+    }
+
+    const previewGeoJson = suggestedTrailsGeoJson || {
+      type: 'FeatureCollection',
+      features: [],
+    };
+
+    if (map.getSource(SUGGESTED_TRAILS_SOURCE_ID)) {
+      map.getSource(SUGGESTED_TRAILS_SOURCE_ID).setData(previewGeoJson);
+    } else {
+      map.addSource(SUGGESTED_TRAILS_SOURCE_ID, {
+        type: 'geojson',
+        data: previewGeoJson,
+      });
+
+      const suggestedTrailsLayer = {
+        id: SUGGESTED_TRAILS_LAYER_ID,
+        type: 'line',
+        source: SUGGESTED_TRAILS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': getTrailColorExpression(trailColorMode),
+          'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.5, 11, 4],
+          'line-opacity': 0.45,
+          'line-dasharray': [1.2, 1],
+        },
+      };
+
+      if (map.getLayer(TRAILS_LAYER_ID)) {
+        map.addLayer(suggestedTrailsLayer, TRAILS_LAYER_ID);
+      } else {
+        map.addLayer(suggestedTrailsLayer);
+      }
+    }
+
+    if (map.getLayer(SUGGESTED_TRAILS_LAYER_ID)) {
+      map.setPaintProperty(
+        SUGGESTED_TRAILS_LAYER_ID,
+        'line-color',
+        getTrailColorExpression(trailColorMode)
+      );
+
+      if (map.getLayer(TRAILS_LAYER_ID)) {
+        map.moveLayer(SUGGESTED_TRAILS_LAYER_ID, TRAILS_LAYER_ID);
+      }
+    }
+
+    return undefined;
+  }, [mapReady, suggestedTrailsGeoJson, trailColorMode]);
+
+  useEffect(() => {
+    if (!selectedDestinationId || !destinations.length || !selectedDestination) {
+      setNearbyDestinationIds([]);
       return undefined;
     }
 
     const timeoutId = window.setTimeout(() => {
-      const nearestDestination = findClosestDestination(destinations, [
-        mapView.longitude,
-        mapView.latitude,
-      ]);
+      const referenceCoordinates = mapView
+        ? [mapView.longitude, mapView.latitude]
+        : selectedDestination.coordinates;
 
-      if (!nearestDestination || nearestDestination.id === selectedDestinationId) {
-        setSuggestedDestinationId('');
+      const nearbyAlternatives = getDestinationsWithinRadius(
+        destinations,
+        referenceCoordinates,
+        SUGGESTED_DESTINATION_RADIUS_KM,
+        selectedDestinationId
+      );
+
+      if (!nearbyAlternatives.length) {
+        setNearbyDestinationIds([]);
         return;
       }
 
-      const suggestionKey = `${selectedDestinationId}:${nearestDestination.id}`;
+      const sortedNearbyAlternatives = [...nearbyAlternatives].sort((left, right) => {
+        const leftDistance = getDistanceInKilometers(referenceCoordinates, left.coordinates);
+        const rightDistance = getDistanceInKilometers(referenceCoordinates, right.coordinates);
+        return leftDistance - rightDistance;
+      });
 
-      if (dismissedSuggestionKey === suggestionKey) {
-        setSuggestedDestinationId('');
-        return;
-      }
-
-      setSuggestedDestinationId(nearestDestination.id);
+      setNearbyDestinationIds(sortedNearbyAlternatives.map((destination) => destination.id));
     }, DESTINATION_SUGGESTION_DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [mapView, selectedDestinationId, destinations, dismissedSuggestionKey]);
+  }, [mapView, selectedDestinationId, selectedDestination, destinations]);
 
   useEffect(() => {
     if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
@@ -1318,7 +1556,7 @@ export default function Home() {
         <div className="panel-header">
           <div>
             <p className="eyebrow">cc-maps</p>
-            <h1>Cross-Country maps</h1>
+            {!isPanelCollapsed ? <h1>Cross-Country maps</h1> : null}
           </div>
           <button
             type="button"
@@ -1422,36 +1660,6 @@ export default function Home() {
                   {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
                     DESTINATION_PREP_STYLES.default.label}
                 </p>
-              </section>
-            ) : null}
-
-            {suggestedDestination ? (
-              <section className="detail-card detail-card-compact">
-                <p className="detail-label">Nearby suggestion</p>
-                <h2>{suggestedDestination.name}</h2>
-                <p>The current map center is closer to this destination.</p>
-                <div className="suggestion-actions">
-                  <button
-                    type="button"
-                    className="suggestion-button"
-                    onClick={() => {
-                      setDismissedSuggestionKey('');
-                      updateSelectedDestination(suggestedDestination.id, { manual: true });
-                    }}
-                  >
-                    Switch destination
-                  </button>
-                  <button
-                    type="button"
-                    className="suggestion-button suggestion-button-secondary"
-                    onClick={() => {
-                      setDismissedSuggestionKey(`${selectedDestinationId}:${suggestedDestination.id}`);
-                      setSuggestedDestinationId('');
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
               </section>
             ) : null}
 
