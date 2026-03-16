@@ -11,6 +11,7 @@ This document now serves as a buildout record and status snapshot for the origin
 - Phase 4 is now complete: the repository docs reflect the shipped behavior and current intentional exclusions.
 - Phase 5 is complete retroactive documentation of the post-MVP enhancements that shipped after the original handoff plan.
 - Phase 6 is complete: structural cleanup, responsibility splitting, and unit-test setup landed without changing product scope.
+- Phase 7 is planned: add a route-planning mode for composing and sharing multi-section ski loops without breaking the destination-first performance model.
 
 ## Improvements that landed beyond the original written phase scope
 
@@ -39,6 +40,8 @@ The current engineering baseline after Phase 6:
 2. Coverage is intended to surface dead code so it can be removed, not preserved with artificial tests.
 3. Future work after this point should mostly be maintenance, targeted fixes, or newly scoped feature work.
 
+Phase 7 is the first explicitly scoped post-cleanup feature phase. It covers a planning mode where users can build a route by selecting multiple trail sections, let the app fill missing connectors using the shortest viable path, and persist or share the resulting plan through local storage and URL state.
+
 ## Phase documents
 
 - See `/docs/plan/phase-0.md` for the repository bootstrap scope.
@@ -48,6 +51,7 @@ The current engineering baseline after Phase 6:
 - See `/docs/plan/phase-4.md` for the documentation alignment scope.
 - See `/docs/plan/phase-5.md` for the retroactive record of shipped post-MVP enhancements.
 - See `/docs/plan/phase-6.md` for the planned cleanup and architecture split.
+- See `/docs/plan/phase-7.md` for the planned route-planning mode and shareable multi-section course flow.
 - See `/docs/plan/README.md` for the phase index and completion notes.
 
 ## Relevant files in the current implementation

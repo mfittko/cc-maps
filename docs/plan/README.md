@@ -7,6 +7,7 @@ This directory breaks the top-level MVP plan into implementation phases that can
 - Phase 0 through Phase 6 are complete.
 - Phase 5 exists retroactively to capture the post-MVP enhancements that shipped after the original documentation handoff.
 - Phase 6 completed the cleanup split, test harness, and coverage gate and should be treated as the final greenfield phase in the current roadmap.
+- Phase 7 is planned feature work for route planning and sharing.
 - The current implementation reference still lives in `/README.md` and `/docs/spec.md`.
 
 ## Phases
@@ -18,6 +19,7 @@ This directory breaks the top-level MVP plan into implementation phases that can
 5. [Phase 4](./phase-4.md) - Finalize repository documentation for MVP handoff.
 6. [Phase 5](./phase-5.md) - Record the shipped post-MVP map enhancements retroactively.
 7. [Phase 6](./phase-6.md) - Clean up architecture and split responsibilities into maintainable components.
+8. [Phase 7](./phase-7.md) - Add planning mode for multi-section route composition, auto-fill, and sharing.
 
 ## Execution Notes
 
@@ -28,3 +30,4 @@ This directory breaks the top-level MVP plan into implementation phases that can
 - Phase 4 closes the loop by making the docs match the delivered behavior, including the off-plan enhancements that shipped during implementation.
 - Phase 5 documents the work that landed after the original MVP-alignment pass so the repo history stays legible.
 - Phase 6 was intentionally a cleanup phase rather than a feature phase: it reduced complexity, separated concerns, added a test safety net, and made future changes cheaper.
+- Phase 7 reintroduces scoped feature work after the cleanup phase and should preserve the destination-first loading model and bounded trail-graph computation per destination.
