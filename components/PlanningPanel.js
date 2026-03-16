@@ -3,6 +3,7 @@ import {
   FaArrowUpLong,
   FaArrowsRotate,
   FaFileArrowDown,
+  FaShareNodes,
   FaXmark,
 } from 'react-icons/fa6';
 import { formatDistance } from '../lib/map-domain';
@@ -35,6 +36,7 @@ export default function PlanningPanel({
   onExitPlanning,
   onClearPlan,
   onExportGpx,
+  onShareRoute,
   onReverseRoute,
   onRemoveAnchor,
 }) {
@@ -146,15 +148,26 @@ export default function PlanningPanel({
               {anchorCount > 1 ? (
                 <button type="button" className="icon-chip" onClick={onReverseRoute}>
                   <FaArrowsRotate aria-hidden="true" />
-                  <span>Reverse</span>
+                  <span>Rev</span>
                 </button>
               ) : null}
             </div>
             <div className="planning-actions-slot planning-actions-slot-center">
-              <button type="button" className="icon-chip planning-export-btn" onClick={onExportGpx}>
-                <FaFileArrowDown aria-hidden="true" />
-                <span>GPX</span>
-              </button>
+              <div className="planning-action-group">
+                <button type="button" className="icon-chip planning-export-btn" onClick={onExportGpx}>
+                  <FaFileArrowDown aria-hidden="true" />
+                  <span>GPX</span>
+                </button>
+                <button
+                  type="button"
+                  className="icon-chip planning-icon-only-btn"
+                  onClick={onShareRoute}
+                  aria-label="Share route"
+                  title="Share route"
+                >
+                  <FaShareNodes aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <div className="planning-actions-slot planning-actions-slot-end">
               <button type="button" className="icon-chip planning-clear-btn" onClick={onClearPlan}>
