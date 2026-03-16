@@ -31,7 +31,7 @@ const DEM_SOURCE_ID = 'mapbox-dem';
 const BUILDINGS_LAYER_ID = '3d-buildings';
 const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
 const MIN_SEGMENT_DISTANCE_KM = 0.05;
-const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
+const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 10;
 const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
@@ -776,11 +776,27 @@ export default function Home() {
   const activeTrailLegendItems =
     trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
 
+  function applyTrailGeoJsonToPrimaryLayer(geojson) {
+    const map = mapRef.current;
+
+    setTrailsGeoJson(geojson);
+    setTrailsStatus('success');
+    setRequestError('');
+
+    if (map?.getSource(TRAILS_SOURCE_ID)) {
+      map.getSource(TRAILS_SOURCE_ID).setData(geojson);
+    }
+  }
+
   function updateSelectedDestination(destinationId, options = {}) {
-    const { manual = false } = options;
+    const { manual = false, prefetchedTrailsGeoJson = null } = options;
 
     if (manual) {
       hasManualDestinationSelectionRef.current = true;
+    }
+
+    if (prefetchedTrailsGeoJson) {
+      applyTrailGeoJsonToPrimaryLayer(prefetchedTrailsGeoJson);
     }
 
     setSelectedDestinationId(destinationId);
@@ -1397,8 +1413,13 @@ export default function Home() {
           return;
         }
 
+        const prefetchedTrailsGeoJson = readCachedTrailGeoJson(String(destinationId));
+
         skipNextTrailFitRef.current = true;
-        updateSelectedDestination(String(destinationId), { manual: true });
+        updateSelectedDestination(String(destinationId), {
+          manual: true,
+          prefetchedTrailsGeoJson,
+        });
       });
 
       map.on('mouseenter', SUGGESTED_TRAILS_LAYER_ID, () => {
