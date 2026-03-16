@@ -659,6 +659,10 @@ h2 {
   font-size: 0.9rem;
 }
 
+.planning-elevation-row {
+  margin-top: 0.45rem;
+}
+
 .planning-gap-warning {
   margin-top: 0.3rem;
   font-size: 0.82rem;
@@ -691,6 +695,19 @@ h2 {
   min-width: 0;
 }
 
+.planning-anchor-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.planning-anchor-copy-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
 .planning-anchor-index {
   display: inline-flex;
   align-items: center;
@@ -708,12 +725,24 @@ h2 {
 .planning-anchor-label {
   font-size: 0.84rem;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 600;
 }
 
 .planning-anchor-dist {
   color: #567261;
+}
+
+.planning-anchor-elevation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.planning-anchor-elevation-chip {
+  padding: 0.18rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 600;
 }
 
 .planning-anchor-remove {

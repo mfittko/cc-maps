@@ -80,11 +80,16 @@ export function useMapPersistence({
   ]);
 
   useEffect(() => {
-    if (!router.isReady || !hasInitializedFromUrlRef.current) {
+    if (
+      !router.isReady ||
+      !hasInitializedFromUrlRef.current ||
+      typeof window === 'undefined'
+    ) {
       return;
     }
 
-    const nextQuery = { ...router.query };
+    const nextUrl = new URL(window.location.href);
+    const nextQuery = Object.fromEntries(nextUrl.searchParams.entries());
 
     if (selectedDestinationId) {
       nextQuery.destination = selectedDestinationId;
@@ -108,11 +113,11 @@ export function useMapPersistence({
       delete nextQuery.zoom;
     }
 
-    const currentDestination = getSingleQueryValue(router.query.destination) || '';
-    const currentColors = getSingleQueryValue(router.query.colors) || '';
-    const currentLongitude = getSingleQueryValue(router.query.lng) || '';
-    const currentLatitude = getSingleQueryValue(router.query.lat) || '';
-    const currentZoom = getSingleQueryValue(router.query.zoom) || '';
+    const currentDestination = getSingleQueryValue(nextQuery.destination) || '';
+    const currentColors = getSingleQueryValue(nextQuery.colors) || '';
+    const currentLongitude = getSingleQueryValue(nextQuery.lng) || '';
+    const currentLatitude = getSingleQueryValue(nextQuery.lat) || '';
+    const currentZoom = getSingleQueryValue(nextQuery.zoom) || '';
     const nextDestination = getSingleQueryValue(nextQuery.destination) || '';
     const nextColors = getSingleQueryValue(nextQuery.colors) || '';
     const nextLongitude = getSingleQueryValue(nextQuery.lng) || '';
@@ -129,14 +134,17 @@ export function useMapPersistence({
       return;
     }
 
-    router.replace(
-      {
-        pathname: router.pathname,
-        query: nextQuery,
-      },
-      undefined,
-      { shallow: true, scroll: false }
-    );
+    Object.entries(nextQuery).forEach(([key, value]) => {
+      nextUrl.searchParams.set(key, String(value));
+    });
+
+    ['destination', 'colors', 'lng', 'lat', 'zoom'].forEach((key) => {
+      if (!(key in nextQuery)) {
+        nextUrl.searchParams.delete(key);
+      }
+    });
+
+    window.history.replaceState(window.history.state, '', nextUrl);
   }, [
     defaultTrailColorMode,
     hasInitializedFromUrlRef,

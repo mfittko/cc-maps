@@ -30,11 +30,21 @@ import {
   appendRoutePlanAnchor,
   createRoutePlanGeoJson,
   findNearestRouteGraphEdgeId,
+  findNearestRouteTraversalFeature,
   isPlanningSelectionInteraction,
   removeRoutePlanAnchor,
   reverseRoutePlan,
 } from '../lib/planning-mode';
-import { createRoutePlan } from '../lib/route-plan';
+import {
+  clearStoredRoutePlan,
+  createRoutePlan,
+  decodeRoutePlanFromUrl,
+  encodeRoutePlanToUrl,
+  hydrateRoutePlan,
+  readStoredRoutePlan,
+  writeStoredRoutePlan,
+} from '../lib/route-plan';
+import { getSingleQueryValue } from '../lib/map-persistence';
 import { buildRouteGraph } from '../lib/route-graph';
 import { resolveRoute } from '../lib/route-planner';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
@@ -64,6 +74,8 @@ const ROUTE_PLAN_ANCHORS_SOURCE_ID = 'route-plan-anchors';
 const ROUTE_PLAN_ANCHORS_LAYER_ID = 'route-plan-anchors-layer';
 const ROUTE_PLAN_CONNECTORS_SOURCE_ID = 'route-plan-connectors';
 const ROUTE_PLAN_CONNECTORS_LAYER_ID = 'route-plan-connectors-layer';
+const ROUTE_PLAN_DIRECTIONS_SOURCE_ID = 'route-plan-directions';
+const ROUTE_PLAN_DIRECTIONS_LAYER_ID = 'route-plan-directions-layer';
 const DEM_SOURCE_ID = 'mapbox-dem';
 const BUILDINGS_LAYER_ID = '3d-buildings';
 const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
@@ -297,10 +309,13 @@ export default function Home() {
   const hasInitializedFromUrlRef = useRef(false);
   const shouldPreserveMapViewRef = useRef(false);
   const skipNextTrailFitRef = useRef(false);
+  const pendingRouteViewportFitRef = useRef('');
+  const hydratedRoutePlanKeyRef = useRef('');
   const lastAutoLocationRef = useRef(null);
   const isPlanningRef = useRef(false);
   const routeGraphRef = useRef(null);
   const selectedDestinationIdRef = useRef('');
+  const selectedTrailFeatureRef = useRef(null);
   const isMacOSRef = useRef(false);
   const isMobileInteractionRef = useRef(false);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
@@ -329,6 +344,8 @@ export default function Home() {
   const [routePlan, setRoutePlan] = useState(null);
   const [routeResult, setRouteResult] = useState(null);
   const [routeGraph, setRouteGraph] = useState(null);
+  const [routeElevationMetrics, setRouteElevationMetrics] = useState(null);
+  const [routeAnchorElevationMetrics, setRouteAnchorElevationMetrics] = useState([]);
   const [isMacOS, setIsMacOS] = useState(false);
   const [isMobileInteraction, setIsMobileInteraction] = useState(false);
 
@@ -359,6 +376,10 @@ export default function Home() {
   useEffect(() => {
     selectedDestinationIdRef.current = selectedDestinationId;
   }, [selectedDestinationId]);
+
+  useEffect(() => {
+    selectedTrailFeatureRef.current = selectedTrailFeature;
+  }, [selectedTrailFeature]);
 
   useEffect(() => {
     isMacOSRef.current = isMacOS;
@@ -560,6 +581,112 @@ export default function Home() {
   }, [routeGraph, routePlan, selectedDestinationId]);
 
   useEffect(() => {
+    if (!router.isReady || !selectedDestinationId || !routeGraph) {
+      return;
+    }
+
+    const searchParams =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const routeFromUrl = decodeRoutePlanFromUrl(
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    );
+    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
+    const nextRoutePlan =
+      routeFromUrl?.destinationId === selectedDestinationId
+        ? routeFromUrl
+        : routeFromStorage?.destinationId === selectedDestinationId
+          ? routeFromStorage
+          : null;
+
+    const nextRouteKey = nextRoutePlan ? encodeRoutePlanToUrl(nextRoutePlan) || '' : '';
+    const hydrationScopeKey = `${selectedDestinationId}:${nextRouteKey}`;
+
+    if (hydratedRoutePlanKeyRef.current === hydrationScopeKey) {
+      return;
+    }
+
+    hydratedRoutePlanKeyRef.current = hydrationScopeKey;
+
+    if (!nextRoutePlan) {
+      return;
+    }
+
+    const hydratedRoutePlan = hydrateRoutePlan(nextRoutePlan, routeGraph);
+
+    const hasExplicitMapViewQuery = Boolean(
+      searchParams?.get('lng') && searchParams?.get('lat') && searchParams?.get('zoom')
+    );
+
+    if (routeFromUrl && !hasExplicitMapViewQuery && nextRouteKey) {
+      pendingRouteViewportFitRef.current = nextRouteKey;
+    }
+
+    if (!hydratedRoutePlan.validAnchorEdgeIds.length && nextRoutePlan.anchorEdgeIds.length) {
+      setRoutePlan(nextRoutePlan);
+      setIsPlanning(true);
+      return;
+    }
+
+    setRoutePlan(nextRoutePlan);
+    if (nextRoutePlan.anchorEdgeIds.length) {
+      setIsPlanning(true);
+    }
+  }, [routeGraph, router.isReady, selectedDestinationId]);
+
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      !hasInitializedFromUrlRef.current ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
+
+    const nextUrl = new URL(window.location.href);
+    const routeFromCurrentUrl = decodeRoutePlanFromUrl(nextUrl.searchParams.get('route'));
+    const encodedRoutePlan =
+      routePlan && routePlan.destinationId === selectedDestinationId && routePlan.anchorEdgeIds.length
+        ? encodeRoutePlanToUrl(routePlan)
+        : '';
+
+    if (
+      !encodedRoutePlan &&
+      routePlan === null &&
+      routeFromCurrentUrl?.destinationId === selectedDestinationId
+    ) {
+      return;
+    }
+
+    if (encodedRoutePlan) {
+      nextUrl.searchParams.set('route', encodedRoutePlan);
+    } else {
+      nextUrl.searchParams.delete('route');
+    }
+
+    const currentRoute = new URLSearchParams(window.location.search).get('route') || '';
+    const nextRoute = nextUrl.searchParams.get('route') || '';
+
+    if (currentRoute === nextRoute) {
+      return;
+    }
+
+    window.history.replaceState(window.history.state, '', nextUrl);
+  }, [hasInitializedFromUrlRef, routePlan, router, selectedDestinationId]);
+
+  useEffect(() => {
+    if (!hasInitializedFromUrlRef.current || !selectedDestinationId) {
+      return;
+    }
+
+    if (routePlan && routePlan.destinationId === selectedDestinationId && routePlan.anchorEdgeIds.length) {
+      writeStoredRoutePlan(routePlan, MAP_SETTINGS_STORAGE_KEY);
+      return;
+    }
+
+    clearStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
+  }, [hasInitializedFromUrlRef, routePlan, selectedDestinationId]);
+
+  useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
     if (!accessToken && !isMapboxMockEnabled) {
@@ -577,6 +704,10 @@ export default function Home() {
       center: DEFAULT_CENTER,
       zoom: 7,
     });
+
+    if (typeof map.doubleClickZoom?.disable === 'function') {
+      map.doubleClickZoom.disable();
+    }
 
     mapRef.current = map;
 
@@ -1052,6 +1183,17 @@ export default function Home() {
               return;
             }
 
+            const isSameSelectedTrail =
+              selectedTrailFeatureRef.current?.properties?.id != null &&
+              String(selectedTrailFeatureRef.current.properties.id) === String(feature.properties.id);
+
+            if (isSameSelectedTrail) {
+              clearSelectedTrail();
+              setIsSettingsPanelOpen(false);
+              setIsInfoPanelOpen(false);
+              return;
+            }
+
             setIsSettingsPanelOpen(false);
             setIsInfoPanelOpen(false);
             setSelectedTrailFeature(feature);
@@ -1325,9 +1467,38 @@ export default function Home() {
           'line-join': 'round',
         },
         paint: {
-          'line-color': '#f08b32',
+          'line-color': '#1f5fa8',
           'line-width': ['interpolate', ['linear'], ['zoom'], 7, 3, 11, 6],
           'line-opacity': 0.95,
+        },
+      });
+    }
+
+    if (map.getSource(ROUTE_PLAN_DIRECTIONS_SOURCE_ID)) {
+      map.getSource(ROUTE_PLAN_DIRECTIONS_SOURCE_ID).setData(routePlanGeoJson.directions);
+    } else {
+      map.addSource(ROUTE_PLAN_DIRECTIONS_SOURCE_ID, {
+        type: 'geojson',
+        data: routePlanGeoJson.directions,
+      });
+
+      map.addLayer({
+        id: ROUTE_PLAN_DIRECTIONS_LAYER_ID,
+        type: 'symbol',
+        source: ROUTE_PLAN_DIRECTIONS_SOURCE_ID,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': 120,
+          'text-field': '▶',
+          'text-size': ['interpolate', ['linear'], ['zoom'], 7, 10, 11, 14],
+          'text-keep-upright': false,
+          'symbol-z-order': 'source',
+        },
+        paint: {
+          'text-color': '#123f74',
+          'text-halo-color': '#f7fbff',
+          'text-halo-width': 1.5,
+          'text-opacity': 0.9,
         },
       });
     }
@@ -1340,6 +1511,10 @@ export default function Home() {
       map.moveLayer(ROUTE_PLAN_ANCHORS_LAYER_ID);
     }
 
+    if (map.getLayer(ROUTE_PLAN_DIRECTIONS_LAYER_ID)) {
+      map.moveLayer(ROUTE_PLAN_DIRECTIONS_LAYER_ID);
+    }
+
     if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
       map.moveLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
     }
@@ -1349,6 +1524,133 @@ export default function Home() {
     }
 
     return undefined;
+  }, [mapReady, routeGraph, routePlan, routeResult]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map || !routePlan || routePlan.destinationId !== selectedDestinationId) {
+      return;
+    }
+
+    const encodedRoutePlan = encodeRoutePlanToUrl(routePlan);
+
+    if (!encodedRoutePlan || pendingRouteViewportFitRef.current !== encodedRoutePlan) {
+      return;
+    }
+
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const featureCollection = {
+      type: 'FeatureCollection',
+      features: [
+        ...routePlanGeoJson.anchors.features,
+        ...routePlanGeoJson.connectors.features,
+      ],
+    };
+
+    if (!featureCollection.features.length) {
+      return;
+    }
+
+    fitMapToGeoJson(map, featureCollection, selectedDestination?.coordinates || DEFAULT_CENTER);
+    pendingRouteViewportFitRef.current = '';
+  }, [mapReady, routeGraph, routePlan, routeResult, selectedDestination, selectedDestinationId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const routeFeatures = routePlanGeoJson.traversal.features;
+    const routeAnchorFeatures = routeFeatures.filter(
+      (feature) => feature.properties?.role === 'traversal-anchor'
+    );
+
+    if (!mapReady || !map || !routeFeatures.length) {
+      setRouteElevationMetrics(null);
+      setRouteAnchorElevationMetrics([]);
+      return undefined;
+    }
+
+    if (typeof map.queryTerrainElevation !== 'function') {
+      setRouteElevationMetrics(null);
+      setRouteAnchorElevationMetrics([]);
+      return undefined;
+    }
+
+    const sampledCoordinates = routeFeatures.flatMap((feature) =>
+      getSampledCoordinatesAlongFeature(feature, TERRAIN_SAMPLE_SPACING_METERS)
+    );
+
+    if (sampledCoordinates.length < 2) {
+      setRouteElevationMetrics(null);
+      setRouteAnchorElevationMetrics([]);
+      return undefined;
+    }
+
+    let isCancelled = false;
+    let shouldRestoreTerrain = false;
+
+    const readElevationMetrics = () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const elevations = sampledCoordinates.map((coordinates) =>
+          map.queryTerrainElevation(coordinates, { exaggerated: false })
+        );
+        const nextRouteAnchorElevationMetrics = routeAnchorFeatures.map((feature) => {
+          const anchorCoordinates = getSampledCoordinatesAlongFeature(
+            feature,
+            TERRAIN_SAMPLE_SPACING_METERS
+          );
+
+          if (anchorCoordinates.length < 2) {
+            return null;
+          }
+
+          const anchorElevations = anchorCoordinates.map((coordinates) =>
+            map.queryTerrainElevation(coordinates, { exaggerated: false })
+          );
+
+          return getElevationChangeMetrics(anchorElevations);
+        });
+
+        if (!isCancelled) {
+          setRouteElevationMetrics(getElevationChangeMetrics(elevations));
+          setRouteAnchorElevationMetrics(nextRouteAnchorElevationMetrics);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.warn('Skipped route ascent/descent calculation', error);
+          setRouteElevationMetrics(null);
+          setRouteAnchorElevationMetrics([]);
+        }
+      } finally {
+        if (shouldRestoreTerrain) {
+          map.setTerrain(null);
+          shouldRestoreTerrain = false;
+        }
+      }
+    };
+
+    if (map.getTerrain()) {
+      readElevationMetrics();
+    } else {
+      shouldRestoreTerrain = true;
+      map.once('idle', readElevationMetrics);
+      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1 });
+    }
+
+    return () => {
+      isCancelled = true;
+
+      if (shouldRestoreTerrain) {
+        map.setTerrain(null);
+        shouldRestoreTerrain = false;
+      }
+
+      map.off('idle', readElevationMetrics);
+    };
   }, [mapReady, routeGraph, routePlan, routeResult]);
 
   useEffect(() => {
@@ -1423,7 +1725,13 @@ export default function Home() {
 
   useEffect(() => {
     const map = mapRef.current;
-    const selectedFeature = selectedTrailSectionFeature || selectedTrailFeature;
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const routeTraversalFeature = findNearestRouteTraversalFeature(
+      routePlanGeoJson.traversal,
+      selectedTrailFeature?.properties?.id,
+      selectedTrailClickCoordinates
+    );
+    const selectedFeature = routeTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature;
 
     if (!mapReady || !map || !selectedFeature) {
       setSelectedTrailElevationMetrics(null);
@@ -1492,7 +1800,15 @@ export default function Home() {
 
       map.off('idle', readElevationMetrics);
     };
-  }, [mapReady, selectedTrailFeature, selectedTrailSectionFeature]);
+  }, [
+    mapReady,
+    routeGraph,
+    routePlan,
+    routeResult,
+    selectedTrailClickCoordinates,
+    selectedTrailFeature,
+    selectedTrailSectionFeature,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1757,6 +2073,8 @@ export default function Home() {
         routePlan={routePlan}
         routeResult={routeResult}
         routeGraph={routeGraph}
+        routeElevationMetrics={routeElevationMetrics}
+        routeAnchorElevationMetrics={routeAnchorElevationMetrics}
         isMacOS={isMacOS}
         isMobileHint={isMobileInteraction}
         onExitPlanning={() => setIsPlanning(false)}

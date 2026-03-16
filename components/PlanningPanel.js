@@ -1,5 +1,4 @@
-import { FaArrowsRotate, FaXmark } from 'react-icons/fa6';
-import { TRAIL_TYPE_STYLES } from '../lib/sporet';
+import { FaArrowDownLong, FaArrowUpLong, FaArrowsRotate, FaXmark } from 'react-icons/fa6';
 import { formatDistance } from '../lib/map-domain';
 
 /**
@@ -23,6 +22,8 @@ export default function PlanningPanel({
   routePlan,
   routeResult,
   routeGraph,
+  routeElevationMetrics,
+  routeAnchorElevationMetrics,
   isMacOS,
   isMobileHint,
   onExitPlanning,
@@ -77,6 +78,18 @@ export default function PlanningPanel({
               <strong>{anchorCount}</strong> {anchorCount === 1 ? 'section' : 'sections'}
               {totalDistanceKm > 0 ? ` · ${formatDistance(totalDistanceKm)}` : null}
             </p>
+            {routeElevationMetrics ? (
+              <div className="trail-stats-row planning-elevation-row" aria-label="Route elevation metrics">
+                <span className="elevation-chip">
+                  <FaArrowUpLong aria-hidden="true" />
+                  <span>{routeElevationMetrics.ascentMeters} m</span>
+                </span>
+                <span className="elevation-chip">
+                  <FaArrowDownLong aria-hidden="true" />
+                  <span>{routeElevationMetrics.descentMeters} m</span>
+                </span>
+              </div>
+            ) : null}
             {hasGaps ? (
               <p className="planning-gap-warning">Some sections could not be connected.</p>
             ) : null}
@@ -85,17 +98,27 @@ export default function PlanningPanel({
           <ol className="planning-anchor-list" aria-label="Planned sections">
             {anchorEdgeIds.map((edgeId, index) => {
               const edge = routeGraph?.edges?.get(edgeId);
-              const typeLabel =
-                TRAIL_TYPE_STYLES[edge?.trailType]?.label ?? TRAIL_TYPE_STYLES.default.label;
+              const anchorElevationMetrics = routeAnchorElevationMetrics?.[index] || null;
               const distLabel = edge?.distanceKm ? formatDistance(edge.distanceKm) : null;
 
               return (
                 <li key={`${edgeId}-${index}`} className="planning-anchor-item">
                   <span className="planning-anchor-info">
                     <span className="planning-anchor-index">{index + 1}</span>
-                    <span className="planning-anchor-label">
-                      {typeLabel}
-                      {distLabel ? <span className="planning-anchor-dist"> · {distLabel}</span> : null}
+                    <span className="planning-anchor-copy planning-anchor-copy-inline">
+                      {distLabel ? <span className="planning-anchor-label">{distLabel}</span> : null}
+                      {anchorElevationMetrics ? (
+                        <span className="planning-anchor-elevation">
+                          <span className="elevation-chip planning-anchor-elevation-chip">
+                            <FaArrowUpLong aria-hidden="true" />
+                            <span>{anchorElevationMetrics.ascentMeters} m</span>
+                          </span>
+                          <span className="elevation-chip planning-anchor-elevation-chip">
+                            <FaArrowDownLong aria-hidden="true" />
+                            <span>{anchorElevationMetrics.descentMeters} m</span>
+                          </span>
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                   <button
