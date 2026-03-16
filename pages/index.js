@@ -85,6 +85,46 @@ function getDestinationSummary(feature) {
   };
 }
 
+function toRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function getDistanceInKilometers(fromCoordinates, toCoordinates) {
+  const [fromLng, fromLat] = fromCoordinates;
+  const [toLng, toLat] = toCoordinates;
+  const earthRadiusKm = 6371;
+  const deltaLat = toRadians(toLat - fromLat);
+  const deltaLng = toRadians(toLng - fromLng);
+  const a =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(toRadians(fromLat)) *
+      Math.cos(toRadians(toLat)) *
+      Math.sin(deltaLng / 2) *
+      Math.sin(deltaLng / 2);
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function findClosestDestination(destinations, referenceCoordinates) {
+  if (!destinations.length) {
+    return null;
+  }
+
+  return destinations.reduce((closestDestination, candidate) => {
+    if (!closestDestination) {
+      return candidate;
+    }
+
+    const closestDistance = getDistanceInKilometers(
+      referenceCoordinates,
+      closestDestination.coordinates
+    );
+    const candidateDistance = getDistanceInKilometers(referenceCoordinates, candidate.coordinates);
+
+    return candidateDistance < closestDistance ? candidate : closestDestination;
+  }, null);
+}
+
 function setLayerPaintIfPresent(map, layerId, property, value) {
   const layer = map.getLayer(layerId);
 
@@ -205,6 +245,8 @@ function applyThreeDimensionalMode(map, isEnabled) {
 export default function Home() {
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
+  const hasManualDestinationSelectionRef = useRef(false);
+  const hasAutoSelectedDestinationRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState('');
   const [destinationsStatus, setDestinationsStatus] = useState('idle');
@@ -220,6 +262,17 @@ export default function Home() {
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
+
+  function updateSelectedDestination(destinationId, options = {}) {
+    const { manual = false } = options;
+
+    if (manual) {
+      hasManualDestinationSelectionRef.current = true;
+    }
+
+    setSelectedDestinationId(destinationId);
+    setSelectedTrail(null);
+  }
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -331,6 +384,64 @@ export default function Home() {
   }, [mapReady]);
 
   useEffect(() => {
+    if (!mapReady || !destinations.length || hasManualDestinationSelectionRef.current) {
+      return undefined;
+    }
+
+    if (!navigator.geolocation) {
+      const fallbackDestination = findClosestDestination(destinations, DEFAULT_CENTER);
+
+      if (fallbackDestination && !selectedDestinationId && !hasAutoSelectedDestinationRef.current) {
+        hasAutoSelectedDestinationRef.current = true;
+        updateSelectedDestination(fallbackDestination.id);
+      }
+
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        if (isCancelled || hasManualDestinationSelectionRef.current) {
+          return;
+        }
+
+        const nearestDestination = findClosestDestination(destinations, [
+          position.coords.longitude,
+          position.coords.latitude,
+        ]);
+
+        if (nearestDestination && !selectedDestinationId) {
+          hasAutoSelectedDestinationRef.current = true;
+          updateSelectedDestination(nearestDestination.id);
+        }
+      },
+      () => {
+        if (isCancelled || hasManualDestinationSelectionRef.current) {
+          return;
+        }
+
+        const fallbackDestination = findClosestDestination(destinations, DEFAULT_CENTER);
+
+        if (fallbackDestination && !selectedDestinationId && !hasAutoSelectedDestinationRef.current) {
+          hasAutoSelectedDestinationRef.current = true;
+          updateSelectedDestination(fallbackDestination.id);
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 300000,
+        timeout: 10000,
+      }
+    );
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [mapReady, destinations, selectedDestinationId]);
+
+  useEffect(() => {
     const map = mapRef.current;
 
     if (!mapReady || !map || !destinationsGeoJson) {
@@ -366,8 +477,7 @@ export default function Home() {
         return;
       }
 
-      setSelectedDestinationId(String(feature.properties.id));
-      setSelectedTrail(null);
+      updateSelectedDestination(String(feature.properties.id), { manual: true });
     };
 
     const handleMouseEnter = () => {
@@ -536,8 +646,7 @@ export default function Home() {
               className="select-input"
               value={selectedDestinationId}
               onChange={(event) => {
-                setSelectedDestinationId(event.target.value);
-                setSelectedTrail(null);
+                updateSelectedDestination(event.target.value, { manual: true });
               }}
               disabled={destinationsStatus !== 'success'}
             >
