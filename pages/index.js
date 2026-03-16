@@ -22,8 +22,10 @@ const SUGGESTED_DESTINATION_DOT_LAYER_ID = 'suggested-destination-dot-layer';
 const SUGGESTED_DESTINATION_LABEL_LAYER_ID = 'suggested-destination-label-layer';
 const TRAILS_SOURCE_ID = 'trails';
 const TRAILS_LAYER_ID = 'trails-layer';
+const TRAILS_HIT_LAYER_ID = 'trails-hit-layer';
 const SUGGESTED_TRAILS_SOURCE_ID = 'suggested-trails';
 const SUGGESTED_TRAILS_LAYER_ID = 'suggested-trails-layer';
+const SUGGESTED_TRAILS_HIT_LAYER_ID = 'suggested-trails-hit-layer';
 const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
 const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
@@ -37,6 +39,7 @@ const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
 const SUGGESTED_DESTINATION_RADIUS_KM = 20;
 const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
+const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18];
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -1255,7 +1258,22 @@ export default function Home() {
             },
           });
 
-          map.on('click', TRAILS_LAYER_ID, (event) => {
+          map.addLayer({
+            id: TRAILS_HIT_LAYER_ID,
+            type: 'line',
+            source: TRAILS_SOURCE_ID,
+            layout: {
+              'line-cap': 'round',
+              'line-join': 'round',
+            },
+            paint: {
+              'line-color': '#000000',
+              'line-width': TRAIL_HIT_LINE_WIDTH,
+              'line-opacity': 0,
+            },
+          });
+
+          map.on('click', TRAILS_HIT_LAYER_ID, (event) => {
             const feature = event.features?.[0];
 
             if (!feature?.properties) {
@@ -1265,11 +1283,11 @@ export default function Home() {
             setSelectedTrailFeature(feature);
           });
 
-          map.on('mouseenter', TRAILS_LAYER_ID, () => {
+          map.on('mouseenter', TRAILS_HIT_LAYER_ID, () => {
             map.getCanvas().style.cursor = 'pointer';
           });
 
-          map.on('mouseleave', TRAILS_LAYER_ID, () => {
+          map.on('mouseleave', TRAILS_HIT_LAYER_ID, () => {
             map.getCanvas().style.cursor = '';
           });
         }
@@ -1405,7 +1423,28 @@ export default function Home() {
         map.addLayer(suggestedTrailsLayer);
       }
 
-      map.on('click', SUGGESTED_TRAILS_LAYER_ID, (event) => {
+      const suggestedTrailsHitLayer = {
+        id: SUGGESTED_TRAILS_HIT_LAYER_ID,
+        type: 'line',
+        source: SUGGESTED_TRAILS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': '#000000',
+          'line-width': TRAIL_HIT_LINE_WIDTH,
+          'line-opacity': 0,
+        },
+      };
+
+      if (map.getLayer(TRAILS_LAYER_ID)) {
+        map.addLayer(suggestedTrailsHitLayer, TRAILS_LAYER_ID);
+      } else {
+        map.addLayer(suggestedTrailsHitLayer);
+      }
+
+      map.on('click', SUGGESTED_TRAILS_HIT_LAYER_ID, (event) => {
         const feature = event.features?.[0];
         const destinationId = feature?.properties?.destinationid;
 
@@ -1422,11 +1461,11 @@ export default function Home() {
         });
       });
 
-      map.on('mouseenter', SUGGESTED_TRAILS_LAYER_ID, () => {
+      map.on('mouseenter', SUGGESTED_TRAILS_HIT_LAYER_ID, () => {
         map.getCanvas().style.cursor = 'pointer';
       });
 
-      map.on('mouseleave', SUGGESTED_TRAILS_LAYER_ID, () => {
+      map.on('mouseleave', SUGGESTED_TRAILS_HIT_LAYER_ID, () => {
         map.getCanvas().style.cursor = '';
       });
     }
@@ -1440,6 +1479,10 @@ export default function Home() {
 
       if (map.getLayer(TRAILS_LAYER_ID)) {
         map.moveLayer(SUGGESTED_TRAILS_LAYER_ID, TRAILS_LAYER_ID);
+      }
+
+      if (map.getLayer(TRAILS_HIT_LAYER_ID)) {
+        map.moveLayer(SUGGESTED_TRAILS_HIT_LAYER_ID, TRAILS_HIT_LAYER_ID);
       }
     }
 
