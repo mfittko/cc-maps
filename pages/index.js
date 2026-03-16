@@ -36,6 +36,7 @@ const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
 const SUGGESTED_DESTINATION_RADIUS_KM = 20;
+const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -537,6 +538,58 @@ function readStoredMapSettings() {
   } catch (error) {
     console.warn('Failed to read stored map settings', error);
     return null;
+  }
+}
+
+function getTrailCacheStorageKey(destinationId) {
+  return `${MAP_SETTINGS_STORAGE_KEY}:trails:${destinationId}`;
+}
+
+function readCachedTrailGeoJson(destinationId) {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(getTrailCacheStorageKey(destinationId));
+
+    if (!rawValue) {
+      return null;
+    }
+
+    const parsedValue = JSON.parse(rawValue);
+
+    if (
+      !parsedValue?.cachedAt ||
+      !parsedValue?.data ||
+      Date.now() - parsedValue.cachedAt > TRAILS_CACHE_TTL_MS
+    ) {
+      window.localStorage.removeItem(getTrailCacheStorageKey(destinationId));
+      return null;
+    }
+
+    return parsedValue.data;
+  } catch (error) {
+    console.warn(`Failed to read cached trails for destination ${destinationId}`, error);
+    return null;
+  }
+}
+
+function writeCachedTrailGeoJson(destinationId, data) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      getTrailCacheStorageKey(destinationId),
+      JSON.stringify({
+        cachedAt: Date.now(),
+        data,
+      })
+    );
+  } catch (error) {
+    console.warn(`Failed to cache trails for destination ${destinationId}`, error);
   }
 }
 
@@ -1144,13 +1197,18 @@ export default function Home() {
       setRequestError('');
 
       try {
-        const response = await fetch(`/api/trails?destinationid=${selectedDestinationId}`);
+        let geojson = readCachedTrailGeoJson(selectedDestinationId);
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch trails for the selected destination');
+        if (!geojson) {
+          const response = await fetch(`/api/trails?destinationid=${selectedDestinationId}`);
+
+          if (!response.ok) {
+            throw new Error('Failed to fetch trails for the selected destination');
+          }
+
+          geojson = await response.json();
+          writeCachedTrailGeoJson(selectedDestinationId, geojson);
         }
-
-        const geojson = await response.json();
 
         if (isCancelled) {
           return;
@@ -1233,15 +1291,26 @@ export default function Home() {
 
     async function loadSuggestedTrails() {
       try {
-        const responses = await Promise.all(
-          nearbyDestinationIds.map((destinationId) => fetch(`/api/trails?destinationid=${destinationId}`))
+        const previewCollections = await Promise.all(
+          nearbyDestinationIds.map(async (destinationId) => {
+            const cachedGeoJson = readCachedTrailGeoJson(destinationId);
+
+            if (cachedGeoJson) {
+              return cachedGeoJson;
+            }
+
+            const response = await fetch(`/api/trails?destinationid=${destinationId}`);
+
+            if (!response.ok) {
+              throw new Error('Failed to fetch trails for nearby destinations');
+            }
+
+            const geojson = await response.json();
+            writeCachedTrailGeoJson(destinationId, geojson);
+            return geojson;
+          })
         );
 
-        if (responses.some((response) => !response.ok)) {
-          throw new Error('Failed to fetch trails for nearby destinations');
-        }
-
-        const previewCollections = await Promise.all(responses.map((response) => response.json()));
         const geojson = {
           type: 'FeatureCollection',
           features: previewCollections.flatMap((collection) => collection.features || []),
