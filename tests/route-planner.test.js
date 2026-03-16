@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRouteGraph } from '../lib/route-graph.js';
-import { resolveRoute } from '../lib/route-planner.js';
+import { MinPriorityQueue, resolveRoute } from '../lib/route-planner.js';
 
 // ---------------------------------------------------------------------------
 // Shared GeoJSON test fixtures
@@ -139,6 +139,43 @@ const E = {
   CD: edgeId(N.C, N.D),
   DE: edgeId(N.D, N.E),
 };
+
+// ---------------------------------------------------------------------------
+// Internal priority queue coverage
+// ---------------------------------------------------------------------------
+
+describe('MinPriorityQueue', () => {
+  it('returns null when popping an empty queue', () => {
+    const queue = new MinPriorityQueue();
+    expect(queue.pop()).toBeNull();
+  });
+
+  it('bubbleDown swaps with the left child when it is the smaller child', () => {
+    const queue = new MinPriorityQueue();
+    queue.items = [
+      { nodeId: 'root', totalCost: 5 },
+      { nodeId: 'left', totalCost: 2 },
+      { nodeId: 'right', totalCost: 3 },
+    ];
+
+    queue.bubbleDown(0);
+
+    expect(queue.items.map(({ nodeId }) => nodeId)).toEqual(['left', 'root', 'right']);
+  });
+
+  it('bubbleDown swaps with the right child when it is the smaller child', () => {
+    const queue = new MinPriorityQueue();
+    queue.items = [
+      { nodeId: 'root', totalCost: 5 },
+      { nodeId: 'left', totalCost: 3 },
+      { nodeId: 'right', totalCost: 2 },
+    ];
+
+    queue.bubbleDown(0);
+
+    expect(queue.items.map(({ nodeId }) => nodeId)).toEqual(['right', 'left', 'root']);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Empty and degenerate input
