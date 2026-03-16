@@ -1,38 +1,53 @@
-/**
- * API Route: /api/trails
- *
- * This Next.js API route acts as a proxy to the Sporet ArcGIS REST API.  It
- * queries the `Loypetype` (ID: 6) layer of the public `Sporet_Simple` service
- * and returns the resulting GeoJSON.
- *
- * Query parameters:
- *   destinationid (optional) – integer.  When provided the query will
- *   filter by `destinationid=<value>`.  If omitted, all trails are returned
- *   (subject to the server's max record count).
- */
+import {
+  SPORET_LAYER_IDS,
+  fetchSporetGeoJson,
+  parseIntegerParam,
+} from '../../lib/sporet';
+
+const TRAIL_FIELDS = [
+  'id',
+  'destinationid',
+  'trailtypesymbol',
+  'prepsymbol',
+  'warningtext',
+  'has_classic',
+  'has_skating',
+  'has_floodlight',
+  'is_scootertrail',
+  'st_length(shape)',
+].join(',');
+
+const UNFILTERED_TRAIL_LIMIT = '250';
+
 export default async function handler(req, res) {
-  const { destinationid } = req.query;
-  const baseUrl =
-    process.env.SPORET_API_BASE_URL ||
-    'https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapServer';
-  const layerId = 6;
-  const whereClause = destinationid ? `destinationid=${destinationid}` : '1=1';
-  const query = new URLSearchParams({
-    where: whereClause,
-    outFields: '*',
-    returnGeometry: 'true',
-    f: 'geojson',
-  });
-  const url = `${baseUrl}/${layerId}/query?${query.toString()}`;
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const destinationId = parseIntegerParam(req.query.destinationid);
+
+  if (destinationId === null) {
+    return res.status(400).json({
+      error: 'destinationid must be a positive integer when provided',
+    });
+  }
+
+  const queryParams = {
+    where: destinationId === undefined ? '1=1' : `destinationid=${destinationId}`,
+    outFields: TRAIL_FIELDS,
+  };
+
+  if (destinationId === undefined) {
+    queryParams.resultRecordCount = UNFILTERED_TRAIL_LIMIT;
+  }
 
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`Sporet API request failed: ${response.status}`);
-    }
-    const data = await response.json();
-    res.status(200).json(data);
+    const data = await fetchSporetGeoJson(SPORET_LAYER_IDS.trails, queryParams);
+
+    res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    return res.status(200).json(data);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
