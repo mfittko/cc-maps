@@ -603,4 +603,157 @@ h2 {
     font-size: 0.82rem;
     line-height: 1.3;
   }
+
+  .planning-panel {
+    right: 0.75rem;
+    top: 0.75rem;
+    left: 0.75rem;
+    width: auto;
+    max-height: min(46vh, 360px);
+    padding: 0.8rem;
+    border-radius: 14px;
+  }
+
+  .planning-anchor-item {
+    font-size: 0.8rem;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Planning panel
+ * --------------------------------------------------------------------------- */
+
+.planning-panel {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3;
+  width: min(320px, calc(100% - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1rem;
+  border: 1px solid rgba(29, 50, 42, 0.1);
+  border-radius: 20px;
+  background: rgba(252, 253, 251, 0.94);
+  box-shadow: 0 24px 48px rgba(47, 74, 61, 0.14);
+  backdrop-filter: blur(14px);
+}
+
+.planning-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.planning-hint {
+  margin-top: 0.75rem;
+  color: #4a6457;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.planning-summary {
+  margin-top: 0.65rem;
+  color: #284638;
+  font-size: 0.9rem;
+}
+
+.planning-gap-warning {
+  margin-top: 0.3rem;
+  font-size: 0.82rem;
+  color: #8d5a20;
+}
+
+.planning-anchor-list {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.planning-anchor-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  background: #f3f7f3;
+  color: #284638;
+}
+
+.planning-anchor-info {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.planning-anchor-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: #1f7f59;
+  color: #ffffff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.planning-anchor-label {
+  font-size: 0.84rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planning-anchor-dist {
+  color: #567261;
+}
+
+.planning-anchor-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: #dfeae2;
+  color: #1d4236;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.planning-anchor-remove:hover {
+  background: #d2e2d7;
+}
+
+.planning-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.planning-clear-btn {
+  margin-left: auto;
+  background: #f7ece6;
+  color: #7a3520;
+}
+
+.planning-clear-btn:hover {
+  background: #f0ddd4;
+}
+
+/* Planning mode entry button (mobile map overlay) */
+.map-plan-button {
+  top: 4.5rem;
 }

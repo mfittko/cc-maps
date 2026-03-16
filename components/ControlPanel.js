@@ -1,6 +1,7 @@
 import {
   FaCircleInfo,
   FaLocationDot,
+  FaRoute,
   FaXmark,
 } from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES } from '../lib/sporet';
@@ -20,6 +21,8 @@ export default function ControlPanel({
   destinations,
   selectedDestination,
   activeTrailLegendItems,
+  isPlanningMode = false,
+  onEnterPlanning,
 }) {
   return (
     <aside
