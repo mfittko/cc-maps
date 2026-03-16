@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
 import {
   FaCircleInfo,
@@ -25,6 +26,8 @@ const BUILDINGS_LAYER_ID = '3d-buildings';
 const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
 const MIN_SEGMENT_DISTANCE_KM = 0.05;
 const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13;
+const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
+const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
@@ -439,6 +442,37 @@ function formatDistance(distanceKm) {
   return `${distanceKm.toFixed(1)} km`;
 }
 
+function getSingleQueryValue(value) {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+function isTrailColorMode(value) {
+  return value === 'type' || value === 'freshness';
+}
+
+function readStoredMapSettings() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(MAP_SETTINGS_STORAGE_KEY);
+
+    if (!rawValue) {
+      return null;
+    }
+
+    return JSON.parse(rawValue);
+  } catch (error) {
+    console.warn('Failed to read stored map settings', error);
+    return null;
+  }
+}
+
 function findClosestDestination(destinations, referenceCoordinates) {
   if (!destinations.length) {
     return null;
@@ -577,10 +611,12 @@ function applyThreeDimensionalMode(map, isEnabled) {
 }
 
 export default function Home() {
+  const router = useRouter();
   const mapContainer = useRef(null);
   const mapRef = useRef(null);
   const hasManualDestinationSelectionRef = useRef(false);
   const hasAutoSelectedDestinationRef = useRef(false);
+  const hasInitializedFromUrlRef = useRef(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState('');
   const [destinationsStatus, setDestinationsStatus] = useState('idle');
@@ -592,7 +628,7 @@ export default function Home() {
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrailFeature, setSelectedTrailFeature] = useState(null);
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
-  const [trailColorMode, setTrailColorMode] = useState('freshness');
+  const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
@@ -614,6 +650,40 @@ export default function Home() {
     setSelectedTrailFeature(null);
     setSelectedTrailCrossings(null);
   }
+
+  useEffect(() => {
+    if (!router.isReady || hasInitializedFromUrlRef.current) {
+      return;
+    }
+
+    const storedSettings = readStoredMapSettings();
+    const destinationFromUrl = getSingleQueryValue(router.query.destination);
+    const colorModeFromUrl = getSingleQueryValue(router.query.colors);
+    const threeDimensionalFromUrl = getSingleQueryValue(router.query.terrain);
+    const destinationFromStorage = getSingleQueryValue(storedSettings?.destination);
+    const colorModeFromStorage = getSingleQueryValue(storedSettings?.colors);
+    const threeDimensionalFromStorage = getSingleQueryValue(storedSettings?.terrain);
+
+    const initialDestination = destinationFromUrl || destinationFromStorage;
+    const initialColorMode = colorModeFromUrl || colorModeFromStorage;
+    const initialTerrain = threeDimensionalFromUrl || threeDimensionalFromStorage;
+
+    if (typeof initialDestination === 'string' && /^\d+$/.test(initialDestination)) {
+      hasManualDestinationSelectionRef.current = true;
+      hasAutoSelectedDestinationRef.current = true;
+      setSelectedDestinationId(initialDestination);
+    }
+
+    if (isTrailColorMode(initialColorMode)) {
+      setTrailColorMode(initialColorMode);
+    }
+
+    if (initialTerrain === '1') {
+      setIsThreeDimensional(true);
+    }
+
+    hasInitializedFromUrlRef.current = true;
+  }, [router.isReady, router.query.destination, router.query.colors, router.query.terrain]);
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -1022,6 +1092,80 @@ export default function Home() {
       }
     };
   }, [mapReady, trailsGeoJson, destinations]);
+
+  useEffect(() => {
+    if (!router.isReady || !hasInitializedFromUrlRef.current) {
+      return;
+    }
+
+    const nextQuery = { ...router.query };
+
+    if (selectedDestinationId) {
+      nextQuery.destination = selectedDestinationId;
+    } else {
+      delete nextQuery.destination;
+    }
+
+    if (trailColorMode !== DEFAULT_TRAIL_COLOR_MODE) {
+      nextQuery.colors = trailColorMode;
+    } else {
+      delete nextQuery.colors;
+    }
+
+    if (isThreeDimensional) {
+      nextQuery.terrain = '1';
+    } else {
+      delete nextQuery.terrain;
+    }
+
+    const currentDestination = getSingleQueryValue(router.query.destination) || '';
+    const currentColors = getSingleQueryValue(router.query.colors) || '';
+    const currentTerrain = getSingleQueryValue(router.query.terrain) || '';
+    const nextDestination = getSingleQueryValue(nextQuery.destination) || '';
+    const nextColors = getSingleQueryValue(nextQuery.colors) || '';
+    const nextTerrain = getSingleQueryValue(nextQuery.terrain) || '';
+
+    if (
+      currentDestination === nextDestination &&
+      currentColors === nextColors &&
+      currentTerrain === nextTerrain
+    ) {
+      return;
+    }
+
+    router.replace(
+      {
+        pathname: router.pathname,
+        query: nextQuery,
+      },
+      undefined,
+      { shallow: true, scroll: false }
+    );
+  }, [
+    router,
+    selectedDestinationId,
+    trailColorMode,
+    isThreeDimensional,
+  ]);
+
+  useEffect(() => {
+    if (!hasInitializedFromUrlRef.current || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        MAP_SETTINGS_STORAGE_KEY,
+        JSON.stringify({
+          destination: selectedDestinationId || '',
+          colors: trailColorMode,
+          terrain: isThreeDimensional ? '1' : '',
+        })
+      );
+    } catch (error) {
+      console.warn('Failed to persist map settings', error);
+    }
+  }, [selectedDestinationId, trailColorMode, isThreeDimensional]);
 
   return (
     <div className="page-shell">
