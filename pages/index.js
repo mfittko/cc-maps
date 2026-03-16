@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
+import {
+  FaCircleInfo,
+  FaLayerGroup,
+  FaLocationDot,
+  FaMountain,
+  FaPersonSkiingNordic,
+  FaSnowflake,
+  FaXmark,
+} from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
@@ -206,6 +215,8 @@ export default function Home() {
   const [selectedDestinationId, setSelectedDestinationId] = useState('');
   const [selectedTrail, setSelectedTrail] = useState(null);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
@@ -471,98 +482,175 @@ export default function Home() {
 
   return (
     <div className="page-shell">
-      <aside className="control-panel">
-        <p className="eyebrow">cc-maps</p>
-        <h1>Cross-Country maps</h1>
-        <p className="panel-copy">
-          Browse active ski destinations first, then load trails on demand for a selected area.
-        </p>
-
-        <section className="detail-card detail-card-compact">
-          <p className="detail-label">Map mode</p>
-          <p>Winter base map is the default. Enable 3D only when you want terrain depth.</p>
-          <label className="toggle-row" htmlFor="three-d-toggle">
-            <span>3D terrain and buildings</span>
-            <input
-              id="three-d-toggle"
-              type="checkbox"
-              checked={isThreeDimensional}
-              onChange={(event) => setIsThreeDimensional(event.target.checked)}
-            />
-          </label>
-        </section>
-
-        <label className="field-label" htmlFor="destination-select">
-          Destination
-        </label>
-        <select
-          id="destination-select"
-          className="select-input"
-          value={selectedDestinationId}
-          onChange={(event) => {
-            setSelectedDestinationId(event.target.value);
-            setSelectedTrail(null);
-          }}
-          disabled={destinationsStatus !== 'success'}
-        >
-          <option value="">Choose a ski area</option>
-          {destinations.map((destination) => (
-            <option key={destination.id} value={destination.id}>
-              {destination.name}
-            </option>
-          ))}
-        </select>
-
-        <div className="status-stack">
-          {mapError ? <p className="status-card status-error">{mapError}</p> : null}
-          {destinationsStatus === 'loading' ? (
-            <p className="status-card">Loading destinations...</p>
-          ) : null}
-          {trailsStatus === 'loading' ? <p className="status-card">Loading trails...</p> : null}
-          {requestError ? <p className="status-card status-error">{requestError}</p> : null}
-          {destinationsStatus === 'success' && destinations.length === 0 ? (
-            <p className="status-card">No active destinations were returned by the API.</p>
-          ) : null}
+      <aside className={`control-panel${isPanelCollapsed ? ' control-panel-collapsed' : ''}`}>
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">cc-maps</p>
+            <h1>Cross-Country maps</h1>
+          </div>
+          <button
+            type="button"
+            className="panel-collapse-button"
+            onClick={() => setIsPanelCollapsed((current) => !current)}
+            aria-expanded={!isPanelCollapsed}
+            aria-controls="control-panel-body"
+          >
+            {isPanelCollapsed ? 'Open' : 'Minimize'}
+          </button>
         </div>
 
-        {selectedDestination ? (
-          <section className="detail-card">
-            <p className="detail-label">Selected destination</p>
-            <h2>{selectedDestination.name}</h2>
-            <p>
-              {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
-                DESTINATION_PREP_STYLES.default.label}
-            </p>
-          </section>
-        ) : null}
+        {!isPanelCollapsed ? (
+          <div id="control-panel-body">
+            <div className="quick-actions">
+              <button
+                type="button"
+                className="icon-chip"
+                onClick={() => setIsInfoPanelOpen(true)}
+                aria-label="Open info panel"
+              >
+                <FaCircleInfo />
+                <span>Info</span>
+              </button>
+              <label className="icon-toggle" htmlFor="three-d-toggle">
+                <span className="icon-toggle-copy">
+                  <FaMountain />
+                  <span>3D</span>
+                </span>
+                <input
+                  id="three-d-toggle"
+                  type="checkbox"
+                  checked={isThreeDimensional}
+                  onChange={(event) => setIsThreeDimensional(event.target.checked)}
+                />
+              </label>
+            </div>
 
-        <section className="detail-card">
-          <p className="detail-label">Trail legend</p>
-          <ul className="legend-list">
-            {trailLegendItems.map((item) => (
-              <li key={item.code} className="legend-item">
-                <span className="legend-swatch" style={{ backgroundColor: item.color }} />
-                <span>{item.label}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
+            <label className="field-label" htmlFor="destination-select">
+              <span className="field-label-content">
+                <FaLocationDot />
+                <span>Destination</span>
+              </span>
+            </label>
+            <select
+              id="destination-select"
+              className="select-input"
+              value={selectedDestinationId}
+              onChange={(event) => {
+                setSelectedDestinationId(event.target.value);
+                setSelectedTrail(null);
+              }}
+              disabled={destinationsStatus !== 'success'}
+            >
+              <option value="">Choose a ski area</option>
+              {destinations.map((destination) => (
+                <option key={destination.id} value={destination.id}>
+                  {destination.name}
+                </option>
+              ))}
+            </select>
 
-        {selectedTrail ? (
-          <section className="detail-card">
-            <p className="detail-label">Trail details</p>
-            <h2>
-              {TRAIL_TYPE_STYLES[selectedTrail.trailtypesymbol]?.label ||
-                TRAIL_TYPE_STYLES.default.label}
-            </h2>
-            <p>
-              Classic: {selectedTrail.has_classic ? 'Yes' : 'No'} · Skating:{' '}
-              {selectedTrail.has_skating ? 'Yes' : 'No'}
-            </p>
-            {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
-          </section>
+            <div className="status-stack">
+              {mapError ? <p className="status-card status-error">{mapError}</p> : null}
+              {destinationsStatus === 'loading' ? (
+                <p className="status-card">Loading destinations...</p>
+              ) : null}
+              {trailsStatus === 'loading' ? <p className="status-card">Loading trails...</p> : null}
+              {requestError ? <p className="status-card status-error">{requestError}</p> : null}
+              {destinationsStatus === 'success' && destinations.length === 0 ? (
+                <p className="status-card">No active destinations were returned by the API.</p>
+              ) : null}
+            </div>
+
+            {selectedDestination ? (
+              <section className="detail-card detail-card-compact">
+                <p className="detail-label">Selected destination</p>
+                <h2>{selectedDestination.name}</h2>
+                <p>
+                  {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
+                    DESTINATION_PREP_STYLES.default.label}
+                </p>
+              </section>
+            ) : null}
+
+            <section className="detail-card detail-card-compact">
+              <p className="detail-label">Trail legend</p>
+              <ul className="legend-list">
+                {trailLegendItems.map((item) => (
+                  <li key={item.code} className="legend-item">
+                    <span className="legend-swatch" style={{ backgroundColor: item.color }} />
+                    <span>{item.label}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {selectedTrail ? (
+              <section className="detail-card detail-card-compact">
+                <p className="detail-label">Trail details</p>
+                <h2>
+                  {TRAIL_TYPE_STYLES[selectedTrail.trailtypesymbol]?.label ||
+                    TRAIL_TYPE_STYLES.default.label}
+                </h2>
+                <p>
+                  Classic: {selectedTrail.has_classic ? 'Yes' : 'No'} · Skating:{' '}
+                  {selectedTrail.has_skating ? 'Yes' : 'No'}
+                </p>
+                {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
+              </section>
+            ) : null}
+          </div>
+        ) : selectedDestination ? (
+          <div className="panel-collapsed-summary">
+            <p className="detail-label">Destination</p>
+            <p>{selectedDestination.name}</p>
+          </div>
         ) : null}
       </aside>
+
+      {isInfoPanelOpen ? (
+        <aside className="info-panel" aria-label="Map information">
+          <div className="info-panel-header">
+            <div>
+              <p className="eyebrow">Guide</p>
+              <h2 className="info-title">How to use the map</h2>
+            </div>
+            <button
+              type="button"
+              className="info-close-button"
+              onClick={() => setIsInfoPanelOpen(false)}
+              aria-label="Close info panel"
+            >
+              <FaXmark />
+            </button>
+          </div>
+
+          <div className="info-list">
+            <section className="info-item">
+              <FaPersonSkiingNordic className="info-icon" />
+              <div>
+                <p className="detail-label">Browse</p>
+                <p>Pick a ski area from the destination menu or tap a destination marker on the map.</p>
+              </div>
+            </section>
+
+            <section className="info-item">
+              <FaSnowflake className="info-icon" />
+              <div>
+                <p className="detail-label">Winter mode</p>
+                <p>The base map is winter-styled by default. Turn on 3D only when you want terrain depth.</p>
+              </div>
+            </section>
+
+            <section className="info-item">
+              <FaLayerGroup className="info-icon" />
+              <div>
+                <p className="detail-label">Trail colors</p>
+                <p>Blue is floodlit, green is machine groomed, orange is scooter, and purple is historic.</p>
+              </div>
+            </section>
+          </div>
+        </aside>
+      ) : null}
 
       <main className="map-stage">
         <div ref={mapContainer} className="map-container" />
@@ -590,6 +678,152 @@ export default function Home() {
           background: rgba(250, 252, 250, 0.92);
           box-shadow: 0 24px 48px rgba(47, 74, 61, 0.16);
           backdrop-filter: blur(14px);
+        }
+
+        .control-panel-collapsed {
+          width: auto;
+          max-width: min(260px, calc(100% - 2rem));
+        }
+
+        .panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .panel-collapse-button {
+          border: 0;
+          border-radius: 999px;
+          background: #dfeae2;
+          color: #1d4236;
+          padding: 0.45rem 0.7rem;
+          font: inherit;
+          font-size: 0.82rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .panel-collapse-button:hover {
+          background: #d2e2d7;
+        }
+
+        .panel-collapsed-summary {
+          margin-top: 0.6rem;
+          color: #284638;
+          font-size: 0.92rem;
+        }
+
+        .quick-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.65rem;
+          margin-top: 0.75rem;
+        }
+
+        .icon-chip,
+        .icon-toggle {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          border-radius: 999px;
+          padding: 0.55rem 0.75rem;
+          background: #eef4ef;
+          color: #1f4235;
+          font: inherit;
+          font-size: 0.84rem;
+          font-weight: 700;
+        }
+
+        .icon-chip {
+          border: 0;
+          cursor: pointer;
+        }
+
+        .icon-toggle {
+          justify-content: space-between;
+          flex: 1;
+        }
+
+        .icon-toggle-copy,
+        .field-label-content {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.45rem;
+        }
+
+        .icon-toggle input {
+          width: 1rem;
+          height: 1rem;
+          margin: 0;
+          accent-color: #1f7f59;
+        }
+
+        .info-panel {
+          position: absolute;
+          top: 1rem;
+          right: 1rem;
+          z-index: 1;
+          width: min(320px, calc(100% - 2rem));
+          max-height: calc(100vh - 2rem);
+          overflow-y: auto;
+          padding: 1rem;
+          border: 1px solid rgba(29, 50, 42, 0.1);
+          border-radius: 20px;
+          background: rgba(252, 253, 251, 0.94);
+          box-shadow: 0 24px 48px rgba(47, 74, 61, 0.14);
+          backdrop-filter: blur(14px);
+        }
+
+        .info-panel-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 0.75rem;
+        }
+
+        .info-title {
+          font-size: 1.15rem;
+        }
+
+        .info-close-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 2rem;
+          height: 2rem;
+          border: 0;
+          border-radius: 999px;
+          background: #eef3ee;
+          color: #234236;
+          cursor: pointer;
+        }
+
+        .info-list {
+          display: grid;
+          gap: 0.85rem;
+          margin-top: 1rem;
+        }
+
+        .info-item {
+          display: grid;
+          grid-template-columns: auto 1fr;
+          gap: 0.75rem;
+          align-items: flex-start;
+          padding-top: 0.75rem;
+          border-top: 1px solid rgba(35, 66, 54, 0.08);
+          color: #2a4639;
+        }
+
+        .info-item:first-child {
+          padding-top: 0;
+          border-top: 0;
+        }
+
+        .info-icon {
+          margin-top: 0.1rem;
+          font-size: 1rem;
+          color: #2f6d58;
         }
 
         .eyebrow,
@@ -722,6 +956,12 @@ export default function Home() {
           .control-panel {
             width: min(320px, calc(100% - 2rem));
           }
+
+          .info-panel {
+            top: auto;
+            right: 1rem;
+            bottom: 1rem;
+          }
         }
 
         @media (max-width: 640px) {
@@ -738,6 +978,20 @@ export default function Home() {
             background: rgba(248, 251, 248, 0.84);
             box-shadow: 0 10px 24px rgba(47, 74, 61, 0.1);
             backdrop-filter: blur(10px);
+          }
+
+          .control-panel-collapsed {
+            max-width: calc(100% - 1.5rem);
+          }
+
+          .info-panel {
+            right: 0.75rem;
+            bottom: 0.75rem;
+            left: 0.75rem;
+            width: auto;
+            max-height: min(42vh, 340px);
+            padding: 0.8rem;
+            border-radius: 14px;
           }
 
           h1 {
@@ -763,6 +1017,17 @@ export default function Home() {
             margin-top: 0.6rem;
             margin-bottom: 0.3rem;
             font-size: 0.78rem;
+          }
+
+          .quick-actions {
+            margin-top: 0.55rem;
+            gap: 0.45rem;
+          }
+
+          .icon-chip,
+          .icon-toggle {
+            padding: 0.45rem 0.6rem;
+            font-size: 0.76rem;
           }
 
           .select-input {
@@ -804,6 +1069,23 @@ export default function Home() {
           .toggle-row input {
             width: 1rem;
             height: 1rem;
+          }
+
+          .info-title {
+            font-size: 1rem;
+          }
+
+          .info-item {
+            gap: 0.6rem;
+          }
+
+          .info-icon {
+            font-size: 0.92rem;
+          }
+
+          .panel-collapse-button {
+            padding: 0.35rem 0.6rem;
+            font-size: 0.74rem;
           }
 
           h2 {
