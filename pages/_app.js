@@ -1,4 +1,5 @@
 import Head from 'next/head';
+import { Analytics } from '@vercel/analytics/react';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '../styles/globals.css';
 
@@ -19,6 +20,7 @@ export default function App({ Component, pageProps }) {
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </Head>
       <Component {...pageProps} />
+      <Analytics />
     </>
   );
 }
