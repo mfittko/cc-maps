@@ -1,10 +1,10 @@
-import { FaXmark } from 'react-icons/fa6';
+import { FaArrowDownLong, FaArrowUpLong, FaXmark } from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 export default function TrailDetailsPanel({
   selectedTrail,
   selectedTrailLengthKm,
-  selectedTrailCrossings,
+  selectedTrailElevationMetrics,
   formatDistance,
   onClose,
 }) {
@@ -43,34 +43,23 @@ export default function TrailDetailsPanel({
             DESTINATION_PREP_STYLES.default.label}
         </p>
         {selectedTrailLengthKm ? (
-          <p>
-            Length: {formatDistance(selectedTrailLengthKm)}
-            {selectedTrailCrossings ? ` · Crossings: ${selectedTrailCrossings.crossings.length}` : ''}
-          </p>
+          <p>Length: {formatDistance(selectedTrailLengthKm)}</p>
+        ) : null}
+        {selectedTrailElevationMetrics ? (
+          <div className="trail-stats-row">
+            <div className="elevation-metrics" aria-label="Elevation metrics">
+              <span className="elevation-chip">
+                <FaArrowUpLong aria-hidden="true" />
+                <span>{selectedTrailElevationMetrics.ascentMeters} m</span>
+              </span>
+              <span className="elevation-chip">
+                <FaArrowDownLong aria-hidden="true" />
+                <span>{selectedTrailElevationMetrics.descentMeters} m</span>
+              </span>
+            </div>
+          </div>
         ) : null}
         {selectedTrail.warningtext ? <p>{selectedTrail.warningtext}</p> : null}
-        {selectedTrailCrossings?.segments?.length ? (
-          <div className="crossing-list-block">
-            <p className="detail-label">Trail segments</p>
-            <ul className="crossing-list">
-              {selectedTrailCrossings.segments.map((segment, index) => (
-                <li
-                  key={`${segment.fromLabel}-${segment.toLabel}-${index}`}
-                  className="crossing-item"
-                >
-                  <span>
-                    {segment.fromLabel} to {segment.toLabel}
-                  </span>
-                  <strong>{formatDistance(segment.distanceKm)}</strong>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : selectedTrailCrossings?.crossings?.length === 1 ? (
-          <p>Only one crossing was found on this trail, so no interval can be shown yet.</p>
-        ) : selectedTrailCrossings ? (
-          <p>No crossings were found for this trail within the loaded destination network.</p>
-        ) : null}
       </div>
     </aside>
   );

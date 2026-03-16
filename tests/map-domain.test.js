@@ -9,6 +9,8 @@ import {
   getDestinationSummary,
   getDestinationsWithinRadius,
   getDistanceInKilometers,
+  getElevationChangeMetrics,
+  getSampledCoordinatesAlongFeature,
   getSuggestedDestinationGeoJson,
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
@@ -576,6 +578,32 @@ describe('map-domain', () => {
     expect(findClosestDestinationByTrailProximity([], trailProximityGeoJson, oslo, 0.05)).toBeNull();
     expect(findClosestDestinationByTrailProximity(destinations, null, oslo, 0.05)).toBeNull();
     expect(getTrailSelectionLengthInKilometers(null)).toBe(0);
+  });
+
+  it('samples selected trail geometry at a fixed spacing and keeps the endpoint', () => {
+    const sampledCoordinates = getSampledCoordinatesAlongFeature(
+      clickedSectionGeoJson.features[0],
+      500
+    );
+
+    expect(sampledCoordinates[0]).toEqual([10.0, 59.0]);
+    expect(sampledCoordinates[sampledCoordinates.length - 1]).toEqual([10.02, 59.0]);
+    expect(sampledCoordinates.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('computes ascent and descent from sampled elevations', () => {
+    expect(getElevationChangeMetrics([100, 125, 118, 140, 135])).toEqual({
+      ascentMeters: 47,
+      descentMeters: 12,
+    });
+
+    expect(getElevationChangeMetrics([null, 100, 105, Number.NaN, 97])).toEqual({
+      ascentMeters: 5,
+      descentMeters: 8,
+    });
+
+    expect(getElevationChangeMetrics([100])).toBeNull();
+    expect(getElevationChangeMetrics(null)).toBeNull();
   });
 
   it('formats distances consistently', () => {

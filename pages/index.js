@@ -9,12 +9,14 @@ import {
   findClosestDestinationByTrailProximity,
   findClosestDestination,
   formatDistance,
+  getElevationChangeMetrics,
   getClickedTrailSection,
   getAllTrailSegmentLabelsGeoJson,
   getCrossingMetrics,
   getDestinationSummary,
   getDestinationsWithinRadius,
   getDistanceInKilometers,
+  getSampledCoordinatesAlongFeature,
   getSuggestedDestinationGeoJson,
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
@@ -60,6 +62,7 @@ const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18
 const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const GEOLOCATE_MAX_ZOOM = 13.5;
+const TERRAIN_SAMPLE_SPACING_METERS = 25;
 const trailLegendItems = Object.entries(TRAIL_TYPE_STYLES)
   .filter(([key]) => key !== 'default')
   .map(([key, value]) => ({ code: Number(key), ...value }));
@@ -202,7 +205,7 @@ function applyWinterBasemap(map) {
   });
 }
 
-function applyThreeDimensionalMode(map, isEnabled) {
+function ensureTerrainSource(map) {
   if (!map.getSource(DEM_SOURCE_ID)) {
     map.addSource(DEM_SOURCE_ID, {
       type: 'raster-dem',
@@ -211,6 +214,10 @@ function applyThreeDimensionalMode(map, isEnabled) {
       maxzoom: 14,
     });
   }
+}
+
+function applyThreeDimensionalMode(map, isEnabled) {
+  ensureTerrainSource(map);
 
   if (isEnabled) {
     map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.2 });
@@ -287,6 +294,7 @@ export default function Home() {
   const [selectedTrailSectionFeature, setSelectedTrailSectionFeature] = useState(null);
   const [selectedTrailClickCoordinates, setSelectedTrailClickCoordinates] = useState(null);
   const [selectedTrailCrossings, setSelectedTrailCrossings] = useState(null);
+  const [selectedTrailElevationMetrics, setSelectedTrailElevationMetrics] = useState(null);
   const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
   const [isThreeDimensional, setIsThreeDimensional] = useState(false);
   const [mapView, setMapView] = useState(null);
@@ -338,6 +346,7 @@ export default function Home() {
     setSelectedTrailSectionFeature(null);
     setSelectedTrailClickCoordinates(null);
     setSelectedTrailCrossings(null);
+    setSelectedTrailElevationMetrics(null);
     setNearbyDestinationIds([]);
     setSuggestedTrailsGeoJson(null);
   }
@@ -413,6 +422,7 @@ export default function Home() {
     map.on('load', () => {
       try {
         applyWinterBasemap(map);
+        ensureTerrainSource(map);
       } catch (error) {
         console.error('Failed to apply winter basemap styling', error);
       }
@@ -1149,6 +1159,79 @@ export default function Home() {
 
   useEffect(() => {
     const map = mapRef.current;
+    const selectedFeature = selectedTrailSectionFeature || selectedTrailFeature;
+
+    if (!mapReady || !map || !selectedFeature) {
+      setSelectedTrailElevationMetrics(null);
+      return undefined;
+    }
+
+    if (typeof map.queryTerrainElevation !== 'function') {
+      setSelectedTrailElevationMetrics(null);
+      return undefined;
+    }
+
+    const sampledCoordinates = getSampledCoordinatesAlongFeature(
+      selectedFeature,
+      TERRAIN_SAMPLE_SPACING_METERS
+    );
+
+    if (sampledCoordinates.length < 2) {
+      setSelectedTrailElevationMetrics(null);
+      return undefined;
+    }
+
+    let isCancelled = false;
+    let shouldRestoreTerrain = false;
+
+    const readElevationMetrics = () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        const elevations = sampledCoordinates.map((coordinates) =>
+          map.queryTerrainElevation(coordinates, { exaggerated: false })
+        );
+
+        if (!isCancelled) {
+          setSelectedTrailElevationMetrics(getElevationChangeMetrics(elevations));
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.warn('Skipped trail ascent/descent calculation', error);
+          setSelectedTrailElevationMetrics(null);
+        }
+      } finally {
+        if (shouldRestoreTerrain) {
+          map.setTerrain(null);
+          shouldRestoreTerrain = false;
+        }
+      }
+    };
+
+    if (map.getTerrain()) {
+      readElevationMetrics();
+    } else {
+      shouldRestoreTerrain = true;
+      map.once('idle', readElevationMetrics);
+      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1 });
+    }
+
+    return () => {
+      isCancelled = true;
+
+      if (shouldRestoreTerrain) {
+        map.setTerrain(null);
+        shouldRestoreTerrain = false;
+      }
+
+      map.off('idle', readElevationMetrics);
+    };
+  }, [mapReady, selectedTrailFeature, selectedTrailSectionFeature]);
+
+  useEffect(() => {
+    const map = mapRef.current;
 
     if (!mapReady || !map) {
       return undefined;
@@ -1394,13 +1477,14 @@ export default function Home() {
         <TrailDetailsPanel
           selectedTrail={selectedTrail}
           selectedTrailLengthKm={selectedTrailLengthKm}
-          selectedTrailCrossings={selectedTrailCrossings}
+          selectedTrailElevationMetrics={selectedTrailElevationMetrics}
           formatDistance={formatDistance}
           onClose={() => {
             setSelectedTrailFeature(null);
             setSelectedTrailSectionFeature(null);
             setSelectedTrailClickCoordinates(null);
             setSelectedTrailCrossings(null);
+            setSelectedTrailElevationMetrics(null);
           }}
         />
       ) : null}

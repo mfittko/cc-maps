@@ -362,6 +362,31 @@ h2 {
   color: #284638;
 }
 
+.trail-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.elevation-metrics {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.elevation-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  font-weight: 700;
+  background: rgba(29, 50, 42, 0.08);
+  color: #284638;
+}
+
 .map-overlay-icon-button,
 .mobile-overlay-backdrop {
   display: none;
