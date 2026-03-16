@@ -7,7 +7,7 @@ import { resolveRoute } from '../lib/route-planner.js';
 // ---------------------------------------------------------------------------
 
 /**
- * A linear chain of four trail sections sharing endpoints:
+ * A linear chain of three trail sections sharing endpoints:
  *   A=[10.75,59.91] --[AB]--> B=[10.76,59.91] --[BC]--> C=[10.77,59.91] --[CD]--> D=[10.78,59.91]
  *
  * Produces graph nodes A, B, C, D and edges AB, BC, CD.
@@ -52,7 +52,7 @@ const chainGeoJson = {
 };
 
 /**
- * A longer chain with five sections sharing endpoints:
+ * A longer chain with four sections sharing endpoints:
  *   A --[AB]--> B --[BC]--> C --[CD]--> D --[DE]--> E
  *
  * Used to verify multi-hop connector resolution.
@@ -105,7 +105,7 @@ const disconnectedGeoJson = {
 };
 
 // ---------------------------------------------------------------------------
-// Helper: deterministic edge ID builder (mirrors lib/route-graph.js logic)
+// Helper: deterministic base edge ID builder for fixtures without parallel edges.
 // ---------------------------------------------------------------------------
 
 const COORD_PRECISION = 6;
