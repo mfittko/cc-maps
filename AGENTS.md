@@ -40,6 +40,9 @@ This file gives future coding agents the minimum project context needed to work 
 - Buildout and phase status: `docs/PLAN.md` and `docs/plan/`
 - Post-MVP shipped enhancements: `docs/plan/phase-5.md`
 - Planned cleanup and test work: `docs/plan/phase-6.md`
+- VS Code Copilot workflow: `docs/ai/vscode-copilot-workflow.md`
+- Repo-wide workspace instructions: `AGENTS.md`
+- Copilot scoped customizations: `.github/instructions/`, `.github/prompts/`, `.github/agents/`, `.github/skills/`, and `.github/hooks/`
 
 When implementation changes materially, keep these docs aligned. Do not let the repo drift back into stale scaffold-era assumptions.
 
@@ -95,6 +98,8 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - Current proven validation command: `npm run build`
 - The repository uses Vitest for extracted pure logic and API contract coverage.
 - CI must run `npm run test:coverage` and fail if coverage drops below 90% for lines, statements, branches, or functions across the covered modules.
+- Use `npm ci` for dependency installation when the lockfile is present.
+- For focused work, prefer targeted tests first, then finish with `npm run test:coverage` and `npm run build` when the change affects shared logic or shipped behavior.
 - Prefer testing pure logic such as geometry helpers, trail analysis, persistence helpers, and request-shaping utilities over brittle UI-heavy tests as a first step.
 - If coverage reveals dead or unreachable code, remove that code instead of writing tests whose only purpose is to cover it.
 
@@ -108,6 +113,20 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - If you are refactoring, make the safety net stronger as you go: extract pure logic, then test it.
 - If the task is unclear about whether it is feature work or cleanup work, default to preserving current behavior and ask only if the distinction materially affects the outcome.
 
+## Multi-agent workflow
+
+This repo uses VS Code Copilot-native chat customizations.
+
+- `AGENTS.md` is the only repo-wide workspace instruction file.
+- `.github/instructions/` contains on-demand and file-specific instructions.
+- `.github/prompts/` contains reusable slash-invocable prompt files.
+- `.github/agents/` contains custom role-based agents.
+- `.github/skills/` contains specialized workflows that Copilot can load on demand.
+- `.github/hooks/` contains deterministic workspace hook configuration.
+- `.vscode/mcp.json` contains workspace-shared MCP server configuration for VS Code.
+
+Do not reintroduce parallel Claude-specific instruction systems in this repo. Keep the Copilot customizations aligned with the product docs and phase plans.
+
 ## Environment and local setup
 
 Expected local environment variables:
@@ -117,10 +136,12 @@ Expected local environment variables:
 
 Typical local workflow:
 
-1. `npm install`
+1. `npm ci` when the lockfile is present, otherwise `npm install`
 2. Copy `.env.local.example` to `.env.local`
 3. `npm run dev` for interactive checks
 4. `npm run build` for production-safe validation
+
+When product behavior changes, update `README.md`, `docs/spec.md`, and `docs/plan/phase-7.md` when applicable.
 
 ## If you need a starting point
 

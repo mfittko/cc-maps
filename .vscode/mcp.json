@@ -1,0 +1,17 @@
+{
+  "servers": {
+    "XcodeBuildMCP": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "xcodebuildmcp@latest"
+      ],
+      "env": {
+        "INCREMENTAL_BUILDS_ENABLED": "true",
+        "XCODEBUILDMCP_DYNAMIC_TOOLS": "true",
+        "XCODEBUILDMCP_ENABLED_WORKFLOWS": "simulator,device,project-discovery,swift-package"
+      }
+    }
+  }
+}
