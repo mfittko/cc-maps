@@ -355,6 +355,11 @@ function applyThreeDimensionalMode(map, isEnabled) {
   map.easeTo({ pitch: 0, bearing: 0, duration: 700 });
 }
 
+function preventOverlayDoubleClickZoom(event) {
+  event.preventDefault?.();
+  event.originalEvent?.preventDefault?.();
+}
+
 export default function Home() {
   const router = useRouter();
   const mapContainer = useRef(null);
@@ -826,10 +831,6 @@ export default function Home() {
       center: DEFAULT_CENTER,
       zoom: 7,
     });
-
-    if (typeof map.doubleClickZoom?.disable === 'function') {
-      map.doubleClickZoom.disable();
-    }
 
     mapRef.current = map;
 
@@ -1570,6 +1571,8 @@ export default function Home() {
           'line-dasharray': [1.4, 1],
         },
       });
+
+      map.on('dblclick', ROUTE_PLAN_CONNECTORS_LAYER_ID, preventOverlayDoubleClickZoom);
     }
 
     if (map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID)) {
@@ -1594,6 +1597,8 @@ export default function Home() {
           'line-opacity': 0.95,
         },
       });
+
+      map.on('dblclick', ROUTE_PLAN_ANCHORS_LAYER_ID, preventOverlayDoubleClickZoom);
     }
 
     if (map.getSource(ROUTE_PLAN_DIRECTIONS_SOURCE_ID)) {
@@ -1623,6 +1628,8 @@ export default function Home() {
           'text-opacity': 0.9,
         },
       });
+
+      map.on('dblclick', ROUTE_PLAN_DIRECTIONS_LAYER_ID, preventOverlayDoubleClickZoom);
     }
 
     if (map.getLayer(ROUTE_PLAN_CONNECTORS_LAYER_ID)) {
@@ -2026,6 +2033,10 @@ export default function Home() {
           'line-opacity': 1,
         },
       });
+
+      map.on('dblclick', SELECTED_TRAIL_GLOW_LAYER_ID, preventOverlayDoubleClickZoom);
+      map.on('dblclick', SELECTED_TRAIL_BORDER_LAYER_ID, preventOverlayDoubleClickZoom);
+      map.on('dblclick', SELECTED_TRAIL_COLOR_LAYER_ID, preventOverlayDoubleClickZoom);
     }
 
     if (map.getLayer(SELECTED_TRAIL_GLOW_LAYER_ID)) {
