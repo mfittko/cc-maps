@@ -592,6 +592,45 @@ export default function Home() {
     window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
   }
 
+  async function handleShareRoute() {
+    if (!selectedDestination || typeof window === 'undefined') {
+      return;
+    }
+
+    const shareUrl = window.location.href;
+    const shareData = {
+      title: `${selectedDestination.name} route`,
+      text: `Planned route for ${selectedDestination.name}`,
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+        return;
+      }
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        return;
+      }
+
+      console.warn('Share action failed', error);
+      return;
+    }
+
+    const shareInput = window.document.createElement('input');
+    shareInput.value = shareUrl;
+    window.document.body.appendChild(shareInput);
+    shareInput.select();
+    window.document.execCommand('copy');
+    shareInput.remove();
+  }
+
   function handlePlanningAnchorSelection(feature, clickedCoordinates) {
     const destinationId = selectedDestinationIdRef.current;
     const edgeId = findNearestRouteGraphEdgeId(
@@ -2108,6 +2147,7 @@ export default function Home() {
         activeTrailLegendItems={activeTrailLegendItems}
         isPlanningMode={isPlanning}
         onEnterPlanning={handleEnterPlanning}
+        onShareRoute={handleShareRoute}
       />
 
       {!isSettingsPanelOpen && !isInfoPanelOpen ? (
@@ -2171,6 +2211,7 @@ export default function Home() {
               handleEnterPlanning();
               setIsSettingsPanelOpen(false);
             }}
+            onShareRoute={handleShareRoute}
           />
         </>
       ) : null}
@@ -2187,6 +2228,7 @@ export default function Home() {
         onExitPlanning={() => setIsPlanning(false)}
         onClearPlan={handleClearPlan}
         onExportGpx={handleExportGpx}
+        onShareRoute={handleShareRoute}
         onReverseRoute={handleReverseRoute}
         onRemoveAnchor={handleRemoveAnchor}
       />
