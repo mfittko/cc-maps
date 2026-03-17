@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { createRoutePlanGeoJson } from '../lib/planning-mode.js';
+import { buildRouteGraph } from '../lib/route-graph.js';
+import { createRoutePlan } from '../lib/route-plan.js';
 import {
   findClosestDestinationByTrailProximity,
   findClosestDestination,
@@ -318,6 +321,32 @@ describe('map-domain', () => {
     ).toBe('1');
   });
 
+  it('ignores trail proximity features whose destination is not in the loaded destination list', () => {
+    expect(
+      findClosestDestinationByTrailProximity(
+        [{ id: '1', name: 'Oslo', coordinates: oslo }],
+        {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { id: 909, destinationid: '999' },
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [10.7518, 59.9137],
+                  [10.7528, 59.9142],
+                ],
+              },
+            },
+          ],
+        },
+        oslo,
+        0.5
+      )
+    ).toBeNull();
+  });
+
   it('selects the clicked distance interval on a trail', () => {
     const selectedSection = getClickedTrailSection(
       clickedSectionGeoJson.features[0],
@@ -445,6 +474,96 @@ describe('map-domain', () => {
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations, 1.25, 0.05);
     expect(labelsGeoJson.features.length).toBeGreaterThan(0);
     expect(labelsGeoJson.features[0].properties.label).toMatch(/km$/);
+  });
+
+  it('filters segment labels to the active traversal when provided', () => {
+    const graph = buildRouteGraph(clickedSectionGeoJson);
+    const edgeIds = [...graph.edges.keys()];
+    const traversalGeoJson = createRoutePlanGeoJson(createRoutePlan('1', [edgeIds[0]]), graph).traversal;
+
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      traversalGeoJson
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(1);
+    expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
+    expect(labelsGeoJson.features[0].properties.trailFeatureId).toBe(1);
+  });
+
+  it('returns no labels when traversal filtering has no active features', () => {
+    expect(
+      getAllTrailSegmentLabelsGeoJson(
+        clickedSectionGeoJson,
+        destinations,
+        1.25,
+        0.05,
+        { type: 'FeatureCollection', features: [] }
+      )
+    ).toEqual({
+      type: 'FeatureCollection',
+      features: [],
+    });
+  });
+
+  it('ignores degenerate traversal geometry when filtering segment labels', () => {
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { trailFeatureId: 1 },
+            geometry: {
+              type: 'LineString',
+              coordinates: [[10.0, 59.0]],
+            },
+          },
+        ],
+      }
+    );
+
+    expect(labelsGeoJson).toEqual({
+      type: 'FeatureCollection',
+      features: [],
+    });
+  });
+
+  it('ignores traversal features from a different trail when filtering segment labels', () => {
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { trailFeatureId: 999 },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [10.0, 59.0],
+                [10.01, 59.0],
+              ],
+            },
+          },
+        ],
+      }
+    );
+
+    expect(labelsGeoJson).toEqual({
+      type: 'FeatureCollection',
+      features: [],
+    });
   });
 
   it('handles empty and no-crossing trail cases', () => {

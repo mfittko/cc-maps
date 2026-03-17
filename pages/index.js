@@ -2207,11 +2207,19 @@ export default function Home() {
       return undefined;
     }
 
+    const activeTraversalGeoJson =
+      !isPlanning &&
+      routePlan?.destinationId === selectedDestinationId &&
+      routePlan.anchorEdgeIds.length
+        ? createRoutePlanGeoJson(routePlan, routeGraph).traversal
+        : null;
+
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
       trailsGeoJson,
       destinations,
       DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
-      MIN_SEGMENT_DISTANCE_KM
+      MIN_SEGMENT_DISTANCE_KM,
+      activeTraversalGeoJson
     );
 
     if (map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID)) {
@@ -2269,12 +2277,16 @@ export default function Home() {
       map.moveLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);
     }
 
-    return () => {
-      if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
-        map.setLayoutProperty(TRAIL_SEGMENT_LABELS_LAYER_ID, 'visibility', 'visible');
-      }
-    };
-  }, [mapReady, trailsGeoJson, destinations]);
+    return undefined;
+  }, [
+    destinations,
+    isPlanning,
+    mapReady,
+    routeGraph,
+    routePlan,
+    selectedDestinationId,
+    trailsGeoJson,
+  ]);
 
   return (
     <div className="page-shell">
