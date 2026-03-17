@@ -90,6 +90,8 @@ const SUGGESTED_DESTINATION_RADIUS_KM = 20;
 const MAX_NEARBY_DESTINATION_PREVIEWS = 3;
 const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
 const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18];
+const ACTIVE_TRAIL_OPACITY = 0.85;
+const PREVIEW_TRAIL_OPACITY = 0.45;
 const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const ROUTE_DIRECTION_CHANGE_THRESHOLD_KM = CURRENT_LOCATION_RECHECK_DISTANCE_KM;
@@ -131,6 +133,19 @@ function getTrailColorExpression(colorMode) {
   }
 
   return buildMatchExpression('trailtypesymbol', TRAIL_TYPE_STYLES);
+}
+
+function getTrailOpacityExpression(activeTrailFeatureIds) {
+  if (!activeTrailFeatureIds.length) {
+    return ACTIVE_TRAIL_OPACITY;
+  }
+
+  return [
+    'case',
+    ['in', ['to-string', ['get', 'id']], ['literal', activeTrailFeatureIds]],
+    ACTIVE_TRAIL_OPACITY,
+    PREVIEW_TRAIL_OPACITY,
+  ];
 }
 
 function extendBounds(bounds, coordinates) {
@@ -1623,7 +1638,7 @@ export default function Home() {
             paint: {
               'line-color': getTrailColorExpression(trailColorModeRef.current),
               'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 11, 5],
-              'line-opacity': 0.85,
+              'line-opacity': ACTIVE_TRAIL_OPACITY,
             },
           });
 
@@ -1791,6 +1806,32 @@ export default function Home() {
   useEffect(() => {
     const map = mapRef.current;
 
+    if (!mapReady || !map || !map.getLayer(TRAILS_LAYER_ID)) {
+      return;
+    }
+
+    const activeTrailFeatureIds =
+      !isPlanning &&
+      routePlan?.destinationId === selectedDestinationId &&
+      routePlan.anchorEdgeIds.length
+        ? [...new Set(
+            routeTraversalGeoJson.features
+              .map((feature) => feature?.properties?.trailFeatureId)
+              .filter((trailFeatureId) => trailFeatureId != null)
+              .map(String)
+          )]
+        : [];
+
+    map.setPaintProperty(
+      TRAILS_LAYER_ID,
+      'line-opacity',
+      getTrailOpacityExpression(activeTrailFeatureIds)
+    );
+  }, [isPlanning, mapReady, routePlan, routeTraversalGeoJson, selectedDestinationId]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
     if (!mapReady || !map) {
       return undefined;
     }
@@ -1819,7 +1860,7 @@ export default function Home() {
         paint: {
           'line-color': getTrailColorExpression(trailColorMode),
           'line-width': ['interpolate', ['linear'], ['zoom'], 7, 1.5, 11, 4],
-          'line-opacity': 0.45,
+          'line-opacity': PREVIEW_TRAIL_OPACITY,
           'line-dasharray': [1.2, 1],
         },
       };
