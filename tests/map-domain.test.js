@@ -13,6 +13,7 @@ import {
   getDestinationsWithinRadius,
   getDistanceInKilometers,
   getElevationChangeMetrics,
+  getRouteProgressMetrics,
   getSampledCoordinatesAlongFeature,
   getSuggestedDestinationGeoJson,
   getTrailSelectionLengthInKilometers,
@@ -492,6 +493,45 @@ describe('map-domain', () => {
     expect(labelsGeoJson.features).toHaveLength(1);
     expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
     expect(labelsGeoJson.features[0].properties.trailFeatureId).toBe(1);
+  });
+
+  it('computes route progress metrics for the nearest traversal feature', () => {
+    const graph = buildRouteGraph(clickedSectionGeoJson);
+    const edgeIds = [...graph.edges.keys()];
+    const traversalGeoJson = createRoutePlanGeoJson(
+      createRoutePlan('1', [edgeIds[0], edgeIds[1]]),
+      graph
+    ).traversal;
+
+    const progressMetrics = getRouteProgressMetrics(traversalGeoJson, [10.013, 59.0]);
+
+    expect(progressMetrics?.matchedFeatureIndex).toBe(1);
+    expect(progressMetrics?.distanceTraveledKm).toBeGreaterThan(progressMetrics?.segmentStartKm || 0);
+    expect(progressMetrics?.distanceRemainingKm).toBeGreaterThan(0);
+    expect(progressMetrics?.totalDistanceKm).toBeGreaterThan(progressMetrics?.distanceTraveledKm || 0);
+  });
+
+  it('returns null route progress metrics for invalid traversal input', () => {
+    expect(getRouteProgressMetrics(null, [10.0, 59.0])).toBeNull();
+    expect(getRouteProgressMetrics({ type: 'FeatureCollection', features: [] }, null)).toBeNull();
+    expect(
+      getRouteProgressMetrics(
+        {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { id: 'bad-route-segment' },
+              geometry: {
+                type: 'Point',
+                coordinates: [10.0, 59.0],
+              },
+            },
+          ],
+        },
+        [10.0, 59.0]
+      )
+    ).toBeNull();
   });
 
   it('returns no labels when traversal filtering has no active features', () => {

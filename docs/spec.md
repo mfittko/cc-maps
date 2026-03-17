@@ -4,7 +4,7 @@
 
 Cross-Country maps, shipped as `cc-maps`, is a Next.js and Mapbox GL JS web app for browsing cross-country ski destinations and their trail networks from the public Sporet ArcGIS service.
 
-The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, always-on terrain rendering, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, and an explicit planning mode for shareable route composition.
+The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, always-on terrain rendering, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, route-aware detail summaries for planned segments outside planning mode, and an explicit planning mode for shareable route composition.
 
 The app exposes minimal PWA metadata through a manifest and icons, but it does not currently ship with a service worker or offline-first caching strategy.
 
@@ -72,6 +72,8 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 4. Planned routes are shown as ordered anchor sections selected by the user and may span the selected destination plus nearby preview sectors.
 5. The planning panel supports exit, clear, reverse, per-section removal, GPX export, and route sharing actions.
 6. Planned routes persist in local storage and are encoded into the URL so shared links reopen the same destination, route, and supporting preview sectors required to rehydrate it.
+7. Outside planning mode, selecting a segment that belongs to the active planned route keeps the normal trail-details sheet but augments it with whole-route distance and elevation context.
+8. While live localization tracking is active and the user is on the planned route, the app auto-locks the first route section reached, shows route and selected-section traveled and remaining distances, and warns when movement appears to run opposite the planned route direction.
 
 ### Trail details panel
 
@@ -81,6 +83,8 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 4. Clicking a trail selects the exact interval between crossings or endpoints that contains the click location, then shows detail metadata including trail type, classic and skating flags, grooming freshness, optional warning text, and computed section length.
 5. Crossing analysis detects where the selected trail intersects other loaded trail geometry and derives segment distances between endpoints and crossings.
 6. Segment-distance labels are rendered directly on the map at higher zoom levels.
+7. When the selected interval is also part of the active planned route, the trail details panel additionally shows the selected route section index, overall route distance, and total route elevation metrics even though planning mode remains off.
+8. If live localization tracking is active and the current position matches the active route, the trail details panel also shows route traveled and remaining distance, selected-section traveled and remaining distance, and a warning when the observed movement direction appears reversed relative to the route order.
 
 ### Persistence and shareability
 

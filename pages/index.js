@@ -19,6 +19,7 @@ import {
   getDestinationSummary,
   getDestinationsWithinRadius,
   getDistanceInKilometers,
+  getRouteProgressMetrics,
   getSampledCoordinatesAlongFeature,
   getSuggestedDestinationGeoJson,
   getTrailSelectionLengthInKilometers,
@@ -90,6 +91,7 @@ const TRAILS_CACHE_TTL_MS = 15 * 60 * 1000;
 const TRAIL_HIT_LINE_WIDTH = ['interpolate', ['linear'], ['zoom'], 7, 12, 11, 18];
 const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
+const ROUTE_DIRECTION_CHANGE_THRESHOLD_KM = CURRENT_LOCATION_RECHECK_DISTANCE_KM;
 const GEOLOCATE_MAX_ZOOM = 13.5;
 const TERRAIN_SAMPLE_SPACING_METERS = 25;
 const ELEVATION_RETRY_DELAY_MS = 180;
@@ -403,6 +405,10 @@ function getEdgeMidpointCoordinates(edge) {
   return coordinates[Math.floor(coordinates.length / 2)] || coordinates[0] || null;
 }
 
+function clampDistance(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function Home() {
   const router = useRouter();
   const mapContainer = useRef(null);
@@ -418,6 +424,8 @@ export default function Home() {
   const hydratedRoutePlanKeyRef = useRef('');
   const lastAutoLocationRef = useRef(null);
   const isPlanningRef = useRef(false);
+  const wasCurrentLocationOnRouteRef = useRef(false);
+  const lastRouteProgressDistanceKmRef = useRef(null);
   const routeGraphRef = useRef(null);
   const selectedDestinationIdRef = useRef('');
   const selectedTrailFeatureRef = useRef(null);
@@ -452,6 +460,8 @@ export default function Home() {
   const [routeGraph, setRouteGraph] = useState(null);
   const [routeElevationMetrics, setRouteElevationMetrics] = useState(null);
   const [routeAnchorElevationMetrics, setRouteAnchorElevationMetrics] = useState([]);
+  const [currentLocationCoordinates, setCurrentLocationCoordinates] = useState(null);
+  const [isRouteTravelingReverse, setIsRouteTravelingReverse] = useState(false);
   const [isMacOS, setIsMacOS] = useState(false);
   const [isMobileInteraction, setIsMobileInteraction] = useState(false);
 
@@ -482,6 +492,108 @@ export default function Home() {
 
     return mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]);
   }, [isPlanning, trailsGeoJson, suggestedTrailsGeoJson]);
+  const routeTraversalGeoJson = useMemo(
+    () => createRoutePlanGeoJson(routePlan, routeGraph).traversal,
+    [routeGraph, routePlan]
+  );
+  const routeTraversalSegments = useMemo(() => {
+    let cumulativeDistanceKm = 0;
+
+    return routeTraversalGeoJson.features.map((feature, index) => {
+      const distanceKm = getTrailSelectionLengthInKilometers(feature);
+      const segment = {
+        feature,
+        index: feature?.properties?.index ?? index,
+        distanceKm,
+        startKm: cumulativeDistanceKm,
+        endKm: cumulativeDistanceKm + distanceKm,
+      };
+
+      cumulativeDistanceKm = segment.endKm;
+      return segment;
+    });
+  }, [routeTraversalGeoJson]);
+  const routeSummary = useMemo(
+    () => ({
+      totalSections: routeTraversalSegments.length,
+      totalDistanceKm: routeTraversalSegments[routeTraversalSegments.length - 1]?.endKm || 0,
+    }),
+    [routeTraversalSegments]
+  );
+  const currentRouteProgress = useMemo(
+    () => getRouteProgressMetrics(routeTraversalGeoJson, currentLocationCoordinates),
+    [currentLocationCoordinates, routeTraversalGeoJson]
+  );
+  const isCurrentLocationOnRoute = Boolean(
+    currentLocationCoordinates &&
+      currentRouteProgress?.distanceToRouteKm <= CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM
+  );
+  const selectedRouteTraversalFeature = useMemo(
+    () =>
+      findNearestRouteTraversalFeature(
+        routeTraversalGeoJson,
+        selectedTrailFeature?.properties?.id,
+        selectedTrailClickCoordinates
+      ),
+    [routeTraversalGeoJson, selectedTrailClickCoordinates, selectedTrailFeature]
+  );
+  const selectedRouteSegment = useMemo(() => {
+    if (!selectedRouteTraversalFeature) {
+      return null;
+    }
+
+    return (
+      routeTraversalSegments.find(
+        (segment) => segment.index === selectedRouteTraversalFeature.properties?.index
+      ) || null
+    );
+  }, [routeTraversalSegments, selectedRouteTraversalFeature]);
+  const selectedRouteInsights = useMemo(() => {
+    if (isPlanning || !selectedRouteSegment || !routeSummary.totalSections) {
+      return null;
+    }
+
+    const insights = {
+      selectedSectionNumber: selectedRouteSegment.index + 1,
+      totalSections: routeSummary.totalSections,
+      totalDistanceKm: routeSummary.totalDistanceKm,
+      selectedSectionDistanceKm: selectedRouteSegment.distanceKm,
+      routeElevationMetrics,
+      isLocationOnRoute: isCurrentLocationOnRoute,
+      isReverse: isRouteTravelingReverse,
+      currentSectionNumber: isCurrentLocationOnRoute
+        ? (currentRouteProgress?.matchedFeature?.properties?.index ?? currentRouteProgress?.matchedFeatureIndex ?? -1) + 1
+        : null,
+      routeTraveledKm: isCurrentLocationOnRoute ? currentRouteProgress?.distanceTraveledKm ?? null : null,
+      routeRemainingKm: isCurrentLocationOnRoute ? currentRouteProgress?.distanceRemainingKm ?? null : null,
+      sectionTraveledKm: null,
+      sectionRemainingKm: null,
+    };
+
+    if (!isCurrentLocationOnRoute || !currentRouteProgress) {
+      return insights;
+    }
+
+    const sectionTraveledKm = clampDistance(
+      currentRouteProgress.distanceTraveledKm - selectedRouteSegment.startKm,
+      0,
+      selectedRouteSegment.distanceKm
+    );
+
+    return {
+      ...insights,
+      sectionTraveledKm,
+      sectionRemainingKm: Math.max(0, selectedRouteSegment.distanceKm - sectionTraveledKm),
+    };
+  }, [
+    currentRouteProgress,
+    isCurrentLocationOnRoute,
+    isPlanning,
+    isRouteTravelingReverse,
+    routeElevationMetrics,
+    routeSummary,
+    selectedRouteSegment,
+  ]);
 
   useEffect(() => {
     trailColorModeRef.current = trailColorMode;
@@ -558,11 +670,9 @@ export default function Home() {
     setSelectedTrailElevationMetrics(null);
   }
 
-  function handleSelectPlannedAnchor(edgeId) {
-    const edge = routeGraphRef.current?.edges?.get(edgeId);
-
+  function selectRouteEdge(edge, clickedCoordinates) {
     if (!edge || edge.trailFeatureId == null || !availableTrailsGeoJson.features.length) {
-      return;
+      return false;
     }
 
     const sourceFeature = availableTrailsGeoJson.features.find((feature) => {
@@ -576,15 +686,29 @@ export default function Home() {
 
       return String(feature?.properties?.destinationid || '') === String(edge.destinationId);
     });
+    const nextClickCoordinates = Array.isArray(clickedCoordinates)
+      ? clickedCoordinates
+      : getEdgeMidpointCoordinates(edge);
 
-    if (!sourceFeature) {
-      return;
+    if (!sourceFeature || !Array.isArray(nextClickCoordinates)) {
+      return false;
     }
 
     setIsSettingsPanelOpen(false);
     setIsInfoPanelOpen(false);
     setSelectedTrailFeature(sourceFeature);
-    setSelectedTrailClickCoordinates(getEdgeMidpointCoordinates(edge));
+    setSelectedTrailClickCoordinates(nextClickCoordinates);
+    return true;
+  }
+
+  function handleSelectPlannedAnchor(edgeId) {
+    const edge = routeGraphRef.current?.edges?.get(edgeId);
+
+    if (!edge) {
+      return;
+    }
+
+    selectRouteEdge(edge, getEdgeMidpointCoordinates(edge));
   }
 
   function applyTrailGeoJsonToPrimaryLayer(geojson) {
@@ -1167,14 +1291,15 @@ export default function Home() {
     let isCancelled = false;
     const geolocateControl = geolocateControlRef.current;
     const handleGeolocate = (event) => {
+      const nextCoordinates = [event.coords.longitude, event.coords.latitude];
+
+      setCurrentLocationCoordinates(nextCoordinates);
+
       if (isCancelled || hasManualDestinationSelectionRef.current) {
         return;
       }
 
-      void maybeAutoSelectDestinationFromLocation([
-        event.coords.longitude,
-        event.coords.latitude,
-      ]);
+      void maybeAutoSelectDestinationFromLocation(nextCoordinates);
     };
 
     if (geolocateControl) {
@@ -1222,6 +1347,65 @@ export default function Home() {
       }
     };
   }, [mapReady, destinations, selectedDestinationId]);
+
+  useEffect(() => {
+    wasCurrentLocationOnRouteRef.current = false;
+    lastRouteProgressDistanceKmRef.current = null;
+    setIsRouteTravelingReverse(false);
+  }, [isPlanning, routePlan, selectedDestinationId]);
+
+  useEffect(() => {
+    if (isPlanning || !routePlan?.anchorEdgeIds?.length || !currentRouteProgress || !isCurrentLocationOnRoute) {
+      wasCurrentLocationOnRouteRef.current = false;
+      lastRouteProgressDistanceKmRef.current = null;
+      setIsRouteTravelingReverse(false);
+      return;
+    }
+
+    const currentDistanceKm = currentRouteProgress.distanceTraveledKm;
+
+    if (!wasCurrentLocationOnRouteRef.current) {
+      wasCurrentLocationOnRouteRef.current = true;
+      lastRouteProgressDistanceKmRef.current = currentDistanceKm;
+      setIsRouteTravelingReverse(false);
+
+      if (!selectedRouteTraversalFeature) {
+        const matchedEdge = routeGraph?.edges?.get(
+          currentRouteProgress.matchedFeature?.properties?.edgeId || ''
+        );
+
+        if (matchedEdge) {
+          selectRouteEdge(matchedEdge, currentLocationCoordinates);
+        }
+      }
+
+      return;
+    }
+
+    const previousDistanceKm = lastRouteProgressDistanceKmRef.current;
+
+    if (typeof previousDistanceKm !== 'number') {
+      lastRouteProgressDistanceKmRef.current = currentDistanceKm;
+      return;
+    }
+
+    const deltaKm = currentDistanceKm - previousDistanceKm;
+
+    if (Math.abs(deltaKm) < ROUTE_DIRECTION_CHANGE_THRESHOLD_KM) {
+      return;
+    }
+
+    lastRouteProgressDistanceKmRef.current = currentDistanceKm;
+    setIsRouteTravelingReverse(deltaKm < 0);
+  }, [
+    currentLocationCoordinates,
+    currentRouteProgress,
+    isCurrentLocationOnRoute,
+    isPlanning,
+    routeGraph,
+    routePlan,
+    selectedRouteTraversalFeature,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2015,13 +2199,8 @@ export default function Home() {
 
   useEffect(() => {
     const map = mapRef.current;
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
-    const routeTraversalFeature = findNearestRouteTraversalFeature(
-      routePlanGeoJson.traversal,
-      selectedTrailFeature?.properties?.id,
-      selectedTrailClickCoordinates
-    );
-    const selectedFeature = routeTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature;
+    const selectedFeature =
+      selectedRouteTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature;
 
     if (!mapReady || !map || !selectedFeature) {
       setSelectedTrailElevationMetrics(null);
@@ -2092,8 +2271,7 @@ export default function Home() {
     };
   }, [
     mapReady,
-    routeGraph,
-    routePlan,
+    selectedRouteTraversalFeature,
     selectedTrailClickCoordinates,
     selectedTrailFeature,
     selectedTrailSectionFeature,
@@ -2211,7 +2389,7 @@ export default function Home() {
       !isPlanning &&
       routePlan?.destinationId === selectedDestinationId &&
       routePlan.anchorEdgeIds.length
-        ? createRoutePlanGeoJson(routePlan, routeGraph).traversal
+        ? routeTraversalGeoJson
         : null;
 
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
@@ -2398,6 +2576,7 @@ export default function Home() {
           selectedTrail={selectedTrail}
           selectedTrailLengthKm={selectedTrailLengthKm}
           selectedTrailElevationMetrics={selectedTrailElevationMetrics}
+          selectedRouteInsights={selectedRouteInsights}
           formatDistance={formatDistance}
           onClose={clearSelectedTrail}
         />

@@ -355,11 +355,50 @@ h2 {
   gap: 0.75rem;
 }
 
+.trail-details-heading {
+  display: grid;
+}
+
+.trail-details-heading-compact .eyebrow {
+  margin-bottom: 0;
+}
+
 .trail-details-body {
   display: grid;
   gap: 0.4rem;
   margin-top: 0.9rem;
   color: #284638;
+}
+
+.trail-details-body-compact {
+  margin-top: 0.45rem;
+}
+
+.route-insights {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  background: rgba(29, 50, 42, 0.05);
+}
+
+.route-insights-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.route-progress-grid {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.route-warning {
+  color: #8d5a20;
+  font-weight: 600;
 }
 
 .trail-stats-row {
@@ -385,6 +424,32 @@ h2 {
   font-weight: 700;
   background: rgba(29, 50, 42, 0.08);
   color: #284638;
+}
+
+.route-total-chip {
+  background: rgba(29, 50, 42, 0.1);
+}
+
+.route-summary-row {
+  justify-content: flex-start;
+}
+
+.trail-summary-row {
+  justify-content: flex-start;
+}
+
+.trail-summary-metrics {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.route-summary-metrics {
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.trail-length-chip {
+  background: rgba(29, 50, 42, 0.1);
 }
 
 .map-overlay-icon-button,

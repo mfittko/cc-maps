@@ -2,7 +2,7 @@
 
 This repository contains Cross-Country maps, shipped under the `cc-maps` package and deployment alias. It is a Next.js and Mapbox GL JS application that loads active ski destinations from the public Sporet service, then fetches trail data on demand for the selected area.
 
-The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, always-on terrain rendering, URL and local storage map-state persistence for destination, color mode, map view, and planned routes, client-side trail caching, nearby destination suggestions, live current-location destination matching when the user is skiing on a nearby track, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, and a planning mode with shareable manual route composition and GPX export.
+The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, always-on terrain rendering, URL and local storage map-state persistence for destination, color mode, map view, and planned routes, client-side trail caching, nearby destination suggestions, live current-location destination matching when the user is skiing on a nearby track, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, route-aware trail details for planned segments outside planning mode, and a planning mode with shareable manual route composition and GPX export.
 
 ## Current implementation state
 
@@ -75,6 +75,7 @@ npm run test:coverage
 9. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
 10. Users can enter an explicit planning mode, build an ordered manual route from trail sections, extend that route into nearby destination preview sectors, reverse or prune it, and keep the same route across reloads.
 11. The active route is mirrored into URL state for sharing and can be exported as GPX.
+12. Outside planning mode, selecting a segment that belongs to the active planned route also shows overall route context, and active live localization can auto-lock the first route section reached while surfacing traveled and remaining distance plus a reverse-direction warning.
 
 ## Deferred work
 

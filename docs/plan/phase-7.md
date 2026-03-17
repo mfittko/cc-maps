@@ -8,7 +8,7 @@ Add a destination-first planning mode that lets users assemble a ski route from 
 
 Implemented for the initial planning-mode release on PR #12.
 
-The shipped scope covers destination-first planning mode, ordered route anchors, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Nearby destination preview sectors can now participate in a persisted route without changing the primary selected destination. Automatic connector routing was removed from the MVP scope after validation because manual route composition is sufficient for the initial release. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
+The shipped scope covers destination-first planning mode, ordered route anchors, persistence, shareable URLs, GPX export, desktop/mobile interaction flows, and follow-up route-summary polish in the non-planning trail details panel. Nearby destination preview sectors can now participate in a persisted route without changing the primary selected destination. Automatic connector routing was removed from the MVP scope after validation because manual route composition is sufficient for the initial release. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
 
 ## Product Intent
 
