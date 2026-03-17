@@ -103,7 +103,9 @@ test.describe('planning mode interactions', () => {
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
 
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
-    await expect(page.getByText('Ctrl+click a trail section to add it to your route.')).toBeVisible();
+    await expect(
+      page.getByText(/^(Ctrl|Cmd)\+click a trail section to add it to your route\.$/)
+    ).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath('planning-mode-desktop.png'),
       fullPage: true,

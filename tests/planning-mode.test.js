@@ -389,5 +389,46 @@ describe('planning-mode helpers', () => {
 
       expect(traversalFeature?.geometry?.type).toBe('MultiLineString');
     });
+
+    it('uses the nearest multiline segment instead of only the first segment', () => {
+      const traversalFeature = findNearestRouteTraversalFeature(
+        {
+          features: [
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101, name: 'first' },
+              geometry: {
+                type: 'MultiLineString',
+                coordinates: [
+                  [
+                    [10.0, 59.0],
+                    [10.01, 59.0],
+                  ],
+                  [
+                    [10.5, 59.5],
+                    [10.51, 59.5],
+                  ],
+                ],
+              },
+            },
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101, name: 'second' },
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [10.2, 59.2],
+                  [10.21, 59.2],
+                ],
+              },
+            },
+          ],
+        },
+        101,
+        [10.509, 59.5]
+      );
+
+      expect(traversalFeature?.properties?.name).toBe('first');
+    });
   });
 });

@@ -2168,7 +2168,7 @@ export default function Home() {
               type="button"
               className="map-overlay-icon-button map-plan-button"
               onClick={handleEnterPlanning}
-              aria-label={isPlanning ? 'Open route planning' : 'Plan route'}
+              aria-label="Plan route"
             >
               <FaRoute aria-hidden="true" />
               <span className="sr-only">Plan route</span>

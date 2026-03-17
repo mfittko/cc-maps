@@ -797,6 +797,12 @@ h2 {
   justify-content: center;
 }
 
+.planning-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .planning-actions-slot-end {
   justify-content: flex-end;
 }
@@ -808,6 +814,13 @@ h2 {
 
 .planning-export-btn:hover {
   background: #dbe9f4;
+}
+
+.planning-icon-only-btn {
+  justify-content: center;
+  min-width: 2.35rem;
+  padding-right: 0.65rem;
+  padding-left: 0.65rem;
 }
 
 .planning-clear-btn {

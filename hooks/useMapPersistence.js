@@ -89,6 +89,7 @@ export function useMapPersistence({
     }
 
     const nextUrl = new URL(window.location.href);
+  const currentQuery = Object.fromEntries(nextUrl.searchParams.entries());
     const nextQuery = Object.fromEntries(nextUrl.searchParams.entries());
 
     if (selectedDestinationId) {
@@ -113,11 +114,11 @@ export function useMapPersistence({
       delete nextQuery.zoom;
     }
 
-    const currentDestination = getSingleQueryValue(nextQuery.destination) || '';
-    const currentColors = getSingleQueryValue(nextQuery.colors) || '';
-    const currentLongitude = getSingleQueryValue(nextQuery.lng) || '';
-    const currentLatitude = getSingleQueryValue(nextQuery.lat) || '';
-    const currentZoom = getSingleQueryValue(nextQuery.zoom) || '';
+    const currentDestination = getSingleQueryValue(currentQuery.destination) || '';
+    const currentColors = getSingleQueryValue(currentQuery.colors) || '';
+    const currentLongitude = getSingleQueryValue(currentQuery.lng) || '';
+    const currentLatitude = getSingleQueryValue(currentQuery.lat) || '';
+    const currentZoom = getSingleQueryValue(currentQuery.zoom) || '';
     const nextDestination = getSingleQueryValue(nextQuery.destination) || '';
     const nextColors = getSingleQueryValue(nextQuery.colors) || '';
     const nextLongitude = getSingleQueryValue(nextQuery.lng) || '';
