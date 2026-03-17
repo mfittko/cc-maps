@@ -106,6 +106,13 @@ p {
   cursor: pointer;
 }
 
+.quick-action-button {
+  justify-content: center;
+  width: 2.85rem;
+  height: 2.85rem;
+  padding: 0;
+}
+
 .icon-toggle {
   justify-content: space-between;
   flex: 1;
@@ -615,6 +622,11 @@ h2 {
 
   .icon-chip {
     flex: 0 0 auto;
+  }
+
+  .quick-action-button {
+    width: 2.5rem;
+    height: 2.5rem;
   }
 
   .select-input {

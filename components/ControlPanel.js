@@ -53,31 +53,42 @@ export default function ControlPanel({
         <div className="quick-actions">
           <button
             type="button"
-            className="icon-chip"
+            className="icon-chip quick-action-button"
             onClick={onOpenInfo}
             aria-label="Open map guide"
+            title="Guide"
           >
-            <FaCircleInfo />
-            <span>Guide</span>
+            <FaCircleInfo aria-hidden="true" />
           </button>
           {selectedDestination ? (
             <>
               <button
                 type="button"
-                className="icon-chip"
+                className="icon-chip quick-action-button"
                 onClick={onEnterPlanning}
+                aria-label={isPlanningMode ? 'Planning mode active' : 'Plan route'}
                 aria-pressed={isPlanningMode}
+                title={isPlanningMode ? 'Planning mode active' : 'Plan route'}
               >
-                <FaRoute />
-                <span>{isPlanningMode ? 'Planning' : 'Plan route'}</span>
+                <FaRoute aria-hidden="true" />
               </button>
-              <button type="button" className="icon-chip" onClick={onShareRoute}>
-                <FaShareNodes />
-                <span>Share</span>
+              <button
+                type="button"
+                className="icon-chip quick-action-button"
+                onClick={onShareRoute}
+                aria-label="Share route"
+                title="Share"
+              >
+                <FaShareNodes aria-hidden="true" />
               </button>
-              <button type="button" className="icon-chip" onClick={onReloadPage}>
-                <FaArrowsRotate />
-                <span>Reload</span>
+              <button
+                type="button"
+                className="icon-chip quick-action-button"
+                onClick={onReloadPage}
+                aria-label="Reload page"
+                title="Reload"
+              >
+                <FaArrowsRotate aria-hidden="true" />
               </button>
             </>
           ) : null}
