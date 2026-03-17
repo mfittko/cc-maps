@@ -3,6 +3,7 @@ import {
   getMapViewFromValues,
   getSingleQueryValue,
   getTrailCacheStorageKey,
+  isPlanningModeQueryValue,
   isTrailColorMode,
   persistMapSettings,
   readCachedTrailGeoJson,
@@ -37,6 +38,10 @@ describe('map-persistence', () => {
     expect(isTrailColorMode('type')).toBe(true);
     expect(isTrailColorMode('freshness')).toBe(true);
     expect(isTrailColorMode('other')).toBe(false);
+    expect(isPlanningModeQueryValue('1')).toBe(true);
+    expect(isPlanningModeQueryValue('true')).toBe(true);
+    expect(isPlanningModeQueryValue('0')).toBe(false);
+    expect(isPlanningModeQueryValue('')).toBe(false);
   });
 
   it('parses map view values safely', () => {

@@ -26,6 +26,7 @@ import {
 } from '../lib/map-domain';
 import {
   readCachedTrailGeoJson,
+  isPlanningModeQueryValue,
   writeCachedTrailGeoJson,
 } from '../lib/map-persistence';
 import {
@@ -439,6 +440,7 @@ export default function Home() {
   const pendingRouteViewportFitRef = useRef('');
   const hydratedRoutePlanKeyRef = useRef('');
   const dismissedPlanningRouteKeyRef = useRef('');
+  const shouldOpenPlanningFromUrlRef = useRef(false);
   const lastAutoLocationRef = useRef(null);
   const isPlanningRef = useRef(false);
   const wasCurrentLocationOnRouteRef = useRef(false);
@@ -762,6 +764,7 @@ export default function Home() {
   }
 
   function handleExitPlanning() {
+    shouldOpenPlanningFromUrlRef.current = false;
     dismissedPlanningRouteKeyRef.current = encodeRoutePlanToUrl(routePlan) || '';
     setIsPlanning(false);
   }
@@ -771,6 +774,7 @@ export default function Home() {
       return;
     }
 
+    shouldOpenPlanningFromUrlRef.current = false;
     dismissedPlanningRouteKeyRef.current = '';
     clearSelectedTrail();
     setIsSettingsPanelOpen(false);
@@ -918,6 +922,16 @@ export default function Home() {
   });
 
   useEffect(() => {
+    if (!router.isReady || hasInitializedFromUrlRef.current) {
+      return;
+    }
+
+    shouldOpenPlanningFromUrlRef.current = isPlanningModeQueryValue(
+      getSingleQueryValue(router.query.planning)
+    );
+  }, [hasInitializedFromUrlRef, router.isReady, router.query.planning]);
+
+  useEffect(() => {
     const map = mapRef.current;
 
     if (!router.isReady || !isMapLoaded || !map || isInitialMapViewSettled) {
@@ -951,6 +965,25 @@ export default function Home() {
 
     setRouteGraph(buildRouteGraph(routeGraphTrailsGeoJson));
   }, [routeGraphTrailsGeoJson]);
+
+  useEffect(() => {
+    if (
+      !hasInitializedFromUrlRef.current ||
+      !shouldOpenPlanningFromUrlRef.current ||
+      !selectedDestinationId ||
+      isPlanning
+    ) {
+      return;
+    }
+
+    setIsPlanning(true);
+    setRoutePlan((currentPlan) =>
+      currentPlan?.destinationId === selectedDestinationId
+        ? currentPlan
+        : createRoutePlan(selectedDestinationId, [])
+    );
+    shouldOpenPlanningFromUrlRef.current = false;
+  }, [hasInitializedFromUrlRef, isPlanning, selectedDestinationId]);
 
   useEffect(() => {
     if (!selectedDestinationId) {
@@ -1023,10 +1056,12 @@ export default function Home() {
 
     const nextRouteKey = nextRoutePlan ? encodeRoutePlanToUrl(nextRoutePlan) || '' : '';
     const hydrationScopeKey = `${selectedDestinationId}:${requiredPreviewDestinationIds.join(',')}:${nextRouteKey}`;
-    const shouldRestorePlanningMode = shouldRestoreHydratedRoutePlan(
-      nextRoutePlan,
-      dismissedPlanningRouteKeyRef.current
+    const isPlanningRequestedFromUrl = isPlanningModeQueryValue(
+      searchParams?.get('planning') ?? getSingleQueryValue(router.query.planning)
     );
+    const shouldRestorePlanningMode = routeFromUrl
+      ? isPlanningRequestedFromUrl
+      : shouldRestoreHydratedRoutePlan(nextRoutePlan, dismissedPlanningRouteKeyRef.current);
 
     if (hydratedRoutePlanKeyRef.current === hydrationScopeKey) {
       return;
@@ -1113,6 +1148,32 @@ export default function Home() {
 
     window.history.replaceState(window.history.state, '', nextUrl);
   }, [hasInitializedFromUrlRef, routePlan, router, selectedDestinationId]);
+
+  useEffect(() => {
+    if (
+      !router.isReady ||
+      !hasInitializedFromUrlRef.current ||
+      typeof window === 'undefined'
+    ) {
+      return;
+    }
+
+    const nextUrl = new URL(window.location.href);
+    const currentPlanning = nextUrl.searchParams.get('planning') || '';
+    const nextPlanning = isPlanning ? '1' : '';
+
+    if (nextPlanning) {
+      nextUrl.searchParams.set('planning', nextPlanning);
+    } else {
+      nextUrl.searchParams.delete('planning');
+    }
+
+    if (currentPlanning === nextPlanning) {
+      return;
+    }
+
+    window.history.replaceState(window.history.state, '', nextUrl);
+  }, [hasInitializedFromUrlRef, isPlanning, router.isReady]);
 
   useEffect(() => {
     if (!hasInitializedFromUrlRef.current || !selectedDestinationId) {
