@@ -792,6 +792,15 @@ export default function Home() {
       return;
     }
 
+    if (
+      routePlan?.destinationId === selectedDestinationId &&
+      routePlan.anchorEdgeIds.length &&
+      typeof window !== 'undefined' &&
+      !window.confirm('Clear the current planned route?')
+    ) {
+      return;
+    }
+
     setRoutePlan(createRoutePlan(selectedDestinationId, []));
   }
 
