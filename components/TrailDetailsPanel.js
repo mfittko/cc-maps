@@ -1,5 +1,24 @@
-import { FaArrowDownLong, FaArrowUpLong, FaRoute, FaXmark } from 'react-icons/fa6';
+import { FaArrowDownLong, FaArrowUpLong, FaHourglassHalf, FaRoute, FaXmark } from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
+
+function getCompactFreshnessLabel(prepSymbol) {
+  switch (prepSymbol) {
+    case 20:
+      return '6h';
+    case 30:
+      return '>6h';
+    case 40:
+      return '>18h';
+    case 50:
+      return '>48h';
+    case 60:
+      return '>14d';
+    case 70:
+      return 'season';
+    default:
+      return '?';
+  }
+}
 
 export default function TrailDetailsPanel({
   selectedTrail,
@@ -14,6 +33,9 @@ export default function TrailDetailsPanel({
   }
 
   const shouldShowStyleAvailability = !(selectedTrail.has_classic && selectedTrail.has_skating);
+  const freshnessLabel =
+    DESTINATION_PREP_STYLES[selectedTrail.prepsymbol]?.label || DESTINATION_PREP_STYLES.default.label;
+  const compactFreshnessLabel = getCompactFreshnessLabel(selectedTrail.prepsymbol);
 
   return (
     <aside className="trail-details-panel" aria-label="Trail details">
@@ -44,14 +66,13 @@ export default function TrailDetailsPanel({
             {selectedTrail.has_skating ? 'Yes' : 'No'}
           </p>
         ) : null}
-        <p>
-          Freshness:{' '}
-          {DESTINATION_PREP_STYLES[selectedTrail.prepsymbol]?.label ||
-            DESTINATION_PREP_STYLES.default.label}
-        </p>
-        {selectedTrailLengthKm || selectedTrailElevationMetrics ? (
+        {selectedTrailLengthKm || selectedTrailElevationMetrics || compactFreshnessLabel ? (
           <div className="trail-stats-row trail-summary-row">
             <div className="elevation-metrics trail-summary-metrics" aria-label="Trail summary metrics">
+              <span className="elevation-chip trail-freshness-chip" title={freshnessLabel}>
+                <FaHourglassHalf aria-hidden="true" />
+                <span>{compactFreshnessLabel}</span>
+              </span>
               {selectedTrailLengthKm ? (
                 <span className="elevation-chip trail-length-chip">
                   <span>{formatDistance(selectedTrailLengthKm)}</span>
