@@ -7,10 +7,10 @@ import {
   findNearestRouteTraversalFeature,
   findNearestRouteGraphEdgeId,
   isPlanningSelectionInteraction,
+  reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
 } from '../lib/planning-mode.js';
-import { resolveRoute } from '../lib/route-planner.js';
 
 const graphGeoJson = {
   type: 'FeatureCollection',
@@ -47,6 +47,32 @@ const graphGeoJson = {
           [10.03, 59.0],
         ],
       },
+    },
+  ],
+};
+
+const extendedGraphGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 301, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.0, 59.1], [10.01, 59.1]] },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 302, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.01, 59.1], [10.02, 59.1]] },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 303, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.02, 59.1], [10.03, 59.1]] },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 304, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.03, 59.1], [10.04, 59.1]] },
     },
   ],
 };
@@ -120,6 +146,57 @@ describe('planning-mode helpers', () => {
 
       expect(appendRoutePlanAnchor(initialPlan, '7', 'edge-b')).toEqual(
         createRoutePlan('7', ['edge-a', 'edge-b'])
+      );
+    });
+
+    it('inserts a new anchor between adjacent selected segments on a line', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const initialPlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[1], graph)).toEqual(
+        createRoutePlan('7', [edgeIds[0], edgeIds[1], edgeIds[2]])
+      );
+    });
+
+    it('keeps the first segment fixed when a new anchor would otherwise prepend the chain', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const initialPlan = createRoutePlan('7', [edgeIds[1], edgeIds[2]]);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[0], graph)).toEqual(
+        createRoutePlan('7', [edgeIds[1], edgeIds[2], edgeIds[0]])
+      );
+    });
+
+    it('keeps the path oriented from the first selected segment when earlier clicks were non-adjacent', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const initialPlan = createRoutePlan('7', [edgeIds[2], edgeIds[0]]);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[1], graph)).toEqual(
+        createRoutePlan('7', [edgeIds[2], edgeIds[1], edgeIds[0]])
+      );
+    });
+
+    it('reorders a persisted anchor list while keeping the first segment fixed', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+
+      expect(reorderAnchorEdgeIds([edgeIds[2], edgeIds[0], edgeIds[1]], graph)).toEqual([
+        edgeIds[2],
+        edgeIds[1],
+        edgeIds[0],
+      ]);
+    });
+
+    it('reshuffles the full path to insert a missing interior segment while keeping the first segment fixed', () => {
+      const graph = buildRouteGraph(extendedGraphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const initialPlan = createRoutePlan('7', [edgeIds[0], edgeIds[1], edgeIds[3]]);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[2], graph)).toEqual(
+        createRoutePlan('7', [edgeIds[0], edgeIds[1], edgeIds[2], edgeIds[3]])
       );
     });
 
@@ -199,25 +276,21 @@ describe('planning-mode helpers', () => {
   });
 
   describe('createRoutePlanGeoJson', () => {
-    it('returns anchor and connector collections from a resolved plan', () => {
+    it('returns anchor, direction, and traversal collections for a route plan', () => {
       const graph = buildRouteGraph(graphGeoJson);
       const edgeIds = [...graph.edges.keys()];
       const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
-      const routeResult = resolveRoute(graph, routePlan.anchorEdgeIds);
-      const geoJson = createRoutePlanGeoJson(routePlan, routeResult, graph);
+      const geoJson = createRoutePlanGeoJson(routePlan, graph);
 
       expect(geoJson.anchors.features).toHaveLength(2);
-      expect(geoJson.connectors.features).toHaveLength(1);
       expect(geoJson.directions.features.length).toBeGreaterThanOrEqual(2);
-      expect(geoJson.traversal.features).toHaveLength(3);
-      expect(geoJson.connectors.features[0].properties.role).toBe('connector');
+      expect(geoJson.traversal.features).toHaveLength(2);
     });
 
     it('returns empty collections for a missing graph or empty plan', () => {
-      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', []), null, null);
+      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', []), null);
 
       expect(geoJson.anchors.features).toHaveLength(0);
-      expect(geoJson.connectors.features).toHaveLength(0);
       expect(geoJson.directions.features).toHaveLength(0);
       expect(geoJson.traversal.features).toHaveLength(0);
     });
@@ -227,27 +300,18 @@ describe('planning-mode helpers', () => {
       const edgeIds = [...graph.edges.keys()];
       const forwardPlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
       const reversePlan = createRoutePlan('7', [edgeIds[2], edgeIds[0]]);
-      const forwardGeoJson = createRoutePlanGeoJson(
-        forwardPlan,
-        resolveRoute(graph, forwardPlan.anchorEdgeIds),
-        graph
-      );
-      const reverseGeoJson = createRoutePlanGeoJson(
-        reversePlan,
-        resolveRoute(graph, reversePlan.anchorEdgeIds),
-        graph
-      );
+      const forwardGeoJson = createRoutePlanGeoJson(forwardPlan, graph);
+      const reverseGeoJson = createRoutePlanGeoJson(reversePlan, graph);
 
       expect(forwardGeoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.0, 59.0]);
-      expect(reverseGeoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.03, 59.0]);
+      expect(reverseGeoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.02, 59.0]);
     });
 
     it('matches the nearest traversal feature for a clicked trail on the active route', () => {
       const graph = buildRouteGraph(graphGeoJson);
       const edgeIds = [...graph.edges.keys()];
       const routePlan = createRoutePlan('7', [edgeIds[2], edgeIds[0]]);
-      const routeResult = resolveRoute(graph, routePlan.anchorEdgeIds);
-      const geoJson = createRoutePlanGeoJson(routePlan, routeResult, graph);
+      const geoJson = createRoutePlanGeoJson(routePlan, graph);
 
       const traversalFeature = findNearestRouteTraversalFeature(
         geoJson.traversal,
@@ -256,67 +320,44 @@ describe('planning-mode helpers', () => {
       );
 
       expect(traversalFeature?.properties?.trailFeatureId).toBe(101);
-      expect(traversalFeature?.geometry?.coordinates?.[0]).toEqual([10.02, 59.0]);
+      expect(traversalFeature?.geometry?.coordinates?.[0]).toEqual([10.0, 59.0]);
     });
 
-    it('falls back to shared-node traversal when anchors touch directly', () => {
+    it('uses shared-node traversal when adjacent anchors touch directly', () => {
       const graph = buildRouteGraph(graphGeoJson);
       const edgeIds = [...graph.edges.keys()];
       const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[1]]);
-      const geoJson = createRoutePlanGeoJson(
-        routePlan,
-        { connections: [{ connectorEdgeIds: [] }] },
-        graph
-      );
+      const geoJson = createRoutePlanGeoJson(routePlan, graph);
 
-      expect(geoJson.connectors.features).toHaveLength(0);
       expect(geoJson.directions.features).toHaveLength(2);
       expect(geoJson.traversal.features).toHaveLength(2);
       expect(geoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.0, 59.0]);
       expect(geoJson.traversal.features[1].geometry.coordinates[0]).toEqual([10.01, 59.0]);
     });
 
+    it('orients adjacent anchor-only traversal consistently when the route is reversed', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[2], edgeIds[1], edgeIds[0]]);
+      const geoJson = createRoutePlanGeoJson(routePlan, graph);
+
+      expect(geoJson.directions.features).toHaveLength(3);
+      expect(geoJson.traversal.features).toHaveLength(3);
+      expect(geoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.03, 59.0]);
+      expect(geoJson.traversal.features[1].geometry.coordinates[0]).toEqual([10.02, 59.0]);
+      expect(geoJson.traversal.features[2].geometry.coordinates[0]).toEqual([10.01, 59.0]);
+    });
+
     it('skips missing anchor and connector edges without failing', () => {
       const graph = buildRouteGraph(graphGeoJson);
       const edgeIds = [...graph.edges.keys()];
       const routePlan = createRoutePlan('7', ['missing-edge', edgeIds[2]]);
-      const geoJson = createRoutePlanGeoJson(
-        routePlan,
-        { connections: [{ connectorEdgeIds: ['missing-connector'] }] },
-        graph
-      );
+      const geoJson = createRoutePlanGeoJson(routePlan, graph);
 
       expect(geoJson.anchors.features).toHaveLength(1);
-      expect(geoJson.connectors.features).toHaveLength(0);
       expect(geoJson.directions.features).toHaveLength(1);
       expect(geoJson.traversal.features).toHaveLength(1);
       expect(geoJson.traversal.features[0].properties.edgeId).toBe(edgeIds[2]);
-    });
-
-    it('falls back to anchor-only traversal when connection edge ids are invalid', () => {
-      const graph = buildRouteGraph(graphGeoJson);
-      const edgeIds = [...graph.edges.keys()];
-      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
-      const geoJson = createRoutePlanGeoJson(routePlan, { connections: [{}] }, graph);
-
-      expect(geoJson.connectors.features).toHaveLength(0);
-      expect(geoJson.directions.features).toHaveLength(2);
-      expect(geoJson.traversal.features).toHaveLength(2);
-    });
-
-    it('falls back to anchor-only traversal when connector traversal cannot be resolved', () => {
-      const graph = buildRouteGraph(graphGeoJson);
-      const edgeIds = [...graph.edges.keys()];
-      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
-      const geoJson = createRoutePlanGeoJson(
-        routePlan,
-        { connections: [{ connectorEdgeIds: ['missing-edge'] }] },
-        graph
-      );
-
-      expect(geoJson.connectors.features).toHaveLength(0);
-      expect(geoJson.directions.features).toHaveLength(2);
-      expect(geoJson.traversal.features).toHaveLength(2);
     });
 
     it('drops invalid edges that have no coordinates', () => {
@@ -334,10 +375,9 @@ describe('planning-mode helpers', () => {
           ],
         ]),
       };
-      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', ['bad-edge']), null, graph);
+      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', ['bad-edge']), graph);
 
       expect(geoJson.anchors.features).toHaveLength(0);
-      expect(geoJson.connectors.features).toHaveLength(0);
       expect(geoJson.directions.features).toHaveLength(0);
       expect(geoJson.traversal.features).toHaveLength(0);
     });

@@ -449,13 +449,13 @@ describe('route-plan', () => {
       expect(result.status).toBe('empty');
     });
 
-    it('does not include connector data (connectors are derived, not restored)', () => {
+    it('does not include derived traversal data in hydration output', () => {
       const edgeIds = [...graph.edges.keys()];
       const plan = createRoutePlan('4', edgeIds);
       const result = hydrateRoutePlan(plan, graph);
       expect(result).not.toHaveProperty('connections');
-      expect(result).not.toHaveProperty('connectorEdgeIds');
-      expect(result).not.toHaveProperty('totalConnectorDistanceKm');
+      expect(result).not.toHaveProperty('traversal');
+      expect(result).not.toHaveProperty('directions');
     });
 
     it('preserves anchor order in validAnchorEdgeIds', () => {

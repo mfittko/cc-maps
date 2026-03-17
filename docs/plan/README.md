@@ -19,7 +19,7 @@ This directory breaks the top-level MVP plan into implementation phases that can
 5. [Phase 4](./phase-4.md) - Finalize repository documentation for MVP handoff.
 6. [Phase 5](./phase-5.md) - Record the shipped post-MVP map enhancements retroactively.
 7. [Phase 6](./phase-6.md) - Clean up architecture and split responsibilities into maintainable components.
-8. [Phase 7](./phase-7.md) - Add planning mode for multi-section route composition, auto-fill, and sharing.
+8. [Phase 7](./phase-7.md) - Add planning mode for multi-section route composition, manual route ordering, and sharing.
 
 ## Execution Notes
 

@@ -15,19 +15,18 @@ import { formatDistance } from '../lib/map-domain';
  * Props:
  *   isPlanning       boolean   - whether planning mode is active
  *   routePlan        object    - { anchorEdgeIds: string[] } | null
- *   routeResult      object    - resolved route from resolveRoute | null
  *   routeGraph       object    - { edges: Map } | null
  *   isMacOS          boolean   - affects modifier-key hint text
  *   isMobileHint     boolean   - when true, show mobile tap hint instead
  *   onExitPlanning   function  - called when user exits planning mode
  *   onClearPlan      function  - called when user clears the route plan
  *   onReverseRoute   function  - called when user reverses the anchor order
+ *   onSelectAnchor   function(edgeId) - called when user selects an anchor from the list
  *   onRemoveAnchor   function(index) - called when user removes an anchor
  */
 export default function PlanningPanel({
   isPlanning,
   routePlan,
-  routeResult,
   routeGraph,
   routeElevationMetrics,
   routeAnchorElevationMetrics,
@@ -38,6 +37,7 @@ export default function PlanningPanel({
   onExportGpx,
   onShareRoute,
   onReverseRoute,
+  onSelectAnchor,
   onRemoveAnchor,
 }) {
   if (!isPlanning) {
@@ -52,9 +52,7 @@ export default function PlanningPanel({
     return sum + (edge?.distanceKm ?? 0);
   }, 0);
 
-  const totalConnectorDistanceKm = routeResult?.totalConnectorDistanceKm ?? 0;
-  const totalDistanceKm = totalAnchorDistanceKm + totalConnectorDistanceKm;
-  const hasGaps = routeResult?.hasUnresolvedGaps ?? false;
+  const totalDistanceKm = totalAnchorDistanceKm;
 
   const modifierKey = isMacOS ? 'Cmd' : 'Ctrl';
   const selectionHint = isMobileHint
@@ -78,10 +76,11 @@ export default function PlanningPanel({
         </button>
       </div>
 
-      {anchorCount === 0 ? (
-        <p className="planning-hint">{selectionHint}</p>
-      ) : (
-        <>
+      <div className="planning-panel-body">
+        {anchorCount === 0 ? (
+          <p className="planning-hint">{selectionHint}</p>
+        ) : (
+          <>
           <div className="planning-summary">
             <p>
               <strong>{anchorCount}</strong> {anchorCount === 1 ? 'section' : 'sections'}
@@ -99,9 +98,6 @@ export default function PlanningPanel({
                 </span>
               </div>
             ) : null}
-            {hasGaps ? (
-              <p className="planning-gap-warning">Some sections could not be connected.</p>
-            ) : null}
           </div>
 
           <ol className="planning-anchor-list" aria-label="Planned sections">
@@ -112,24 +108,31 @@ export default function PlanningPanel({
 
               return (
                 <li key={`${edgeId}-${index}`} className="planning-anchor-item">
-                  <span className="planning-anchor-info">
-                    <span className="planning-anchor-index">{index + 1}</span>
-                    <span className="planning-anchor-copy planning-anchor-copy-inline">
-                      {distLabel ? <span className="planning-anchor-label">{distLabel}</span> : null}
-                      {anchorElevationMetrics ? (
-                        <span className="planning-anchor-elevation">
-                          <span className="elevation-chip planning-anchor-elevation-chip">
-                            <FaArrowUpLong aria-hidden="true" />
-                            <span>{anchorElevationMetrics.ascentMeters} m</span>
+                  <button
+                    type="button"
+                    className="planning-anchor-select"
+                    onClick={() => onSelectAnchor(edgeId)}
+                    aria-label={`Highlight section ${index + 1} on the map`}
+                  >
+                    <span className="planning-anchor-info">
+                      <span className="planning-anchor-index">{index + 1}</span>
+                      <span className="planning-anchor-copy planning-anchor-copy-inline">
+                        {distLabel ? <span className="planning-anchor-label">{distLabel}</span> : null}
+                        {anchorElevationMetrics ? (
+                          <span className="planning-anchor-elevation">
+                            <span className="elevation-chip planning-anchor-elevation-chip">
+                              <FaArrowUpLong aria-hidden="true" />
+                              <span>{anchorElevationMetrics.ascentMeters} m</span>
+                            </span>
+                            <span className="elevation-chip planning-anchor-elevation-chip">
+                              <FaArrowDownLong aria-hidden="true" />
+                              <span>{anchorElevationMetrics.descentMeters} m</span>
+                            </span>
                           </span>
-                          <span className="elevation-chip planning-anchor-elevation-chip">
-                            <FaArrowDownLong aria-hidden="true" />
-                            <span>{anchorElevationMetrics.descentMeters} m</span>
-                          </span>
-                        </span>
-                      ) : null}
+                        ) : null}
+                      </span>
                     </span>
-                  </span>
+                  </button>
                   <button
                     type="button"
                     className="planning-anchor-remove"
@@ -175,8 +178,9 @@ export default function PlanningPanel({
               </button>
             </div>
           </div>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </aside>
   );
 }

@@ -40,7 +40,7 @@ The current engineering baseline after Phase 6:
 2. Coverage is intended to surface dead code so it can be removed, not preserved with artificial tests.
 3. Future work after this point should mostly be maintenance, targeted fixes, or newly scoped feature work.
 
-Phase 7 is the first explicitly scoped post-cleanup feature phase. It covers a planning mode where users can build a route by selecting multiple trail sections, let the app fill missing connectors using the shortest viable path, and persist or share the resulting plan through local storage and URL state.
+Phase 7 is the first explicitly scoped post-cleanup feature phase. It covers a planning mode where users can build a route by selecting multiple trail sections, manage the selected route order manually, and persist or share the resulting plan through local storage and URL state.
 
 ## Phase documents
 

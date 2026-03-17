@@ -2,13 +2,13 @@
 
 ## Goal
 
-Add a destination-scoped planning mode that lets users assemble a ski route from multiple trail sections, automatically fill gaps with the shortest viable connector path, and persist or share the resulting plan without expanding the app into an unbounded route engine.
+Add a destination-scoped planning mode that lets users assemble a ski route from multiple trail sections and persist or share the resulting plan without expanding the app into an unbounded route engine.
 
 ## Status
 
 Implemented for the initial planning-mode release on PR #12.
 
-The shipped scope covers destination-scoped planning mode, ordered route anchors, connector auto-fill, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
+The shipped scope covers destination-scoped planning mode, ordered route anchors, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Automatic connector routing was removed from the MVP scope after validation because manual route composition is sufficient for the initial release. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
 
 ## Product Intent
 
@@ -16,7 +16,7 @@ The current app is strong at exploration and single-section inspection, but it d
 
 1. Select multiple trail sections in sequence to sketch a desired outing.
 2. Reverse or reorder that intent where it materially changes the route.
-3. Let the app auto-fill missing links between selected sections using the shortest available path within the active destination.
+3. Review the selected sections in order without automatic connector routing.
 4. Review a clear summary of the resulting route length and freshness profile.
 5. Keep the plan across reloads and share it with others using a compact URL.
 
@@ -28,12 +28,10 @@ The feature should remain explicitly destination-scoped. It is not a cross-desti
 2. Allow selecting multiple trail sections into an ordered route draft.
 3. Support route reversal and removal of planned sections without forcing users to start over.
 4. Build a destination-local route graph from the existing trail section and crossing model.
-5. Auto-fill gaps between selected sections using the shortest path, with grooming freshness as a tie-breaker rather than the primary cost function.
-6. Visually distinguish manually selected sections from auto-filled connector sections.
-7. Show a route summary with at least total distance, section count, and freshness cues.
-8. Persist the current route plan in local storage.
-9. Encode the route plan into URL state so it can be reopened or shared.
-10. Keep the implementation bounded to the already loaded destination trail network.
+5. Show a route summary with at least total distance and section count.
+6. Persist the current route plan in local storage.
+7. Encode the route plan into URL state so it can be reopened or shared.
+8. Keep the implementation bounded to the already loaded destination trail network.
 
 ## User Experience
 
@@ -52,7 +50,6 @@ The feature should remain explicitly destination-scoped. It is not a cross-desti
 ### Route presentation
 
 - Show the ordered planned route independently from the existing single-section details panel.
-- Differentiate user-selected anchor sections from automatically inserted connectors.
 - Preserve the current trail detail inspection behavior when planning mode is off.
 
 ## Technical Direction
@@ -69,17 +66,9 @@ The feature should remain explicitly destination-scoped. It is not a cross-desti
 Suggested shape:
 
 - `PlannedSectionRef`: stable reference to a user-selected trail section or interval.
-- `PlannedConnection`: resolved connector path between two planned anchors.
-- `RoutePlan`: ordered anchors, resolved connectors, summary metadata, destination id, and version.
+- `RoutePlan`: ordered anchors, summary metadata, destination id, and version.
 
 The persisted model should reference sections compactly rather than storing raw geometries when possible.
-
-### Pathfinding
-
-- Use Dijkstra or an equivalent shortest-path algorithm on the destination-local graph.
-- Primary edge cost: distance.
-- Secondary tie-break: grooming freshness preference, applied only when routes are otherwise comparable.
-- If no connector path exists, expose that as a partial-plan state rather than silently failing.
 
 ### Persistence and sharing
 
@@ -91,8 +80,7 @@ The persisted model should reference sections compactly rather than storing raw 
 
 - Planning mode UX defined for desktop and mobile.
 - Destination-local graph builder derived from the loaded trail network.
-- Route planning state model with clear selected-anchor and auto-connector semantics.
-- Shortest-path auto-fill between selected route anchors.
+- Route planning state model with clear ordered-anchor semantics.
 - Route summary UI and on-map route highlighting.
 - Local-storage persistence and URL rehydration for plans.
 - Tests for the extracted graph and routing logic.
@@ -103,10 +91,9 @@ The persisted model should reference sections compactly rather than storing raw 
 This phase is likely large enough to refine into multiple child issues.
 
 1. Graph extraction and stable trail-section identifiers.
-2. Core routing and connector resolution.
-3. Planning-mode state, persistence, and URL encoding.
-4. Desktop and mobile route-planning UX.
-5. Route summary, highlighting, and validation polish.
+2. Planning-mode state, persistence, and URL encoding.
+3. Desktop and mobile route-planning UX.
+4. Route summary, highlighting, and validation polish.
 
 ## Dependencies
 
@@ -119,38 +106,34 @@ This phase is likely large enough to refine into multiple child issues.
 - Route graph generation could become expensive if it is recomputed too often or against broader-than-destination data.
 - URL encoding can become brittle if the plan model depends on unstable section identifiers.
 - Planning mode can confuse the current inspect flow if the interaction model is not explicit enough.
-- Freshness-aware routing can produce surprising results if it is allowed to outweigh obviously shorter paths.
+- Future connector auto-routing could reintroduce complexity or surprising behavior if it is revisited without clearer product need.
 
 ## Acceptance Criteria
 
 1. Users can enter and exit planning mode without breaking the existing inspection flow.
 2. Users can add multiple trail sections to an ordered route draft within the selected destination.
 3. Users can remove planned sections and reverse the route order.
-4. The app fills gaps between selected route anchors using the shortest available in-destination path.
-5. Auto-filled connector sections are visually distinct from user-selected route anchors.
-6. The route summary shows total length and route composition details clearly enough to review before starting.
-7. Reloading the page restores the active plan from local storage.
-8. Opening a shared planning URL restores the same destination and route plan.
-9. The feature does not trigger unbounded trail loading beyond the active destination.
-10. The new pure planning helpers are covered by automated tests and keep repository coverage expectations intact.
+4. The route summary shows total length and route composition details clearly enough to review before starting.
+5. Reloading the page restores the active plan from local storage.
+6. Opening a shared planning URL restores the same destination and route plan.
+7. The feature does not trigger unbounded trail loading beyond the active destination.
+8. The new pure planning helpers are covered by automated tests and keep repository coverage expectations intact.
 
 ## Verification
 
 1. Confirm planning mode can be toggled on and off on both desktop and mobile flows.
 2. Confirm multi-section selection produces a stable ordered route draft.
-3. Confirm reversing the route recomputes connectors correctly.
-4. Confirm connector routing stays inside the loaded destination network and handles no-path cases visibly.
-5. Confirm route plans survive reloads and can be reconstructed from shared URLs.
-6. Confirm `npm run test:coverage` and `npm run build` still pass.
-7. Confirm route-planning logic does not reintroduce unbounded startup trail loading or repeated heavy graph recomputation.
+3. Confirm reversing the route preserves the selected anchor order correctly.
+4. Confirm route plans survive reloads and can be reconstructed from shared URLs.
+5. Confirm `npm run test:coverage` and `npm run build` still pass.
+6. Confirm route-planning logic does not reintroduce unbounded startup trail loading or repeated heavy graph recomputation.
 
 ## Open Questions For Refinement
 
 1. Should users be able to drag-reorder selected anchors, or is reverse plus remove/re-add sufficient for the first version?
 2. How should the planner handle one-way practical skiing preferences if the source data does not encode directionality?
 3. What is the right compact identifier for a trail section so shared URLs remain stable across app reloads and future data refreshes?
-4. How much freshness weighting is helpful before the route stops feeling like the shortest sensible option?
-5. Should route plans be shareable only as URLs, or should the product eventually support named saved plans per destination?
+4. Should route plans be shareable only as URLs, or should the product eventually support named saved plans per destination?
 
 ## Out Of Scope
 

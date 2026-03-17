@@ -2,7 +2,7 @@
 
 This repository contains Cross-Country maps, shipped under the `cc-maps` package and deployment alias. It is a Next.js and Mapbox GL JS application that loads active ski destinations from the public Sporet service, then fetches trail data on demand for the selected area.
 
-The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, always-on terrain rendering, URL and local storage map-state persistence for destination, color mode, map view, and planned routes, client-side trail caching, nearby destination suggestions, live current-location destination matching when the user is skiing on a nearby track, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, and a planning mode with shareable route composition and GPX export.
+The codebase is no longer just at the original MVP baseline. In addition to the destination-first flow, the current implementation includes a winter-tuned basemap, always-on terrain rendering, URL and local storage map-state persistence for destination, color mode, map view, and planned routes, client-side trail caching, nearby destination suggestions, live current-location destination matching when the user is skiing on a nearby track, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, and a planning mode with shareable manual route composition and GPX export.
 
 ## Current implementation state
 
@@ -18,7 +18,7 @@ The codebase is no longer just at the original MVP baseline. In addition to the 
 - `hooks/useMapPersistence.js` handles URL and local-storage synchronization for destination, color mode, and map view.
 - `lib/map-domain.js` contains extracted map-domain helpers such as distance calculations, nearby-destination selection, trail crossing analysis, and segment-label shaping.
 - `lib/map-persistence.js` contains extracted storage and query-parsing helpers plus trail-cache shaping.
-- `lib/planning-mode.js`, `lib/route-plan.js`, `lib/route-planner.js`, `lib/route-graph.js`, and `lib/route-export.js` contain the extracted planning, routing, and GPX export helpers.
+- `lib/planning-mode.js`, `lib/route-plan.js`, `lib/route-graph.js`, and `lib/route-export.js` contain the extracted planning, persistence, graph, and GPX export helpers.
 - `pages/api/destinations.js` proxies active destination data from Sporet layer 4.
 - `pages/api/trails.js` validates `destinationid` and proxies trail data from Sporet layer 6.
 - `lib/sporet.js` contains shared Sporet layer IDs, query helpers, and trail and grooming style mappings.
@@ -73,7 +73,7 @@ npm run test:coverage
 7. Terrain rendering stays enabled as part of the default map presentation.
 8. Clicking a trail selects the exact interval represented by the section-distance labels, then opens its detail metadata.
 9. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
-10. Users can enter an explicit planning mode, build an ordered route from trail sections, reverse or prune it, and keep the same route across reloads.
+10. Users can enter an explicit planning mode, build an ordered manual route from trail sections, reverse or prune it, and keep the same route across reloads.
 11. The active route is mirrored into URL state for sharing and can be exported as GPX.
 
 ## Deferred work

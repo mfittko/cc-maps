@@ -33,6 +33,7 @@ import {
   findNearestRouteGraphEdgeId,
   findNearestRouteTraversalFeature,
   isPlanningSelectionInteraction,
+  reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
 } from '../lib/planning-mode';
@@ -48,7 +49,6 @@ import {
 import { createGpxFileName, createGpxFromRouteFeatures } from '../lib/route-export';
 import { getSingleQueryValue } from '../lib/map-persistence';
 import { buildRouteGraph } from '../lib/route-graph';
-import { resolveRoute } from '../lib/route-planner';
 import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const DEFAULT_CENTER = [10.7522, 59.9139];
@@ -74,8 +74,6 @@ const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
 const ROUTE_PLAN_ANCHORS_SOURCE_ID = 'route-plan-anchors';
 const ROUTE_PLAN_ANCHORS_LAYER_ID = 'route-plan-anchors-layer';
-const ROUTE_PLAN_CONNECTORS_SOURCE_ID = 'route-plan-connectors';
-const ROUTE_PLAN_CONNECTORS_LAYER_ID = 'route-plan-connectors-layer';
 const ROUTE_PLAN_DIRECTIONS_SOURCE_ID = 'route-plan-directions';
 const ROUTE_PLAN_DIRECTIONS_LAYER_ID = 'route-plan-directions-layer';
 const DEM_SOURCE_ID = 'mapbox-dem';
@@ -360,6 +358,16 @@ function preventOverlayDoubleClickZoom(event) {
   event.originalEvent?.preventDefault?.();
 }
 
+function getEdgeMidpointCoordinates(edge) {
+  const coordinates = edge?.coordinates;
+
+  if (!Array.isArray(coordinates) || coordinates.length === 0) {
+    return null;
+  }
+
+  return coordinates[Math.floor(coordinates.length / 2)] || coordinates[0] || null;
+}
+
 export default function Home() {
   const router = useRouter();
   const mapContainer = useRef(null);
@@ -404,7 +412,6 @@ export default function Home() {
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
   const [routePlan, setRoutePlan] = useState(null);
-  const [routeResult, setRouteResult] = useState(null);
   const [routeGraph, setRouteGraph] = useState(null);
   const [routeElevationMetrics, setRouteElevationMetrics] = useState(null);
   const [routeAnchorElevationMetrics, setRouteAnchorElevationMetrics] = useState([]);
@@ -498,6 +505,27 @@ export default function Home() {
     setSelectedTrailElevationMetrics(null);
   }
 
+  function handleSelectPlannedAnchor(edgeId) {
+    const edge = routeGraphRef.current?.edges?.get(edgeId);
+
+    if (!edge || edge.trailFeatureId == null || !trailsGeoJson?.features?.length) {
+      return;
+    }
+
+    const sourceFeature = trailsGeoJson.features.find(
+      (feature) => String(feature?.properties?.id) === String(edge.trailFeatureId)
+    );
+
+    if (!sourceFeature) {
+      return;
+    }
+
+    setIsSettingsPanelOpen(false);
+    setIsInfoPanelOpen(false);
+    setSelectedTrailFeature(sourceFeature);
+    setSelectedTrailClickCoordinates(getEdgeMidpointCoordinates(edge));
+  }
+
   function applyTrailGeoJsonToPrimaryLayer(geojson) {
     const map = mapRef.current;
 
@@ -527,7 +555,6 @@ export default function Home() {
     setSuggestedTrailsGeoJson(null);
     setIsPlanning(false);
     setRoutePlan(null);
-    setRouteResult(null);
   }
 
   function handleEnterPlanning() {
@@ -575,7 +602,7 @@ export default function Home() {
       return;
     }
 
-    const routeFeatures = createRoutePlanGeoJson(routePlan, routeResult, routeGraph).traversal.features;
+    const routeFeatures = createRoutePlanGeoJson(routePlan, routeGraph).traversal.features;
     const routeName = `${selectedDestination.name} route`;
     const gpxContent = createGpxFromRouteFeatures(routeFeatures, { name: routeName });
 
@@ -648,7 +675,9 @@ export default function Home() {
     }
 
     clearSelectedTrail();
-    setRoutePlan((currentPlan) => appendRoutePlanAnchor(currentPlan, destinationId, edgeId));
+    setRoutePlan((currentPlan) =>
+      appendRoutePlanAnchor(currentPlan, destinationId, edgeId, routeGraphRef.current)
+    );
     return true;
   }
 
@@ -675,6 +704,10 @@ export default function Home() {
       return;
     }
 
+    if (shouldPreserveMapViewRef.current && !mapView) {
+      return;
+    }
+
     if (shouldPreserveMapViewRef.current && mapView) {
       map.jumpTo({
         center: [mapView.longitude, mapView.latitude],
@@ -682,6 +715,7 @@ export default function Home() {
       });
 
       skipNextTrailFitRef.current = true;
+      pendingRouteViewportFitRef.current = '';
       shouldPreserveMapViewRef.current = false;
     }
 
@@ -697,15 +731,6 @@ export default function Home() {
 
     setRouteGraph(buildRouteGraph(trailsGeoJson));
   }, [trailsGeoJson]);
-
-  useEffect(() => {
-    if (!routePlan || routePlan.destinationId !== selectedDestinationId || !routeGraph) {
-      setRouteResult(null);
-      return;
-    }
-
-    setRouteResult(resolveRoute(routeGraph, routePlan.anchorEdgeIds));
-  }, [routeGraph, routePlan, selectedDestinationId]);
 
   useEffect(() => {
     if (!router.isReady || !selectedDestinationId || !routeGraph) {
@@ -744,7 +769,13 @@ export default function Home() {
       searchParams?.get('lng') && searchParams?.get('lat') && searchParams?.get('zoom')
     );
 
-    if (routeFromUrl && !hasExplicitMapViewQuery && nextRouteKey) {
+    if (
+      routeFromUrl &&
+      !hasExplicitMapViewQuery &&
+      !shouldPreserveMapViewRef.current &&
+      !mapView &&
+      nextRouteKey
+    ) {
       pendingRouteViewportFitRef.current = nextRouteKey;
     }
 
@@ -754,11 +785,16 @@ export default function Home() {
       return;
     }
 
-    setRoutePlan(nextRoutePlan);
-    if (nextRoutePlan.anchorEdgeIds.length) {
+    const reorderedRoutePlan = createRoutePlan(
+      nextRoutePlan.destinationId,
+      reorderAnchorEdgeIds(hydratedRoutePlan.validAnchorEdgeIds, routeGraph)
+    );
+
+    setRoutePlan(reorderedRoutePlan);
+    if (reorderedRoutePlan.anchorEdgeIds.length) {
       setIsPlanning(true);
     }
-  }, [routeGraph, router.isReady, selectedDestinationId]);
+  }, [mapView, routeGraph, router.isReady, selectedDestinationId]);
 
   useEffect(() => {
     if (
@@ -1335,7 +1371,7 @@ export default function Home() {
         if (skipNextTrailFitRef.current) {
           skipNextTrailFitRef.current = false;
         } else {
-          fitMapToGeoJson(map, geojson, selectedDestination?.coordinates || DEFAULT_CENTER);
+          fitMapToGeoJson(map, geojson, DEFAULT_CENTER);
         }
         setTrailsStatus('success');
       } catch (error) {
@@ -1353,7 +1389,7 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [mapReady, selectedDestinationId, selectedDestination]);
+  }, [mapReady, selectedDestinationId]);
 
   useEffect(() => {
     if (!mapReady || !nearbyDestinationIds.length) {
@@ -1546,34 +1582,7 @@ export default function Home() {
       return undefined;
     }
 
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
-
-    if (map.getSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID)) {
-      map.getSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID).setData(routePlanGeoJson.connectors);
-    } else {
-      map.addSource(ROUTE_PLAN_CONNECTORS_SOURCE_ID, {
-        type: 'geojson',
-        data: routePlanGeoJson.connectors,
-      });
-
-      map.addLayer({
-        id: ROUTE_PLAN_CONNECTORS_LAYER_ID,
-        type: 'line',
-        source: ROUTE_PLAN_CONNECTORS_SOURCE_ID,
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-        paint: {
-          'line-color': '#0f6ea8',
-          'line-width': ['interpolate', ['linear'], ['zoom'], 7, 2, 11, 5],
-          'line-opacity': 0.85,
-          'line-dasharray': [1.4, 1],
-        },
-      });
-
-      map.on('dblclick', ROUTE_PLAN_CONNECTORS_LAYER_ID, preventOverlayDoubleClickZoom);
-    }
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
 
     if (map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID)) {
       map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID).setData(routePlanGeoJson.anchors);
@@ -1632,10 +1641,6 @@ export default function Home() {
       map.on('dblclick', ROUTE_PLAN_DIRECTIONS_LAYER_ID, preventOverlayDoubleClickZoom);
     }
 
-    if (map.getLayer(ROUTE_PLAN_CONNECTORS_LAYER_ID)) {
-      map.moveLayer(ROUTE_PLAN_CONNECTORS_LAYER_ID);
-    }
-
     if (map.getLayer(ROUTE_PLAN_ANCHORS_LAYER_ID)) {
       map.moveLayer(ROUTE_PLAN_ANCHORS_LAYER_ID);
     }
@@ -1653,7 +1658,7 @@ export default function Home() {
     }
 
     return undefined;
-  }, [mapReady, routeGraph, routePlan, routeResult]);
+  }, [mapReady, routeGraph, routePlan]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1668,13 +1673,10 @@ export default function Home() {
       return;
     }
 
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
     const featureCollection = {
       type: 'FeatureCollection',
-      features: [
-        ...routePlanGeoJson.anchors.features,
-        ...routePlanGeoJson.connectors.features,
-      ],
+      features: routePlanGeoJson.anchors.features,
     };
 
     if (!featureCollection.features.length) {
@@ -1683,11 +1685,11 @@ export default function Home() {
 
     fitMapToGeoJson(map, featureCollection, selectedDestination?.coordinates || DEFAULT_CENTER);
     pendingRouteViewportFitRef.current = '';
-  }, [mapReady, routeGraph, routePlan, routeResult, selectedDestination, selectedDestinationId]);
+  }, [mapReady, routeGraph, routePlan, selectedDestination, selectedDestinationId]);
 
   useEffect(() => {
     const map = mapRef.current;
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
     const routeFeatures = routePlanGeoJson.traversal.features;
     const routeAnchorFeatures = routeFeatures.filter(
       (feature) => feature.properties?.role === 'traversal-anchor'
@@ -1802,7 +1804,7 @@ export default function Home() {
 
       map.off('idle', readElevationMetrics);
     };
-  }, [mapReady, routeGraph, routePlan, routeResult]);
+  }, [mapReady, routeGraph, routePlan]);
 
   useEffect(() => {
     if (!selectedDestinationId || !destinations.length || !selectedDestination) {
@@ -1876,7 +1878,7 @@ export default function Home() {
 
   useEffect(() => {
     const map = mapRef.current;
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeResult, routeGraph);
+    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
     const routeTraversalFeature = findNearestRouteTraversalFeature(
       routePlanGeoJson.traversal,
       selectedTrailFeature?.properties?.id,
@@ -1955,7 +1957,6 @@ export default function Home() {
     mapReady,
     routeGraph,
     routePlan,
-    routeResult,
     selectedTrailClickCoordinates,
     selectedTrailFeature,
     selectedTrailSectionFeature,
@@ -2229,7 +2230,6 @@ export default function Home() {
       <PlanningPanel
         isPlanning={isPlanning}
         routePlan={routePlan}
-        routeResult={routeResult}
         routeGraph={routeGraph}
         routeElevationMetrics={routeElevationMetrics}
         routeAnchorElevationMetrics={routeAnchorElevationMetrics}
@@ -2240,6 +2240,7 @@ export default function Home() {
         onExportGpx={handleExportGpx}
         onShareRoute={handleShareRoute}
         onReverseRoute={handleReverseRoute}
+        onSelectAnchor={handleSelectPlannedAnchor}
         onRemoveAnchor={handleRemoveAnchor}
       />
 
