@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import mapboxgl from 'mapbox-gl';
 import { FaRoute } from 'react-icons/fa6';
@@ -471,10 +471,17 @@ export default function Home() {
     selectedDestinationId
   );
   const previewDestinationIdsKey = previewDestinationIds.join(',');
-  const availableTrailsGeoJson = mergeTrailFeatureCollections([
-    trailsGeoJson,
-    suggestedTrailsGeoJson,
-  ]);
+  const availableTrailsGeoJson = useMemo(
+    () => mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]),
+    [trailsGeoJson, suggestedTrailsGeoJson]
+  );
+  const routeGraphTrailsGeoJson = useMemo(() => {
+    if (!isPlanning) {
+      return trailsGeoJson;
+    }
+
+    return mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]);
+  }, [isPlanning, trailsGeoJson, suggestedTrailsGeoJson]);
 
   useEffect(() => {
     trailColorModeRef.current = trailColorMode;
@@ -782,18 +789,13 @@ export default function Home() {
   }, [router.isReady, isMapLoaded, isInitialMapViewSettled, mapView]);
 
   useEffect(() => {
-    const mergedTrailsGeoJson = mergeTrailFeatureCollections([
-      trailsGeoJson,
-      suggestedTrailsGeoJson,
-    ]);
-
-    if (!mergedTrailsGeoJson.features.length) {
+    if (!routeGraphTrailsGeoJson?.features?.length) {
       setRouteGraph(null);
       return;
     }
 
-    setRouteGraph(buildRouteGraph(mergedTrailsGeoJson));
-  }, [trailsGeoJson, suggestedTrailsGeoJson]);
+    setRouteGraph(buildRouteGraph(routeGraphTrailsGeoJson));
+  }, [routeGraphTrailsGeoJson]);
 
   useEffect(() => {
     if (!selectedDestinationId) {
@@ -1983,12 +1985,7 @@ export default function Home() {
   }, [mapView, selectedDestinationId, selectedDestination, destinations]);
 
   useEffect(() => {
-    const analysisTrailsGeoJson = mergeTrailFeatureCollections([
-      trailsGeoJson,
-      suggestedTrailsGeoJson,
-    ]);
-
-    if (!selectedTrailFeature || !analysisTrailsGeoJson.features.length) {
+    if (!selectedTrailFeature || !availableTrailsGeoJson.features.length) {
       setSelectedTrailSectionFeature(null);
       setSelectedTrailCrossings(null);
       return;
@@ -1997,7 +1994,7 @@ export default function Home() {
     const selectedSection = getClickedTrailSection(
       selectedTrailFeature,
       selectedTrailClickCoordinates,
-      analysisTrailsGeoJson,
+      availableTrailsGeoJson,
       destinations,
       DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
       MIN_SEGMENT_DISTANCE_KM
@@ -2008,13 +2005,13 @@ export default function Home() {
       selectedSection?.crossingMetrics ||
         getCrossingMetrics(
         selectedTrailFeature,
-        analysisTrailsGeoJson,
+        availableTrailsGeoJson,
         destinations,
         DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
         MIN_SEGMENT_DISTANCE_KM
       )
     );
-  }, [selectedTrailFeature, selectedTrailClickCoordinates, trailsGeoJson, suggestedTrailsGeoJson, destinations]);
+  }, [availableTrailsGeoJson, selectedTrailFeature, selectedTrailClickCoordinates, destinations]);
 
   useEffect(() => {
     const map = mapRef.current;
