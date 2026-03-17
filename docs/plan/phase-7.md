@@ -6,9 +6,9 @@ Add a destination-scoped planning mode that lets users assemble a ski route from
 
 ## Status
 
-Planned.
+Implemented for the initial planning-mode release on PR #12.
 
-This phase is not implemented yet. It defines the intended product and engineering scope for the next feature phase after the Phase 6 cleanup work.
+The shipped scope covers destination-scoped planning mode, ordered route anchors, connector auto-fill, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
 
 ## Product Intent
 

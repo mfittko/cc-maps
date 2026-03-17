@@ -609,17 +609,16 @@ export default function Home() {
         await navigator.share(shareData);
         return;
       }
-
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl);
-        return;
-      }
     } catch (error) {
       if (error?.name === 'AbortError') {
         return;
       }
 
       console.warn('Share action failed', error);
+    }
+
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(shareUrl);
       return;
     }
 

@@ -90,7 +90,58 @@ async function stubAppApi(page) {
   });
 }
 
+async function emitPrimaryTrailClick(page) {
+  await page.evaluate(() => {
+    const mockMap = window.__ccMapsMockMap;
+
+    if (!mockMap) {
+      throw new Error('Mock map instance not found');
+    }
+
+    mockMap.emitLayerEvent('click', 'trails-hit-layer', {
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            id: 101,
+            destinationid: '1',
+            trailtypesymbol: 30,
+            prepsymbol: 20,
+            has_classic: true,
+            has_skating: true,
+            has_floodlight: false,
+            is_scootertrail: false,
+            warningtext: '',
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [10.75, 59.95],
+              [10.76, 59.95],
+            ],
+          },
+        },
+      ],
+      lngLat: { lng: 10.755, lat: 59.95 },
+      originalEvent: {},
+    });
+  });
+}
+
 test.describe('planning mode interactions', () => {
+  test('planning mode off still opens trail details on trail click', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await page.locator('.control-panel-desktop .select-input').selectOption('1');
+    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+
+    await emitPrimaryTrailClick(page);
+
+    await expect(page.getByRole('heading', { name: 'Machine groomed' })).toBeVisible();
+    await expect(page.getByText('Classic: Yes · Skating: Yes')).toBeVisible();
+  });
+
   test('desktop quick action opens and closes planning mode with desktop hint text', async ({
     page,
   }, testInfo) => {
