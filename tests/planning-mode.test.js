@@ -1,0 +1,434 @@
+import { describe, expect, it } from 'vitest';
+import { buildRouteGraph } from '../lib/route-graph.js';
+import { createRoutePlan } from '../lib/route-plan.js';
+import {
+  appendRoutePlanAnchor,
+  createRoutePlanGeoJson,
+  findNearestRouteTraversalFeature,
+  findNearestRouteGraphEdgeId,
+  isPlanningSelectionInteraction,
+  removeRoutePlanAnchor,
+  reverseRoutePlan,
+} from '../lib/planning-mode.js';
+import { resolveRoute } from '../lib/route-planner.js';
+
+const graphGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 101, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.0, 59.0],
+          [10.01, 59.0],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 101, trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.01, 59.0],
+          [10.02, 59.0],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 202, trailtypesymbol: 20, prepsymbol: 2 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.02, 59.0],
+          [10.03, 59.0],
+        ],
+      },
+    },
+  ],
+};
+
+describe('planning-mode helpers', () => {
+  describe('isPlanningSelectionInteraction', () => {
+    it('returns false when planning mode is off', () => {
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: false,
+          isMobileInteraction: false,
+          isMacOS: false,
+          originalEvent: { ctrlKey: true },
+        })
+      ).toBe(false);
+    });
+
+    it('treats any tap as additive selection on mobile', () => {
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: true,
+          isMobileInteraction: true,
+          isMacOS: false,
+          originalEvent: {},
+        })
+      ).toBe(true);
+    });
+
+    it('requires metaKey on macOS', () => {
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: true,
+          isMobileInteraction: false,
+          isMacOS: true,
+          originalEvent: { metaKey: true, ctrlKey: false },
+        })
+      ).toBe(true);
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: true,
+          isMobileInteraction: false,
+          isMacOS: true,
+          originalEvent: { metaKey: false, ctrlKey: true },
+        })
+      ).toBe(false);
+    });
+
+    it('requires ctrlKey on non-macOS desktop', () => {
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: true,
+          isMobileInteraction: false,
+          isMacOS: false,
+          originalEvent: { ctrlKey: true, metaKey: false },
+        })
+      ).toBe(true);
+      expect(
+        isPlanningSelectionInteraction({
+          isPlanning: true,
+          isMobileInteraction: false,
+          isMacOS: false,
+          originalEvent: { ctrlKey: false, metaKey: true },
+        })
+      ).toBe(false);
+    });
+  });
+
+  describe('route-plan mutations', () => {
+    it('appends anchors to an existing plan', () => {
+      const initialPlan = createRoutePlan('7', ['edge-a']);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', 'edge-b')).toEqual(
+        createRoutePlan('7', ['edge-a', 'edge-b'])
+      );
+    });
+
+    it('removes an existing anchor when the same edge is selected again', () => {
+      const initialPlan = createRoutePlan('7', ['edge-a', 'edge-b']);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', 'edge-a')).toEqual(
+        createRoutePlan('7', ['edge-b'])
+      );
+    });
+
+    it('removes an anchor by index', () => {
+      const initialPlan = createRoutePlan('7', ['edge-a', 'edge-b', 'edge-c']);
+
+      expect(removeRoutePlanAnchor(initialPlan, '7', 1)).toEqual(
+        createRoutePlan('7', ['edge-a', 'edge-c'])
+      );
+    });
+
+    it('reverses the current plan order', () => {
+      const initialPlan = createRoutePlan('7', ['edge-a', 'edge-b', 'edge-c']);
+
+      expect(reverseRoutePlan(initialPlan, '7')).toEqual(
+        createRoutePlan('7', ['edge-c', 'edge-b', 'edge-a'])
+      );
+    });
+
+    it('ignores invalid anchor ids when appending', () => {
+      const initialPlan = createRoutePlan('7', ['edge-a']);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', '')).toEqual(initialPlan);
+      expect(appendRoutePlanAnchor(initialPlan, '7')).toEqual(initialPlan);
+    });
+
+    it('returns an empty plan when removing from a missing route plan', () => {
+      expect(removeRoutePlanAnchor(null, '7', 0)).toEqual(createRoutePlan('7', []));
+    });
+  });
+
+  describe('findNearestRouteGraphEdgeId', () => {
+    const graph = buildRouteGraph(graphGeoJson);
+    const edgeIds = [...graph.edges.keys()];
+
+    it('returns the nearest matching edge for the clicked trail feature', () => {
+      expect(findNearestRouteGraphEdgeId(graph, 101, [10.001, 59.0])).toBe(edgeIds[0]);
+      expect(findNearestRouteGraphEdgeId(graph, 101, [10.019, 59.0])).toBe(edgeIds[1]);
+    });
+
+    it('returns null when the feature id does not exist in the graph', () => {
+      expect(findNearestRouteGraphEdgeId(graph, 999, [10.001, 59.0])).toBeNull();
+    });
+
+    it('returns null for invalid graph lookup inputs', () => {
+      expect(findNearestRouteGraphEdgeId(null, 101, [10.001, 59.0])).toBeNull();
+      expect(findNearestRouteGraphEdgeId(graph, null, [10.001, 59.0])).toBeNull();
+      expect(findNearestRouteGraphEdgeId(graph, 101, null)).toBeNull();
+    });
+
+    it('supports degenerate edges with repeated coordinates', () => {
+      const degenerateGraph = {
+        edges: new Map([
+          [
+            'edge-a',
+            {
+              coordinates: [
+                [10.0, 59.0],
+                [10.0, 59.0],
+              ],
+              trailFeatureId: 101,
+            },
+          ],
+        ]),
+      };
+
+      expect(findNearestRouteGraphEdgeId(degenerateGraph, 101, [10.0, 59.001])).toBe('edge-a');
+    });
+  });
+
+  describe('createRoutePlanGeoJson', () => {
+    it('returns anchor and connector collections from a resolved plan', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
+      const routeResult = resolveRoute(graph, routePlan.anchorEdgeIds);
+      const geoJson = createRoutePlanGeoJson(routePlan, routeResult, graph);
+
+      expect(geoJson.anchors.features).toHaveLength(2);
+      expect(geoJson.connectors.features).toHaveLength(1);
+      expect(geoJson.directions.features.length).toBeGreaterThanOrEqual(2);
+      expect(geoJson.traversal.features).toHaveLength(3);
+      expect(geoJson.connectors.features[0].properties.role).toBe('connector');
+    });
+
+    it('returns empty collections for a missing graph or empty plan', () => {
+      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', []), null, null);
+
+      expect(geoJson.anchors.features).toHaveLength(0);
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(0);
+      expect(geoJson.traversal.features).toHaveLength(0);
+    });
+
+    it('orients traversal features according to route order', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const forwardPlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
+      const reversePlan = createRoutePlan('7', [edgeIds[2], edgeIds[0]]);
+      const forwardGeoJson = createRoutePlanGeoJson(
+        forwardPlan,
+        resolveRoute(graph, forwardPlan.anchorEdgeIds),
+        graph
+      );
+      const reverseGeoJson = createRoutePlanGeoJson(
+        reversePlan,
+        resolveRoute(graph, reversePlan.anchorEdgeIds),
+        graph
+      );
+
+      expect(forwardGeoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.0, 59.0]);
+      expect(reverseGeoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.03, 59.0]);
+    });
+
+    it('matches the nearest traversal feature for a clicked trail on the active route', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[2], edgeIds[0]]);
+      const routeResult = resolveRoute(graph, routePlan.anchorEdgeIds);
+      const geoJson = createRoutePlanGeoJson(routePlan, routeResult, graph);
+
+      const traversalFeature = findNearestRouteTraversalFeature(
+        geoJson.traversal,
+        101,
+        [10.019, 59.0]
+      );
+
+      expect(traversalFeature?.properties?.trailFeatureId).toBe(101);
+      expect(traversalFeature?.geometry?.coordinates?.[0]).toEqual([10.02, 59.0]);
+    });
+
+    it('falls back to shared-node traversal when anchors touch directly', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[1]]);
+      const geoJson = createRoutePlanGeoJson(
+        routePlan,
+        { connections: [{ connectorEdgeIds: [] }] },
+        graph
+      );
+
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(2);
+      expect(geoJson.traversal.features).toHaveLength(2);
+      expect(geoJson.traversal.features[0].geometry.coordinates[0]).toEqual([10.0, 59.0]);
+      expect(geoJson.traversal.features[1].geometry.coordinates[0]).toEqual([10.01, 59.0]);
+    });
+
+    it('skips missing anchor and connector edges without failing', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', ['missing-edge', edgeIds[2]]);
+      const geoJson = createRoutePlanGeoJson(
+        routePlan,
+        { connections: [{ connectorEdgeIds: ['missing-connector'] }] },
+        graph
+      );
+
+      expect(geoJson.anchors.features).toHaveLength(1);
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(1);
+      expect(geoJson.traversal.features).toHaveLength(1);
+      expect(geoJson.traversal.features[0].properties.edgeId).toBe(edgeIds[2]);
+    });
+
+    it('falls back to anchor-only traversal when connection edge ids are invalid', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
+      const geoJson = createRoutePlanGeoJson(routePlan, { connections: [{}] }, graph);
+
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(2);
+      expect(geoJson.traversal.features).toHaveLength(2);
+    });
+
+    it('falls back to anchor-only traversal when connector traversal cannot be resolved', () => {
+      const graph = buildRouteGraph(graphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const routePlan = createRoutePlan('7', [edgeIds[0], edgeIds[2]]);
+      const geoJson = createRoutePlanGeoJson(
+        routePlan,
+        { connections: [{ connectorEdgeIds: ['missing-edge'] }] },
+        graph
+      );
+
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(2);
+      expect(geoJson.traversal.features).toHaveLength(2);
+    });
+
+    it('drops invalid edges that have no coordinates', () => {
+      const graph = {
+        edges: new Map([
+          [
+            'bad-edge',
+            {
+              id: 'bad-edge',
+              from: 'a',
+              to: 'b',
+              coordinates: null,
+              trailFeatureId: 303,
+            },
+          ],
+        ]),
+      };
+      const geoJson = createRoutePlanGeoJson(createRoutePlan('7', ['bad-edge']), null, graph);
+
+      expect(geoJson.anchors.features).toHaveLength(0);
+      expect(geoJson.connectors.features).toHaveLength(0);
+      expect(geoJson.directions.features).toHaveLength(0);
+      expect(geoJson.traversal.features).toHaveLength(0);
+    });
+
+    it('returns null when traversal lookup inputs are invalid', () => {
+      expect(findNearestRouteTraversalFeature(null, 101, [10.001, 59.0])).toBeNull();
+      expect(
+        findNearestRouteTraversalFeature({ features: [] }, null, [10.001, 59.0])
+      ).toBeNull();
+      expect(
+        findNearestRouteTraversalFeature({ features: [] }, 101, null)
+      ).toBeNull();
+    });
+
+    it('supports multiline traversal matching and ignores unsupported geometry', () => {
+      const traversalFeature = findNearestRouteTraversalFeature(
+        {
+          features: [
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101 },
+              geometry: {
+                type: 'Point',
+                coordinates: [10.0, 59.0],
+              },
+            },
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101 },
+              geometry: {
+                type: 'MultiLineString',
+                coordinates: [
+                  [
+                    [10.0, 59.0],
+                    [10.01, 59.0],
+                  ],
+                  [
+                    [10.01, 59.0],
+                    [10.02, 59.0],
+                  ],
+                ],
+              },
+            },
+          ],
+        },
+        101,
+        [10.019, 59.0]
+      );
+
+      expect(traversalFeature?.geometry?.type).toBe('MultiLineString');
+    });
+
+    it('uses the nearest multiline segment instead of only the first segment', () => {
+      const traversalFeature = findNearestRouteTraversalFeature(
+        {
+          features: [
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101, name: 'first' },
+              geometry: {
+                type: 'MultiLineString',
+                coordinates: [
+                  [
+                    [10.0, 59.0],
+                    [10.01, 59.0],
+                  ],
+                  [
+                    [10.5, 59.5],
+                    [10.51, 59.5],
+                  ],
+                ],
+              },
+            },
+            {
+              type: 'Feature',
+              properties: { trailFeatureId: 101, name: 'second' },
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [10.2, 59.2],
+                  [10.21, 59.2],
+                ],
+              },
+            },
+          ],
+        },
+        101,
+        [10.509, 59.5]
+      );
+
+      expect(traversalFeature?.properties?.name).toBe('first');
+    });
+  });
+});

@@ -1,6 +1,8 @@
 import {
   FaCircleInfo,
   FaLocationDot,
+  FaRoute,
+  FaShareNodes,
   FaXmark,
 } from 'react-icons/fa6';
 import { DESTINATION_PREP_STYLES } from '../lib/sporet';
@@ -20,6 +22,9 @@ export default function ControlPanel({
   destinations,
   selectedDestination,
   activeTrailLegendItems,
+  isPlanningMode = false,
+  onEnterPlanning,
+  onShareRoute,
 }) {
   return (
     <aside
@@ -54,6 +59,23 @@ export default function ControlPanel({
             <FaCircleInfo />
             <span>Guide</span>
           </button>
+          {selectedDestination ? (
+            <>
+              <button
+                type="button"
+                className="icon-chip"
+                onClick={onEnterPlanning}
+                aria-pressed={isPlanningMode}
+              >
+                <FaRoute />
+                <span>{isPlanningMode ? 'Planning' : 'Plan route'}</span>
+              </button>
+              <button type="button" className="icon-chip" onClick={onShareRoute}>
+                <FaShareNodes />
+                <span>Share</span>
+              </button>
+            </>
+          ) : null}
         </div>
 
         <div className="display-mode-block">

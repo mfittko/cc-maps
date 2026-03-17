@@ -4,7 +4,7 @@
 
 Cross-Country maps, shipped as `cc-maps`, is a Next.js and Mapbox GL JS web app for browsing cross-country ski destinations and their trail networks from the public Sporet ArcGIS service.
 
-The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, always-on terrain rendering, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, and trail crossing analysis in a dedicated trail details sheet.
+The current implementation is destination-first. The app loads active destinations first, can auto-select the nearest destination based on geolocation, can switch to the destination whose trail geometry is within 0.05 km of the user's live location while follow mode remains active, and fetches trail GeoJSON only for the selected destination. The map UI also includes a winter-tuned basemap treatment, always-on terrain rendering, nearby destination suggestions, trail segment labels, a mobile-first settings overlay, trail crossing analysis in a dedicated trail details sheet, and an explicit planning mode for shareable route composition.
 
 The app exposes minimal PWA metadata through a manifest and icons, but it does not currently ship with a service worker or offline-first caching strategy.
 
@@ -25,11 +25,11 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 | Layer | Current implementation |
 | --- | --- |
-| Presentation | `pages/index.js` composes the map shell while `components/ControlPanel.js`, `components/InfoPanel.js`, and `components/TrailDetailsPanel.js` contain the extracted overlay UI. |
+| Presentation | `pages/index.js` composes the map shell while `components/ControlPanel.js`, `components/InfoPanel.js`, `components/PlanningPanel.js`, and `components/TrailDetailsPanel.js` contain the extracted overlay UI. |
 | Hooks | `hooks/useMapPersistence.js` synchronizes destination, color mode, and map view with URL query parameters and local storage. |
 | App shell | `pages/_app.js` imports Mapbox CSS, global CSS, title and meta tags, and manifest references. |
 | API proxy | `pages/api/destinations.js` and `pages/api/trails.js` proxy the Sporet REST service and keep request rules centralized. |
-| Shared domain logic | `lib/map-domain.js`, `lib/map-persistence.js`, and `lib/sporet.js` define the extracted geometry, persistence, validation, and Sporet request helpers. |
+| Shared domain logic | `lib/map-domain.js`, `lib/map-persistence.js`, `lib/planning-mode.js`, `lib/route-graph.js`, `lib/route-plan.js`, `lib/route-planner.js`, `lib/route-export.js`, and `lib/sporet.js` define the extracted geometry, persistence, planning, routing, export, validation, and Sporet request helpers. |
 | Static assets | `public/manifest.json` plus SVG icons provide install metadata for mobile home-screen use. |
 
 ## Current user-facing behavior
@@ -63,6 +63,15 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 2. A legend updates to match the selected color mode.
 3. On mobile, the settings surface is minimized to a single icon under the map controls by default so the map remains unobstructed.
 
+### Planning mode and route sharing
+
+1. Users can enter planning mode from the desktop settings panel or the mobile map overlay.
+2. Planning mode preserves the existing inspect-first trail click behavior when it is off.
+3. In planning mode, desktop uses `Cmd` or `Ctrl` assisted selection while mobile switches to tap-to-add route editing.
+4. Planned routes are shown as ordered anchor sections plus automatically inserted connector sections.
+5. The planning panel supports exit, clear, reverse, per-section removal, GPX export, and route sharing actions.
+6. Planned routes persist in local storage and are encoded into the URL so shared links reopen the same destination and route.
+
 ### Trail details panel
 
 1. Clicking a loaded trail opens a dedicated trail details panel instead of expanding the general settings controls.
@@ -74,8 +83,10 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 ### Persistence and shareability
 
-1. The selected destination, color mode, and current map view are written back to the URL with shallow routing.
+1. The selected destination, color mode, and current map view are written back to the URL with `history.replaceState`.
 2. The same state is mirrored to local storage so the last view can be restored on a later visit.
+3. Planned routes are versioned, mirrored to local storage per destination, and encoded into the `route` query parameter for sharing.
+4. The planning panel also supports GPX export for the active route.
 
 ### Mobile and installability
 
