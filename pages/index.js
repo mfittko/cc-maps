@@ -45,6 +45,7 @@ import {
   encodeRoutePlanToUrl,
   hydrateRoutePlan,
   readStoredRoutePlan,
+  shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
 } from '../lib/route-plan';
 import { createGpxFileName, createGpxFromRouteFeatures } from '../lib/route-export';
@@ -422,6 +423,7 @@ export default function Home() {
   const skipNextTrailFitRef = useRef(false);
   const pendingRouteViewportFitRef = useRef('');
   const hydratedRoutePlanKeyRef = useRef('');
+  const dismissedPlanningRouteKeyRef = useRef('');
   const lastAutoLocationRef = useRef(null);
   const isPlanningRef = useRef(false);
   const wasCurrentLocationOnRouteRef = useRef(false);
@@ -744,11 +746,17 @@ export default function Home() {
     setRoutePlan(null);
   }
 
+  function handleExitPlanning() {
+    dismissedPlanningRouteKeyRef.current = encodeRoutePlanToUrl(routePlan) || '';
+    setIsPlanning(false);
+  }
+
   function handleEnterPlanning() {
     if (!selectedDestinationId) {
       return;
     }
 
+    dismissedPlanningRouteKeyRef.current = '';
     clearSelectedTrail();
     setIsSettingsPanelOpen(false);
     setIsInfoPanelOpen(false);
@@ -849,6 +857,14 @@ export default function Home() {
     shareInput.select();
     window.document.execCommand('copy');
     shareInput.remove();
+  }
+
+  function handleReloadPage() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.location.reload();
   }
 
   function handlePlanningAnchorSelection(feature, clickedCoordinates) {
@@ -992,6 +1008,10 @@ export default function Home() {
 
     const nextRouteKey = nextRoutePlan ? encodeRoutePlanToUrl(nextRoutePlan) || '' : '';
     const hydrationScopeKey = `${selectedDestinationId}:${requiredPreviewDestinationIds.join(',')}:${nextRouteKey}`;
+    const shouldRestorePlanningMode = shouldRestoreHydratedRoutePlan(
+      nextRoutePlan,
+      dismissedPlanningRouteKeyRef.current
+    );
 
     if (hydratedRoutePlanKeyRef.current === hydrationScopeKey) {
       return;
@@ -1021,7 +1041,9 @@ export default function Home() {
 
     if (!hydratedRoutePlan.validAnchorEdgeIds.length && nextRoutePlan.anchorEdgeIds.length) {
       setRoutePlan(nextRoutePlan);
-      setIsPlanning(true);
+      if (shouldRestorePlanningMode) {
+        setIsPlanning(true);
+      }
       return;
     }
 
@@ -1032,7 +1054,7 @@ export default function Home() {
     );
 
     setRoutePlan(reorderedRoutePlan);
-    if (reorderedRoutePlan.anchorEdgeIds.length) {
+    if (reorderedRoutePlan.anchorEdgeIds.length && shouldRestorePlanningMode) {
       setIsPlanning(true);
     }
   }, [loadedPreviewDestinationIds, mapView, routeGraph, router.isReady, selectedDestinationId]);
@@ -2486,6 +2508,7 @@ export default function Home() {
         isPlanningMode={isPlanning}
         onEnterPlanning={handleEnterPlanning}
         onShareRoute={handleShareRoute}
+        onReloadPage={handleReloadPage}
       />
 
       {!isSettingsPanelOpen && !isInfoPanelOpen ? (
@@ -2550,6 +2573,7 @@ export default function Home() {
               setIsSettingsPanelOpen(false);
             }}
             onShareRoute={handleShareRoute}
+            onReloadPage={handleReloadPage}
           />
         </>
       ) : null}
@@ -2562,7 +2586,7 @@ export default function Home() {
         routeAnchorElevationMetrics={routeAnchorElevationMetrics}
         isMacOS={isMacOS}
         isMobileHint={isMobileInteraction}
-        onExitPlanning={() => setIsPlanning(false)}
+        onExitPlanning={handleExitPlanning}
         onClearPlan={handleClearPlan}
         onExportGpx={handleExportGpx}
         onShareRoute={handleShareRoute}

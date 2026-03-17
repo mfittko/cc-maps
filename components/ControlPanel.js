@@ -1,11 +1,11 @@
 import {
+  FaArrowsRotate,
   FaCircleInfo,
   FaLocationDot,
   FaRoute,
   FaShareNodes,
   FaXmark,
 } from 'react-icons/fa6';
-import { DESTINATION_PREP_STYLES } from '../lib/sporet';
 
 export default function ControlPanel({
   isOverlay = false,
@@ -25,6 +25,7 @@ export default function ControlPanel({
   isPlanningMode = false,
   onEnterPlanning,
   onShareRoute,
+  onReloadPage,
 }) {
   return (
     <aside
@@ -74,30 +75,12 @@ export default function ControlPanel({
                 <FaShareNodes />
                 <span>Share</span>
               </button>
+              <button type="button" className="icon-chip" onClick={onReloadPage}>
+                <FaArrowsRotate />
+                <span>Reload</span>
+              </button>
             </>
           ) : null}
-        </div>
-
-        <div className="display-mode-block">
-          <p className="detail-label">Trail colors</p>
-          <div className="segmented-control" role="tablist" aria-label="Trail color mode">
-            <button
-              type="button"
-              className={`segment-button${trailColorMode === 'type' ? ' segment-button-active' : ''}`}
-              onClick={() => onTrailColorModeChange('type')}
-              aria-pressed={trailColorMode === 'type'}
-            >
-              Type
-            </button>
-            <button
-              type="button"
-              className={`segment-button${trailColorMode === 'freshness' ? ' segment-button-active' : ''}`}
-              onClick={() => onTrailColorModeChange('freshness')}
-              aria-pressed={trailColorMode === 'freshness'}
-            >
-              Freshness
-            </button>
-          </div>
         </div>
 
         <label className="field-label" htmlFor={`destination-select${isOverlay ? '-overlay' : ''}`}>
@@ -131,16 +114,27 @@ export default function ControlPanel({
           ) : null}
         </div>
 
-        {selectedDestination ? (
-          <section className="detail-card detail-card-compact">
-            <p className="detail-label">Selected destination</p>
-            <h2>{selectedDestination.name}</h2>
-            <p>
-              {DESTINATION_PREP_STYLES[selectedDestination.prepSymbol]?.label ||
-                DESTINATION_PREP_STYLES.default.label}
-            </p>
-          </section>
-        ) : null}
+        <div className="display-mode-block">
+          <p className="detail-label">Trail colors</p>
+          <div className="segmented-control" role="tablist" aria-label="Trail color mode">
+            <button
+              type="button"
+              className={`segment-button${trailColorMode === 'type' ? ' segment-button-active' : ''}`}
+              onClick={() => onTrailColorModeChange('type')}
+              aria-pressed={trailColorMode === 'type'}
+            >
+              Type
+            </button>
+            <button
+              type="button"
+              className={`segment-button${trailColorMode === 'freshness' ? ' segment-button-active' : ''}`}
+              onClick={() => onTrailColorModeChange('freshness')}
+              aria-pressed={trailColorMode === 'freshness'}
+            >
+              Freshness
+            </button>
+          </div>
+        </div>
 
         <section className="detail-card detail-card-compact">
           <p className="detail-label">

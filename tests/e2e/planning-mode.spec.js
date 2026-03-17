@@ -245,6 +245,39 @@ test.describe('planning mode interactions', () => {
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
   });
 
+  test('closing planning mode keeps it closed when a stored route is rehydrated later', async ({
+    page,
+  }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await page.locator('.control-panel-desktop .select-input').selectOption('1');
+    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await expect(page.getByText(/^1 section/)).toBeVisible();
+    await waitForPersistedRoutePlan(page, '1', 1);
+
+    await page.getByRole('button', { name: 'Exit planning mode' }).click();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
+
+    await page.locator('.control-panel-desktop .select-input').selectOption('2');
+    await expect(page.getByRole('heading', { name: 'Østmarka' })).toBeVisible();
+
+    await page.locator('.control-panel-desktop .select-input').selectOption('1');
+    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
+  });
+
   test('planning mode can span a nearby destination sector and restore it after reload', async ({ page }) => {
     await stubAppApi(page);
     await page.goto('/');

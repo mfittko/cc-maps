@@ -9,6 +9,7 @@ import {
   getRoutePlanStorageKey,
   hydrateRoutePlan,
   readStoredRoutePlan,
+  shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
 } from '../lib/route-plan.js';
 
@@ -403,6 +404,25 @@ describe('route-plan', () => {
     it('returns null when an anchor entry is an empty string', () => {
       // Two commas with nothing between them -> one empty entry
       expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|4|4|edgeA,,edgeB`)).toBeNull();
+    });
+  });
+
+  describe('shouldRestoreHydratedRoutePlan', () => {
+    it('returns true for a persisted route that was not manually dismissed', () => {
+      const plan = createRoutePlan('7', ['edgeA'], ['7']);
+
+      expect(shouldRestoreHydratedRoutePlan(plan)).toBe(true);
+    });
+
+    it('returns false when the same route was manually dismissed', () => {
+      const plan = createRoutePlan('7', ['edgeA'], ['7']);
+
+      expect(shouldRestoreHydratedRoutePlan(plan, encodeRoutePlanToUrl(plan))).toBe(false);
+    });
+
+    it('returns false for empty or invalid route plans', () => {
+      expect(shouldRestoreHydratedRoutePlan(createRoutePlan('7', []))).toBe(false);
+      expect(shouldRestoreHydratedRoutePlan(null)).toBe(false);
     });
   });
 
