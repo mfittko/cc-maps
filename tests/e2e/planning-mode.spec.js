@@ -72,7 +72,29 @@ const trailsFixtureByDestinationId = {
   },
   '2': {
     type: 'FeatureCollection',
-    features: [],
+    features: [
+      {
+        type: 'Feature',
+        properties: {
+          id: 303,
+          destinationid: '2',
+          trailtypesymbol: 30,
+          prepsymbol: 10,
+          has_classic: true,
+          has_skating: true,
+          has_floodlight: false,
+          is_scootertrail: false,
+          warningtext: '',
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [10.77, 59.95],
+            [10.78, 59.95],
+          ],
+        },
+      },
+    ],
   },
 };
 
@@ -91,41 +113,98 @@ async function stubAppApi(page) {
 }
 
 async function emitPrimaryTrailClick(page) {
-  await page.evaluate(() => {
-    const mockMap = window.__ccMapsMockMap;
-
-    if (!mockMap) {
-      throw new Error('Mock map instance not found');
-    }
-
-    mockMap.emitLayerEvent('click', 'trails-hit-layer', {
-      features: [
-        {
-          type: 'Feature',
-          properties: {
-            id: 101,
-            destinationid: '1',
-            trailtypesymbol: 30,
-            prepsymbol: 20,
-            has_classic: true,
-            has_skating: true,
-            has_floodlight: false,
-            is_scootertrail: false,
-            warningtext: '',
-          },
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [10.75, 59.95],
-              [10.76, 59.95],
-            ],
-          },
-        },
+  await emitMapLayerClick(page, 'trails-hit-layer', {
+    type: 'Feature',
+    properties: {
+      id: 101,
+      destinationid: '1',
+      trailtypesymbol: 30,
+      prepsymbol: 20,
+      has_classic: true,
+      has_skating: true,
+      has_floodlight: false,
+      is_scootertrail: false,
+      warningtext: '',
+    },
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [10.75, 59.95],
+        [10.76, 59.95],
       ],
-      lngLat: { lng: 10.755, lat: 59.95 },
-      originalEvent: {},
-    });
-  });
+    },
+  }, { lng: 10.755, lat: 59.95 }, {});
+}
+
+async function emitPlanningTrailClick(page, layerId, feature, lngLat, originalEvent = {
+  ctrlKey: true,
+  metaKey: true,
+}) {
+  await emitMapLayerClick(page, layerId, feature, lngLat, originalEvent);
+}
+
+async function emitMapLayerClick(page, layerId, feature, lngLat, originalEvent) {
+  await page.evaluate(
+    ({ layerId: nextLayerId, feature: nextFeature, lngLat: nextLngLat, originalEvent: nextOriginalEvent }) => {
+      const mockMap = window.__ccMapsMockMap;
+
+      if (!mockMap) {
+        throw new Error('Mock map instance not found');
+      }
+
+      mockMap.emitLayerEvent('click', nextLayerId, {
+        features: [nextFeature],
+        lngLat: nextLngLat,
+        originalEvent: nextOriginalEvent,
+      });
+    },
+    { layerId, feature, lngLat, originalEvent }
+  );
+}
+
+async function waitForSuggestedTrailPreview(page, destinationId) {
+  await expect.poll(async () =>
+    page.evaluate((expectedDestinationId) => {
+      const mockMap = window.__ccMapsMockMap;
+      const source = mockMap?.getSource('suggested-trails');
+      const features = source?.data?.features || [];
+
+      return features.some(
+        (feature) => String(feature?.properties?.destinationid) === String(expectedDestinationId)
+      );
+    }, destinationId)
+  ).toBe(true);
+}
+
+async function waitForPersistedRoutePlan(page, destinationId, anchorCount) {
+  await expect.poll(async () =>
+    page.evaluate(
+      ({ expectedDestinationId, expectedAnchorCount }) => {
+        const rawStoredPlan = window.localStorage.getItem(
+          `cc-maps:settings:plan:${expectedDestinationId}`
+        );
+
+        if (!rawStoredPlan) {
+          return false;
+        }
+
+        const storedPlan = JSON.parse(rawStoredPlan);
+        const routeParam = new URLSearchParams(window.location.search).get('route') || '';
+        const routeParts = routeParam.split('|');
+        const routeAnchorCount =
+          routeParts.length >= 4 && routeParts[3]
+            ? routeParts[3].split(',').filter(Boolean).length
+            : 0;
+
+        return (
+          Array.isArray(storedPlan?.anchorEdgeIds) &&
+          storedPlan.anchorEdgeIds.length === expectedAnchorCount &&
+          routeAnchorCount === expectedAnchorCount
+        );
+      },
+      { expectedDestinationId: destinationId, expectedAnchorCount: anchorCount }
+    )
+  ).toBe(true);
 }
 
 test.describe('planning mode interactions', () => {
@@ -164,6 +243,54 @@ test.describe('planning mode interactions', () => {
 
     await page.getByRole('button', { name: 'Exit planning mode' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
+  });
+
+  test('planning mode can span a nearby destination sector and restore it after reload', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await page.locator('.control-panel-desktop .select-input').selectOption('1');
+    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+    await waitForPersistedRoutePlan(page, '1', 2);
+
+    await page.reload();
+
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await expect.poll(async () =>
+      page.locator('.planning-anchor-list li').count()
+    ).toBe(2);
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+
+    await expect.poll(async () =>
+      page.evaluate(() => {
+        const mockMap = window.__ccMapsMockMap;
+        const source = mockMap?.getSource('suggested-trails');
+        const features = source?.data?.features || [];
+
+        return features.some((feature) => String(feature?.properties?.destinationid) === '2');
+      })
+    ).toBe(true);
   });
 
   test.describe('mobile viewport', () => {

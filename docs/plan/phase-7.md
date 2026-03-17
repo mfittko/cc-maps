@@ -2,13 +2,13 @@
 
 ## Goal
 
-Add a destination-scoped planning mode that lets users assemble a ski route from multiple trail sections and persist or share the resulting plan without expanding the app into an unbounded route engine.
+Add a destination-first planning mode that lets users assemble a ski route from multiple trail sections, extend that plan into nearby destination sectors when needed, and persist or share the resulting plan without expanding the app into an unbounded route engine.
 
 ## Status
 
 Implemented for the initial planning-mode release on PR #12.
 
-The shipped scope covers destination-scoped planning mode, ordered route anchors, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Automatic connector routing was removed from the MVP scope after validation because manual route composition is sufficient for the initial release. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
+The shipped scope covers destination-first planning mode, ordered route anchors, persistence, shareable URLs, GPX export, and desktop/mobile interaction flows. Nearby destination preview sectors can now participate in a persisted route without changing the primary selected destination. Automatic connector routing was removed from the MVP scope after validation because manual route composition is sufficient for the initial release. Future follow-up work can iterate on richer reordering and additional route-summary polish without reopening the core interaction model.
 
 ## Product Intent
 
@@ -20,7 +20,7 @@ The current app is strong at exploration and single-section inspection, but it d
 4. Review a clear summary of the resulting route length and freshness profile.
 5. Keep the plan across reloads and share it with others using a compact URL.
 
-The feature should remain explicitly destination-scoped. It is not a cross-destination tour planner.
+The feature should remain explicitly bounded. It is not a general cross-destination tour planner, but it may include nearby destination preview sectors when a practical route crosses that boundary.
 
 ## Scope
 
@@ -31,7 +31,7 @@ The feature should remain explicitly destination-scoped. It is not a cross-desti
 5. Show a route summary with at least total distance and section count.
 6. Persist the current route plan in local storage.
 7. Encode the route plan into URL state so it can be reopened or shared.
-8. Keep the implementation bounded to the already loaded destination trail network.
+8. Keep the implementation bounded to the selected destination plus any nearby preview sectors explicitly required by the active plan.
 
 ## User Experience
 
@@ -56,10 +56,10 @@ The feature should remain explicitly destination-scoped. It is not a cross-desti
 
 ### Route graph
 
-- Reuse the current destination-scoped trail segmentation and crossing analysis as the basis for graph nodes and edges.
+- Reuse the current trail segmentation and crossing analysis as the basis for graph nodes and edges.
 - Treat crossings and dead-end section endpoints as graph nodes.
 - Treat navigable trail sections between those nodes as weighted edges.
-- Keep graph construction local to the active destination so runtime cost remains bounded.
+- Keep graph construction bounded to the active destination and any explicitly loaded preview sectors so runtime cost remains controlled.
 
 ### Plan model
 
@@ -111,12 +111,12 @@ This phase is likely large enough to refine into multiple child issues.
 ## Acceptance Criteria
 
 1. Users can enter and exit planning mode without breaking the existing inspection flow.
-2. Users can add multiple trail sections to an ordered route draft within the selected destination.
+2. Users can add multiple trail sections to an ordered route draft within the selected destination and nearby preview sectors when needed.
 3. Users can remove planned sections and reverse the route order.
 4. The route summary shows total length and route composition details clearly enough to review before starting.
 5. Reloading the page restores the active plan from local storage.
-6. Opening a shared planning URL restores the same destination and route plan.
-7. The feature does not trigger unbounded trail loading beyond the active destination.
+6. Opening a shared planning URL restores the same destination, route plan, and any required nearby preview sectors.
+7. The feature does not trigger unbounded trail loading beyond the active destination and explicitly required nearby preview sectors.
 8. The new pure planning helpers are covered by automated tests and keep repository coverage expectations intact.
 
 ## Verification
@@ -137,7 +137,7 @@ This phase is likely large enough to refine into multiple child issues.
 
 ## Out Of Scope
 
-- Cross-destination route planning.
+- General cross-destination route planning beyond nearby preview-sector support.
 - Turn-by-turn navigation or live GPS guidance.
 - Offline route syncing or service-worker-backed route caching.
 - Public saved-route catalogs, community route publishing, or user accounts.

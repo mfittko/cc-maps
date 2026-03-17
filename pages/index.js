@@ -180,6 +180,41 @@ function getFeatureCollectionGeoJson(features) {
   };
 }
 
+function getTrailFeatureCollectionKey(feature) {
+  return JSON.stringify([
+    feature?.properties?.destinationid || '',
+    feature?.properties?.id || '',
+    feature?.geometry?.type || '',
+    feature?.geometry?.coordinates || [],
+  ]);
+}
+
+function mergeTrailFeatureCollections(collections) {
+  const seenFeatureKeys = new Set();
+  const mergedFeatures = [];
+
+  collections.forEach((collection) => {
+    (collection?.features || []).forEach((feature) => {
+      const featureKey = getTrailFeatureCollectionKey(feature);
+
+      if (seenFeatureKeys.has(featureKey)) {
+        return;
+      }
+
+      seenFeatureKeys.add(featureKey);
+      mergedFeatures.push(feature);
+    });
+  });
+
+  return getFeatureCollectionGeoJson(mergedFeatures);
+}
+
+function getPreviewDestinationIds(destinationIds, selectedDestinationId) {
+  return [...new Set(destinationIds)].filter(
+    (destinationId) => destinationId && destinationId !== selectedDestinationId
+  );
+}
+
 function sampleTerrainElevations(map, sampledCoordinates) {
   return sampledCoordinates.map((coordinates) =>
     map.queryTerrainElevation(coordinates, { exaggerated: false })
@@ -408,6 +443,8 @@ export default function Home() {
   const [trailColorMode, setTrailColorMode] = useState(DEFAULT_TRAIL_COLOR_MODE);
   const [mapView, setMapView] = useState(null);
   const [nearbyDestinationIds, setNearbyDestinationIds] = useState([]);
+  const [plannedDestinationIds, setPlannedDestinationIds] = useState([]);
+  const [loadedPreviewDestinationIds, setLoadedPreviewDestinationIds] = useState([]);
   const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isInfoPanelOpen, setIsInfoPanelOpen] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
@@ -429,6 +466,15 @@ export default function Home() {
     : selectedTrailCrossings?.totalLengthKm || 0;
   const activeTrailLegendItems =
     trailColorMode === 'freshness' ? freshnessLegendItems : trailLegendItems;
+  const previewDestinationIds = getPreviewDestinationIds(
+    [...nearbyDestinationIds, ...plannedDestinationIds],
+    selectedDestinationId
+  );
+  const previewDestinationIdsKey = previewDestinationIds.join(',');
+  const availableTrailsGeoJson = mergeTrailFeatureCollections([
+    trailsGeoJson,
+    suggestedTrailsGeoJson,
+  ]);
 
   useEffect(() => {
     trailColorModeRef.current = trailColorMode;
@@ -508,13 +554,21 @@ export default function Home() {
   function handleSelectPlannedAnchor(edgeId) {
     const edge = routeGraphRef.current?.edges?.get(edgeId);
 
-    if (!edge || edge.trailFeatureId == null || !trailsGeoJson?.features?.length) {
+    if (!edge || edge.trailFeatureId == null || !availableTrailsGeoJson.features.length) {
       return;
     }
 
-    const sourceFeature = trailsGeoJson.features.find(
-      (feature) => String(feature?.properties?.id) === String(edge.trailFeatureId)
-    );
+    const sourceFeature = availableTrailsGeoJson.features.find((feature) => {
+      if (String(feature?.properties?.id) !== String(edge.trailFeatureId)) {
+        return false;
+      }
+
+      if (!edge.destinationId) {
+        return true;
+      }
+
+      return String(feature?.properties?.destinationid || '') === String(edge.destinationId);
+    });
 
     if (!sourceFeature) {
       return;
@@ -552,6 +606,8 @@ export default function Home() {
     setSelectedDestinationId(destinationId);
     clearSelectedTrail();
     setNearbyDestinationIds([]);
+    setPlannedDestinationIds([]);
+    setLoadedPreviewDestinationIds([]);
     setSuggestedTrailsGeoJson(null);
     setIsPlanning(false);
     setRoutePlan(null);
@@ -594,7 +650,9 @@ export default function Home() {
       return;
     }
 
-    setRoutePlan((currentPlan) => removeRoutePlanAnchor(currentPlan, selectedDestinationId, index));
+    setRoutePlan((currentPlan) =>
+      removeRoutePlanAnchor(currentPlan, selectedDestinationId, index, routeGraphRef.current)
+    );
   }
 
   function handleExportGpx() {
@@ -724,13 +782,57 @@ export default function Home() {
   }, [router.isReady, isMapLoaded, isInitialMapViewSettled, mapView]);
 
   useEffect(() => {
-    if (!trailsGeoJson?.features?.length) {
+    const mergedTrailsGeoJson = mergeTrailFeatureCollections([
+      trailsGeoJson,
+      suggestedTrailsGeoJson,
+    ]);
+
+    if (!mergedTrailsGeoJson.features.length) {
       setRouteGraph(null);
       return;
     }
 
-    setRouteGraph(buildRouteGraph(trailsGeoJson));
-  }, [trailsGeoJson]);
+    setRouteGraph(buildRouteGraph(mergedTrailsGeoJson));
+  }, [trailsGeoJson, suggestedTrailsGeoJson]);
+
+  useEffect(() => {
+    if (!selectedDestinationId) {
+      setPlannedDestinationIds([]);
+      return;
+    }
+
+    if (routePlan?.destinationId === selectedDestinationId) {
+      setPlannedDestinationIds(getPreviewDestinationIds(routePlan.destinationIds || [], selectedDestinationId));
+      return;
+    }
+
+    if (!routePlan) {
+      setPlannedDestinationIds([]);
+    }
+  }, [routePlan, selectedDestinationId]);
+
+  useEffect(() => {
+    if (!router.isReady || !selectedDestinationId || routePlan?.destinationId === selectedDestinationId) {
+      return;
+    }
+
+    const searchParams =
+      typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const routeFromUrl = decodeRoutePlanFromUrl(
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    );
+    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
+    const persistedRoutePlan =
+      routeFromUrl?.destinationId === selectedDestinationId
+        ? routeFromUrl
+        : routeFromStorage?.destinationId === selectedDestinationId
+          ? routeFromStorage
+          : null;
+
+    setPlannedDestinationIds(
+      getPreviewDestinationIds(persistedRoutePlan?.destinationIds || [], selectedDestinationId)
+    );
+  }, [routePlan, router.isReady, router.query.route, selectedDestinationId]);
 
   useEffect(() => {
     if (!router.isReady || !selectedDestinationId || !routeGraph) {
@@ -749,9 +851,21 @@ export default function Home() {
         : routeFromStorage?.destinationId === selectedDestinationId
           ? routeFromStorage
           : null;
+    const requiredPreviewDestinationIds = getPreviewDestinationIds(
+      nextRoutePlan?.destinationIds || [],
+      selectedDestinationId
+    );
+
+    if (
+      requiredPreviewDestinationIds.some(
+        (destinationId) => !loadedPreviewDestinationIds.includes(destinationId)
+      )
+    ) {
+      return;
+    }
 
     const nextRouteKey = nextRoutePlan ? encodeRoutePlanToUrl(nextRoutePlan) || '' : '';
-    const hydrationScopeKey = `${selectedDestinationId}:${nextRouteKey}`;
+    const hydrationScopeKey = `${selectedDestinationId}:${requiredPreviewDestinationIds.join(',')}:${nextRouteKey}`;
 
     if (hydratedRoutePlanKeyRef.current === hydrationScopeKey) {
       return;
@@ -787,14 +901,15 @@ export default function Home() {
 
     const reorderedRoutePlan = createRoutePlan(
       nextRoutePlan.destinationId,
-      reorderAnchorEdgeIds(hydratedRoutePlan.validAnchorEdgeIds, routeGraph)
+      reorderAnchorEdgeIds(hydratedRoutePlan.validAnchorEdgeIds, routeGraph),
+      nextRoutePlan.destinationIds
     );
 
     setRoutePlan(reorderedRoutePlan);
     if (reorderedRoutePlan.anchorEdgeIds.length) {
       setIsPlanning(true);
     }
-  }, [mapView, routeGraph, router.isReady, selectedDestinationId]);
+  }, [loadedPreviewDestinationIds, mapView, routeGraph, router.isReady, selectedDestinationId]);
 
   useEffect(() => {
     if (
@@ -1392,8 +1507,9 @@ export default function Home() {
   }, [mapReady, selectedDestinationId]);
 
   useEffect(() => {
-    if (!mapReady || !nearbyDestinationIds.length) {
+    if (!mapReady || !previewDestinationIds.length) {
       setSuggestedTrailsGeoJson(null);
+      setLoadedPreviewDestinationIds([]);
       return undefined;
     }
 
@@ -1402,45 +1518,48 @@ export default function Home() {
     async function loadSuggestedTrails() {
       try {
         const previewCollections = await Promise.all(
-          nearbyDestinationIds.map(async (destinationId) => {
-            const cachedGeoJson = readCachedTrailGeoJson(
-              destinationId,
-              MAP_SETTINGS_STORAGE_KEY,
-              TRAILS_CACHE_TTL_MS
-            );
+          previewDestinationIds.map(async (destinationId) => {
+            try {
+              const cachedGeoJson = readCachedTrailGeoJson(
+                destinationId,
+                MAP_SETTINGS_STORAGE_KEY,
+                TRAILS_CACHE_TTL_MS
+              );
 
-            if (cachedGeoJson) {
-              return cachedGeoJson;
+              if (cachedGeoJson) {
+                return cachedGeoJson;
+              }
+
+              const response = await fetch(`/api/trails?destinationid=${destinationId}`);
+
+              if (!response.ok) {
+                return getFeatureCollectionGeoJson([]);
+              }
+
+              const geojson = await response.json();
+              writeCachedTrailGeoJson(destinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
+              return geojson;
+            } catch (error) {
+              return getFeatureCollectionGeoJson([]);
             }
-
-            const response = await fetch(`/api/trails?destinationid=${destinationId}`);
-
-            if (!response.ok) {
-              throw new Error('Failed to fetch trails for nearby destinations');
-            }
-
-            const geojson = await response.json();
-            writeCachedTrailGeoJson(destinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
-            return geojson;
           })
         );
 
-        const geojson = {
-          type: 'FeatureCollection',
-          features: previewCollections.flatMap((collection) => collection.features || []),
-        };
+        const geojson = mergeTrailFeatureCollections(previewCollections);
 
         if (isCancelled) {
           return;
         }
 
         setSuggestedTrailsGeoJson(geojson);
+        setLoadedPreviewDestinationIds(previewDestinationIds);
       } catch (error) {
         if (isCancelled) {
           return;
         }
 
         setSuggestedTrailsGeoJson(null);
+        setLoadedPreviewDestinationIds(previewDestinationIds);
       }
     }
 
@@ -1449,7 +1568,7 @@ export default function Home() {
     return () => {
       isCancelled = true;
     };
-  }, [mapReady, nearbyDestinationIds]);
+  }, [mapReady, previewDestinationIdsKey]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1526,6 +1645,22 @@ export default function Home() {
 
       map.on('click', SUGGESTED_TRAILS_HIT_LAYER_ID, (event) => {
         const feature = event.features?.[0];
+        const clickedCoordinates = [event.lngLat.lng, event.lngLat.lat];
+
+        if (
+          isPlanningSelectionInteraction({
+            isPlanning: isPlanningRef.current,
+            isMobileInteraction: isMobileInteractionRef.current,
+            isMacOS: isMacOSRef.current,
+            originalEvent: event.originalEvent,
+          }) &&
+          handlePlanningAnchorSelection(feature, clickedCoordinates)
+        ) {
+          setIsSettingsPanelOpen(false);
+          setIsInfoPanelOpen(false);
+          return;
+        }
+
         const destinationId = feature?.properties?.destinationid;
 
         if (!destinationId) {
@@ -1848,7 +1983,12 @@ export default function Home() {
   }, [mapView, selectedDestinationId, selectedDestination, destinations]);
 
   useEffect(() => {
-    if (!selectedTrailFeature || !trailsGeoJson?.features?.length) {
+    const analysisTrailsGeoJson = mergeTrailFeatureCollections([
+      trailsGeoJson,
+      suggestedTrailsGeoJson,
+    ]);
+
+    if (!selectedTrailFeature || !analysisTrailsGeoJson.features.length) {
       setSelectedTrailSectionFeature(null);
       setSelectedTrailCrossings(null);
       return;
@@ -1857,7 +1997,7 @@ export default function Home() {
     const selectedSection = getClickedTrailSection(
       selectedTrailFeature,
       selectedTrailClickCoordinates,
-      trailsGeoJson,
+      analysisTrailsGeoJson,
       destinations,
       DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
       MIN_SEGMENT_DISTANCE_KM
@@ -1868,13 +2008,13 @@ export default function Home() {
       selectedSection?.crossingMetrics ||
         getCrossingMetrics(
         selectedTrailFeature,
-        trailsGeoJson,
+        analysisTrailsGeoJson,
         destinations,
         DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
         MIN_SEGMENT_DISTANCE_KM
       )
     );
-  }, [selectedTrailFeature, selectedTrailClickCoordinates, trailsGeoJson, destinations]);
+  }, [selectedTrailFeature, selectedTrailClickCoordinates, trailsGeoJson, suggestedTrailsGeoJson, destinations]);
 
   useEffect(() => {
     const map = mapRef.current;

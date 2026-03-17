@@ -56,6 +56,7 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 2. Trail responses are cached in local storage for 15 minutes to reduce repeated network requests.
 3. The selected destination's trails render as the primary network and the map fits to their extent unless the current view is intentionally being preserved.
 4. Nearby destinations can be suggested based on the active map view, and their trail networks are shown in a lighter preview style.
+5. Planning mode can add sections from those nearby preview sectors without switching the primary selected destination.
 
 ### Trail visualization and interaction
 
@@ -68,9 +69,9 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 1. Users can enter planning mode from the desktop settings panel or the mobile map overlay.
 2. Planning mode preserves the existing inspect-first trail click behavior when it is off.
 3. In planning mode, desktop uses `Cmd` or `Ctrl` assisted selection while mobile switches to tap-to-add route editing.
-4. Planned routes are shown as ordered anchor sections selected by the user.
+4. Planned routes are shown as ordered anchor sections selected by the user and may span the selected destination plus nearby preview sectors.
 5. The planning panel supports exit, clear, reverse, per-section removal, GPX export, and route sharing actions.
-6. Planned routes persist in local storage and are encoded into the URL so shared links reopen the same destination and route.
+6. Planned routes persist in local storage and are encoded into the URL so shared links reopen the same destination, route, and supporting preview sectors required to rehydrate it.
 
 ### Trail details panel
 
@@ -85,7 +86,7 @@ https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapSe
 
 1. The selected destination, color mode, and current map view are written back to the URL with `history.replaceState`.
 2. The same state is mirrored to local storage so the last view can be restored on a later visit.
-3. Planned routes are versioned, mirrored to local storage per destination, and encoded into the `route` query parameter for sharing.
+3. Planned routes are versioned, mirrored to local storage per primary destination, and encoded into the `route` query parameter with the supporting destination-sector IDs required for sharing and reload hydration.
 4. The planning panel also supports GPX export for the active route.
 
 ### Mobile and installability

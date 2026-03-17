@@ -17,7 +17,7 @@ const graphGeoJson = {
   features: [
     {
       type: 'Feature',
-      properties: { id: 101, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 101, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: {
         type: 'LineString',
         coordinates: [
@@ -28,7 +28,7 @@ const graphGeoJson = {
     },
     {
       type: 'Feature',
-      properties: { id: 101, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 101, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: {
         type: 'LineString',
         coordinates: [
@@ -39,7 +39,7 @@ const graphGeoJson = {
     },
     {
       type: 'Feature',
-      properties: { id: 202, trailtypesymbol: 20, prepsymbol: 2 },
+      properties: { id: 202, destinationid: '7', trailtypesymbol: 20, prepsymbol: 2 },
       geometry: {
         type: 'LineString',
         coordinates: [
@@ -56,23 +56,39 @@ const extendedGraphGeoJson = {
   features: [
     {
       type: 'Feature',
-      properties: { id: 301, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 301, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: { type: 'LineString', coordinates: [[10.0, 59.1], [10.01, 59.1]] },
     },
     {
       type: 'Feature',
-      properties: { id: 302, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 302, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: { type: 'LineString', coordinates: [[10.01, 59.1], [10.02, 59.1]] },
     },
     {
       type: 'Feature',
-      properties: { id: 303, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 303, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: { type: 'LineString', coordinates: [[10.02, 59.1], [10.03, 59.1]] },
     },
     {
       type: 'Feature',
-      properties: { id: 304, trailtypesymbol: 10, prepsymbol: 1 },
+      properties: { id: 304, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
       geometry: { type: 'LineString', coordinates: [[10.03, 59.1], [10.04, 59.1]] },
+    },
+  ],
+};
+
+const multiDestinationGraphGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 401, destinationid: '7', trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.0, 59.2], [10.01, 59.2]] },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 402, destinationid: '8', trailtypesymbol: 10, prepsymbol: 1 },
+      geometry: { type: 'LineString', coordinates: [[10.01, 59.2], [10.02, 59.2]] },
     },
   ],
 };
@@ -197,6 +213,16 @@ describe('planning-mode helpers', () => {
 
       expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[2], graph)).toEqual(
         createRoutePlan('7', [edgeIds[0], edgeIds[1], edgeIds[2], edgeIds[3]])
+      );
+    });
+
+    it('tracks additional destination sectors represented by selected anchors', () => {
+      const graph = buildRouteGraph(multiDestinationGraphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const initialPlan = createRoutePlan('7', [edgeIds[0]]);
+
+      expect(appendRoutePlanAnchor(initialPlan, '7', edgeIds[1], graph)).toEqual(
+        createRoutePlan('7', [edgeIds[0], edgeIds[1]], ['7', '8'])
       );
     });
 

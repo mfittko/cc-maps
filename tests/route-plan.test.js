@@ -96,6 +96,7 @@ describe('route-plan', () => {
       expect(plan).toEqual({
         version: ROUTE_PLAN_VERSION,
         destinationId: '42',
+        destinationIds: ['42'],
         anchorEdgeIds: ['edgeA', 'edgeB'],
       });
     });
@@ -108,6 +109,12 @@ describe('route-plan', () => {
     it('accepts an empty anchor list', () => {
       const plan = createRoutePlan('1', []);
       expect(plan.anchorEdgeIds).toEqual([]);
+    });
+
+    it('normalizes participating destination IDs with the primary first', () => {
+      const plan = createRoutePlan('1', ['edgeA'], ['2', '1', '2', '3']);
+
+      expect(plan.destinationIds).toEqual(['1', '2', '3']);
     });
 
     it('copies the anchorEdgeIds array (does not hold the same reference)', () => {
@@ -173,6 +180,18 @@ describe('route-plan', () => {
         JSON.stringify({ version: 999, destinationId: '4', anchorEdgeIds: [] })
       );
       expect(readStoredRoutePlan('4', storageKey)).toBeNull();
+    });
+
+    it('migrates a legacy version-1 payload from storage', () => {
+      const key = getRoutePlanStorageKey('4', storageKey);
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, destinationId: '4', anchorEdgeIds: ['edgeA'] })
+      );
+
+      expect(readStoredRoutePlan('4', storageKey)).toEqual(
+        createRoutePlan('4', ['edgeA'], ['4'])
+      );
     });
 
     it('returns null for a payload missing required fields', () => {
@@ -275,19 +294,19 @@ describe('route-plan', () => {
 
   describe('encodeRoutePlanToUrl', () => {
     it('encodes a plan with multiple anchors', () => {
-      const plan = createRoutePlan('7', ['edgeA', 'edgeB', 'edgeC']);
+      const plan = createRoutePlan('7', ['edgeA', 'edgeB', 'edgeC'], ['7', '8']);
       const encoded = encodeRoutePlanToUrl(plan);
-      expect(encoded).toBe(`${ROUTE_PLAN_VERSION}|7|edgeA,edgeB,edgeC`);
+      expect(encoded).toBe(`${ROUTE_PLAN_VERSION}|7|7;8|edgeA,edgeB,edgeC`);
     });
 
     it('encodes a plan with a single anchor', () => {
       const plan = createRoutePlan('1', ['edgeA']);
-      expect(encodeRoutePlanToUrl(plan)).toBe(`${ROUTE_PLAN_VERSION}|1|edgeA`);
+      expect(encodeRoutePlanToUrl(plan)).toBe(`${ROUTE_PLAN_VERSION}|1|1|edgeA`);
     });
 
     it('encodes a plan with no anchors', () => {
       const plan = createRoutePlan('3', []);
-      expect(encodeRoutePlanToUrl(plan)).toBe(`${ROUTE_PLAN_VERSION}|3|`);
+      expect(encodeRoutePlanToUrl(plan)).toBe(`${ROUTE_PLAN_VERSION}|3|3|`);
     });
 
     it('returns null for null input', () => {
@@ -307,7 +326,7 @@ describe('route-plan', () => {
       const edgeId = '10.750000:59.910000~10.760000:59.910000';
       const plan = createRoutePlan('4', [edgeId]);
       const encoded = encodeRoutePlanToUrl(plan);
-      expect(encoded).toBe(`${ROUTE_PLAN_VERSION}|4|${edgeId}`);
+      expect(encoded).toBe(`${ROUTE_PLAN_VERSION}|4|4|${edgeId}`);
     });
   });
 
@@ -333,6 +352,12 @@ describe('route-plan', () => {
       expect(decoded).toEqual(plan);
     });
 
+    it('migrates a legacy version-1 URL payload', () => {
+      expect(decodeRoutePlanFromUrl('1|3|edgeA,edgeB')).toEqual(
+        createRoutePlan('3', ['edgeA', 'edgeB'], ['3'])
+      );
+    });
+
     it('returns null for null input', () => {
       expect(decodeRoutePlanFromUrl(null)).toBeNull();
     });
@@ -346,7 +371,7 @@ describe('route-plan', () => {
     });
 
     it('returns null when the separator is missing', () => {
-      expect(decodeRoutePlanFromUrl('1-7-edgeA')).toBeNull();
+      expect(decodeRoutePlanFromUrl('2-7-edgeA')).toBeNull();
       expect(decodeRoutePlanFromUrl('bad')).toBeNull();
     });
 
@@ -364,16 +389,20 @@ describe('route-plan', () => {
     });
 
     it('returns null for a non-numeric destinationId', () => {
-      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|abc|edgeA`)).toBeNull();
+      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|abc|7|edgeA`)).toBeNull();
     });
 
     it('returns null for an empty destinationId', () => {
-      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}||edgeA`)).toBeNull();
+      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}||7|edgeA`)).toBeNull();
+    });
+
+    it('returns null for invalid destinationIds in version-2 payloads', () => {
+      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|4|4;bad|edgeA`)).toBeNull();
     });
 
     it('returns null when an anchor entry is an empty string', () => {
       // Two commas with nothing between them -> one empty entry
-      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|4|edgeA,,edgeB`)).toBeNull();
+      expect(decodeRoutePlanFromUrl(`${ROUTE_PLAN_VERSION}|4|4|edgeA,,edgeB`)).toBeNull();
     });
   });
 

@@ -73,7 +73,7 @@ npm run test:coverage
 7. Terrain rendering stays enabled as part of the default map presentation.
 8. Clicking a trail selects the exact interval represented by the section-distance labels, then opens its detail metadata.
 9. Nearby destination suggestions can surface around the current map view, with preview trails shown in a lighter style.
-10. Users can enter an explicit planning mode, build an ordered manual route from trail sections, reverse or prune it, and keep the same route across reloads.
+10. Users can enter an explicit planning mode, build an ordered manual route from trail sections, extend that route into nearby destination preview sectors, reverse or prune it, and keep the same route across reloads.
 11. The active route is mirrored into URL state for sharing and can be exported as GPX.
 
 ## Deferred work
