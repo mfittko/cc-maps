@@ -191,6 +191,10 @@ final class BrowseViewModel: ObservableObject {
             }
 
             routePlan.toggleAnchorEdge(anchorEdgeID)
+            routePlan.replaceAnchorEdges(with: GeoMath.reorderedAnchorEdgeIDs(
+                routePlan.anchorEdgeIDs,
+                allTrails: primaryTrails
+            ))
         } else {
             selectedTrailID = trailID
             selectedTrailSegment = selection?.segment
@@ -234,6 +238,11 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func updateVisibleRegionCenter(_ center: CLLocationCoordinate2D) {
+        if let visibleRegionCenter,
+           GeoMath.distanceKilometers(from: visibleRegionCenter, to: center) < AppConfig.previewRegionRecheckDistanceKm {
+            return
+        }
+
         visibleRegionCenter = center
         schedulePreviewEvaluation()
     }
@@ -272,6 +281,11 @@ final class BrowseViewModel: ObservableObject {
                 trailsPhase = .success
                 fitRequestID += 1
                 schedulePreviewEvaluation()
+
+                let trails = response.features
+                Task.detached(priority: .utility) {
+                    GeoMath.warmPlanningGraph(for: trails)
+                }
             } catch {
                 guard token == primaryLoadToken else {
                     return
@@ -290,7 +304,7 @@ final class BrowseViewModel: ObservableObject {
             if let self, self.timingConfig.initialFallbackDelayNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: self.timingConfig.initialFallbackDelayNanoseconds)
             }
-            await self?.applyFallbackSelectionIfNeeded()
+            self?.applyFallbackSelectionIfNeeded()
         }
     }
 
@@ -382,6 +396,10 @@ final class BrowseViewModel: ObservableObject {
         guard !previewDestinations.isEmpty else {
             previewTrails = []
             previewPhase = .success
+            let trails = primaryTrails
+            Task.detached(priority: .utility) {
+                GeoMath.warmPlanningGraph(for: trails)
+            }
             return
         }
 
