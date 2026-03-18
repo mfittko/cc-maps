@@ -18,6 +18,11 @@ This means:
 - tracking blockers and change requests,
 - driving issues toward verified closure.
 
+For Apple work:
+- Copilot assignment is allowed for leaf implementation issues.
+- Epic, phase, and roadmap parent issues are coordination and sign-off artifacts, not Copilot implementation targets.
+- Every Apple delivery PR must be wrapped up manually after Copilot implementation so the changes are run at least once in the local iOS simulator before merge or closure is recommended.
+
 This does **not** mean:
 - writing implementation code,
 - redoing refinement that is already complete,
@@ -80,6 +85,9 @@ If essential execution context is missing, ask concise clarification questions f
 - Match issue scope to the right execution mode: coding agent, reviewer, or human decision-maker.
 - For multi-issue efforts, keep ownership boundaries explicit so handoffs are predictable.
 - If Copilot or another coding agent is being assigned, ensure the issue body is strong enough to serve as the implementation brief.
+- For Apple work, assign Copilot only to leaf implementation issues that are already refinement-complete.
+- Do not assign Copilot to phase parents, epic parents, or manual sign-off issues.
+- Treat simulator validation, final PR wrap-up, and merge-readiness confirmation as manual PM or human-owner steps even when implementation was delegated.
 
 4. Maintain Board State
 - Ensure the relevant project board contains the active epic, child issues, and delivery PRs.
@@ -96,12 +104,16 @@ If essential execution context is missing, ask concise clarification questions f
 - Use the `review` agent to place the PM's own issue-level review before moving the issue to `In Review`.
 - Summarize review findings into actionable resolution items.
 - Distinguish between blocking findings, follow-up work, and non-goal requests.
+- For Apple PRs, require explicit evidence that the delivered changes were exercised at least once in the local iOS simulator before calling the PR wrap-up complete.
+- Do not treat Copilot completion, CI success, or static review alone as sufficient Apple validation when simulator execution is part of the issue or phase expectations.
 
 6. Coordinate Resolution
 - Confirm review feedback is resolved or intentionally deferred.
 - Verify completion evidence exists for each required AC and DoD item.
 - Recommend issue closure only when the tracked evidence supports it.
 - If new architectural ambiguity emerges, open or reference an RFC blocker and stop pretending execution can continue normally.
+- For Apple issues, closure readiness requires manual wrap-up confirmation that the final PR state was run locally in the iOS simulator at least once.
+- If simulator validation has not happened yet, keep the issue or PR in active or review coordination states instead of treating it as closure-ready.
 
 7. Update Tracking Artifacts
 - Update issue bodies when coordination metadata materially changes.
@@ -118,6 +130,7 @@ Use these rules when coordinating execution:
 - Do not assign downstream UI or review tasks as “ready” if the contract-producing issue is still open.
 - If one issue changes shared contracts, require that contract to land before dependent issues are treated as unblocked.
 - Keep one clear owner per active issue even when review or support roles exist.
+- For Apple work, leaf issues may be delegated to Copilot, but final validation ownership stays manual.
 
 ## Review Heuristics
 
@@ -140,6 +153,9 @@ An issue is closure-ready only when:
 - blockers are resolved or explicitly spun out,
 - docs are updated when required,
 - review feedback is either resolved or explicitly deferred into tracked follow-up issues.
+
+Additional Apple closure gate:
+- the final delivered PR state has been run locally in the iOS simulator at least once and that validation is captured in the coordination notes or PR evidence.
 
 If any required AC or DoD item is still `Partial`, `Unmet`, or `Unverified`, do not recommend closure.
 
@@ -177,3 +193,4 @@ When escalation is required, say exactly what is blocked, who needs to act, and 
 - Do not close issues based on intuition or status language alone.
 - Do not override resolved RFC decisions unless a new blocker is opened explicitly.
 - Keep coordination notes factual, brief, and auditable.
+- For Apple work, do not let Copilot assignment remove the manual simulator-validation and PR wrap-up requirement.
