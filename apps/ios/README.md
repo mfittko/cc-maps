@@ -61,7 +61,7 @@ xcodebuild test -project apps/ios/CrossCountryMaps.xcodeproj -scheme CrossCountr
 1. The iPhone target now implements the destination-first browse-and-inspect MVP.
 2. Runtime trail data still comes from the existing Next.js API routes rather than direct native Sporet access.
 3. Nearby preview destinations remain bounded to a 20 km radius and a maximum of 3 previews.
-4. Trail inspection currently uses a whole-feature fallback when exact crossing-based interval selection is not yet available.
+4. Trail inspection now resolves crossing-based intervals when the loaded geometry supports it, with whole-feature fallback only when no reliable interval can be derived.
 5. The native XCTest suite consumes the shared browse-contract fixtures under `tests/fixtures/browse-contract/` so Apple parity starts from the same contract as the web validation.
 
 ## Paired Simulator Guidance

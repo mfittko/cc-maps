@@ -308,9 +308,27 @@ struct TrailFeature: Decodable, Identifiable, Equatable {
         GeoMath.trailSegments(trail: self, allTrails: allTrails, includeMidpoints: false).count
     }
 
+    func resolvedSegment(
+        allTrails: [TrailFeature],
+        tapCoordinate: CLLocationCoordinate2D,
+        crossingMatchThresholdKm: Double = AppConfig.trailTapThresholdKm
+    ) -> TrailSegment? {
+        GeoMath.resolvedSegment(
+            for: tapCoordinate,
+            trail: self,
+            allTrails: allTrails,
+            crossingMatchThresholdKm: crossingMatchThresholdKm
+        )
+    }
+
     var shouldShowDisciplineAvailabilityLine: Bool {
         !(hasClassic == true && hasSkating == true)
     }
+}
+
+struct TrailInspectionSelection: Equatable {
+    let trailID: String
+    let segment: TrailSegment?
 }
 
 enum TrailGeometry: Decodable, Equatable {
@@ -440,6 +458,73 @@ enum GeoMath {
         }
     }
 
+    static func inspectableTrailSelection(
+        reference: CLLocationCoordinate2D,
+        trails: [TrailFeature],
+        trailMatchThresholdKm: Double,
+        crossingMatchThresholdKm: Double = 0.01
+    ) -> TrailInspectionSelection? {
+        guard let nearestTrail = trails.min(by: { left, right in
+            distanceToTrailKilometers(reference: reference, trail: left) <
+                distanceToTrailKilometers(reference: reference, trail: right)
+        }) else {
+            return nil
+        }
+
+        let nearestDistance = distanceToTrailKilometers(reference: reference, trail: nearestTrail)
+        guard nearestDistance <= trailMatchThresholdKm else {
+            return nil
+        }
+
+        return TrailInspectionSelection(
+            trailID: nearestTrail.id,
+            segment: resolvedSegment(
+                for: reference,
+                trail: nearestTrail,
+                allTrails: trails,
+                crossingMatchThresholdKm: crossingMatchThresholdKm
+            )
+        )
+    }
+
+    static func resolvedSegment(
+        for reference: CLLocationCoordinate2D,
+        trail: TrailFeature,
+        allTrails: [TrailFeature],
+        crossingMatchThresholdKm: Double = 0.01
+    ) -> TrailSegment? {
+        let segments = trailSegments(trail: trail, allTrails: allTrails, includeMidpoints: false)
+
+        guard segments.count > 1,
+              let distanceAlongTrail = distanceAlongTrailKilometers(reference: reference, trail: trail) else {
+            return nil
+        }
+
+        return segments.first { segment in
+            distanceAlongTrail >= segment.startDistanceKm - crossingMatchThresholdKm &&
+                distanceAlongTrail <= segment.endDistanceKm + crossingMatchThresholdKm
+        }
+    }
+
+    static func distanceAlongTrailKilometers(reference: CLLocationCoordinate2D, trail: TrailFeature) -> Double? {
+        var bestProjection: PolylineProjection?
+        var traversed = 0.0
+
+        for coordinates in trail.coordinateSets {
+            if let projection = nearestProjectionOnPolyline(
+                reference: reference,
+                coordinates: coordinates,
+                startingDistanceKm: traversed
+            ), bestProjection == nil || projection.distanceKm < bestProjection!.distanceKm {
+                bestProjection = projection
+            }
+
+            traversed += totalLengthKilometers(for: [coordinates])
+        }
+
+        return bestProjection?.distanceAlongTrailKm
+    }
+
     static func distanceToPolylineKilometers(reference: CLLocationCoordinate2D, coordinates: [CLLocationCoordinate2D]) -> Double {
         guard coordinates.count > 1 else {
             return Double.greatestFiniteMagnitude
@@ -478,6 +563,14 @@ enum GeoMath {
         toSegmentStart start: CLLocationCoordinate2D,
         end: CLLocationCoordinate2D
     ) -> Double {
+        projectedDistance(reference: reference, start: start, end: end).distanceKm
+    }
+
+    private static func projectedDistance(
+        reference: CLLocationCoordinate2D,
+        start: CLLocationCoordinate2D,
+        end: CLLocationCoordinate2D
+    ) -> (distanceKm: Double, progress: Double) {
         let referenceLatitude = (reference.latitude + start.latitude + end.latitude) / 3
         let projectedPoint = projectToKilometers(coordinate: reference, referenceLatitude: referenceLatitude)
         let projectedStart = projectToKilometers(coordinate: start, referenceLatitude: referenceLatitude)
@@ -486,7 +579,10 @@ enum GeoMath {
         let deltaY = projectedEnd.y - projectedStart.y
 
         if deltaX == 0 && deltaY == 0 {
-            return hypot(projectedPoint.x - projectedStart.x, projectedPoint.y - projectedStart.y)
+            return (
+                distanceKm: hypot(projectedPoint.x - projectedStart.x, projectedPoint.y - projectedStart.y),
+                progress: 0
+            )
         }
 
         let projection = (
@@ -497,7 +593,42 @@ enum GeoMath {
         let projectedX = projectedStart.x + deltaX * clampedProjection
         let projectedY = projectedStart.y + deltaY * clampedProjection
 
-        return hypot(projectedPoint.x - projectedX, projectedPoint.y - projectedY)
+        return (
+            distanceKm: hypot(projectedPoint.x - projectedX, projectedPoint.y - projectedY),
+            progress: clampedProjection
+        )
+    }
+
+    private static func nearestProjectionOnPolyline(
+        reference: CLLocationCoordinate2D,
+        coordinates: [CLLocationCoordinate2D],
+        startingDistanceKm: Double
+    ) -> PolylineProjection? {
+        guard coordinates.count > 1 else {
+            return nil
+        }
+
+        var closestProjection: PolylineProjection?
+        var traversed = startingDistanceKm
+
+        for index in 1..<coordinates.count {
+            let start = coordinates[index - 1]
+            let end = coordinates[index]
+            let segmentLength = distanceKilometers(from: start, to: end)
+            let projection = projectedDistance(reference: reference, start: start, end: end)
+            let candidate = PolylineProjection(
+                distanceKm: projection.distanceKm,
+                distanceAlongTrailKm: traversed + segmentLength * projection.progress
+            )
+
+            if closestProjection == nil || candidate.distanceKm < closestProjection!.distanceKm {
+                closestProjection = candidate
+            }
+
+            traversed += segmentLength
+        }
+
+        return closestProjection
     }
 
     private static func projectToKilometers(
@@ -667,6 +798,11 @@ struct TrailSegment: Equatable {
     var formattedDistanceLabel: String {
         String(format: "%.1f km", distanceKm)
     }
+}
+
+private struct PolylineProjection {
+    let distanceKm: Double
+    let distanceAlongTrailKm: Double
 }
 
 private extension KeyedDecodingContainer {

@@ -7,7 +7,7 @@ Phase 3 is complete.
 Closeout scope delivered:
 
 1. Native iPhone browse-and-inspect flow under `apps/ios/` with destination-first loading, manual destination selection stabilization, destination-scoped primary trail loading, bounded nearby previews, inspect-first trail tapping, and a map-first SwiftUI plus MapKit presentation.
-2. Shared fixture-backed parity coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail categories, and whole-feature inspection fallback.
+2. Shared fixture-backed parity coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail categories, interval-aware trail inspection, and whole-feature inspection fallback.
 3. Native XCTest coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail labels, bootstrap request order, manual-selection lockout, stale primary-response invalidation, and fit-trigger stability during nearby preview loading.
 4. iPhone simulator validation against the checked-in Xcode project and the local Next.js API surface.
 

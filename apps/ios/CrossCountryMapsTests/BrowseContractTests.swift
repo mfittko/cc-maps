@@ -74,6 +74,39 @@ final class BrowseContractTests: XCTestCase {
         )
     }
 
+    func testCrossingIntervalInspectionMatchesSharedFixture() throws {
+        let fixture: TrailInspectionFixture = try FixtureLoader.decode("crossing-interval-inspection.json")
+        let selection = GeoMath.inspectableTrailSelection(
+            reference: fixture.clickCoordinate,
+            trails: fixture.trails.features,
+            trailMatchThresholdKm: fixture.trailMatchThresholdKm,
+            crossingMatchThresholdKm: fixture.crossingMatchThresholdKm
+        )
+
+        XCTAssertEqual(selection?.trailID, String(fixture.expected.featureId))
+                guard let expectedSegment = fixture.expected.segment,
+                            let selectedSegment = selection?.segment else {
+                        return XCTFail("Expected a crossing-derived segment selection")
+                }
+
+                XCTAssertEqual(selectedSegment.startDistanceKm, expectedSegment.startDistanceKm, accuracy: 0.02)
+                XCTAssertEqual(selectedSegment.endDistanceKm, expectedSegment.endDistanceKm, accuracy: 0.02)
+                XCTAssertEqual(selectedSegment.distanceKm, expectedSegment.distanceKm, accuracy: 0.02)
+    }
+
+    func testWholeFeatureInspectionFallbackMatchesSharedFixture() throws {
+        let fixture: TrailInspectionFixture = try FixtureLoader.decode("whole-feature-inspection-fallback.json")
+        let selection = GeoMath.inspectableTrailSelection(
+            reference: fixture.clickCoordinate,
+            trails: fixture.trails.features,
+            trailMatchThresholdKm: fixture.trailMatchThresholdKm,
+            crossingMatchThresholdKm: fixture.crossingMatchThresholdKm
+        )
+
+        XCTAssertEqual(selection?.trailID, String(fixture.expected.featureId))
+        XCTAssertNil(selection?.segment)
+    }
+
     @MainActor
     func testBrowseBootstrapLoadsDestinationsBeforeDestinationScopedTrails() async throws {
         let apiClient = BrowseAPISpy(
@@ -321,9 +354,36 @@ private struct TrailCrossingSegmentsFixture: Decodable {
     }
 }
 
+private struct TrailInspectionFixture: Decodable {
+    let clickCoordinates: CoordinateArray
+    let crossingMatchThresholdKm: Double
+    let trailMatchThresholdKm: Double
+    let trailsGeoJson: TrailFeatureCollection
+    let expected: ExpectedTrailInspection
+
+    var clickCoordinate: CLLocationCoordinate2D {
+        clickCoordinates.coordinate
+    }
+
+    var trails: TrailFeatureCollection {
+        trailsGeoJson
+    }
+}
+
 private struct ExpectedCrossingSegments: Decodable {
     let segmentCount: Int
     let minSegmentDistanceKm: Double
+}
+
+private struct ExpectedTrailInspection: Decodable {
+    let segment: ExpectedSelectedSegment?
+    let featureId: Int
+}
+
+private struct ExpectedSelectedSegment: Decodable {
+    let startDistanceKm: Double
+    let endDistanceKm: Double
+    let distanceKm: Double
 }
 
 private struct ExpectedTrailDetail: Decodable {
@@ -541,7 +601,7 @@ private final class BrowseAPISpy: BrowseAPIClient {
 }
 
 @MainActor
-private final class LocationServiceSpy: BrowseLocationServing {
+private final class LocationServiceSpy: @preconcurrency BrowseLocationServing {
     var onLocationUpdate: ((CLLocationCoordinate2D) -> Void)?
     var onAuthorizationUnavailable: (() -> Void)?
     var startCallCount = 0

@@ -13,7 +13,7 @@ struct TrailMapView: UIViewRepresentable {
     let locationFocusRequestID: Int
     let isAutoFollowEnabled: Bool
     let onDestinationTap: (String) -> Void
-    let onTrailTap: (String?) -> Void
+    let onTrailTap: (TrailInspectionSelection?) -> Void
     let onRegionDidChange: (CLLocationCoordinate2D) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -188,20 +188,14 @@ struct TrailMapView: UIViewRepresentable {
 
             let tappedCoordinate = mapView.convert(tapPoint, toCoordinateFrom: mapView)
             let displayedTrails = parent.primaryTrails + parent.previewTrails
+            let selection = GeoMath.inspectableTrailSelection(
+                reference: tappedCoordinate,
+                trails: displayedTrails,
+                trailMatchThresholdKm: AppConfig.trailTapThresholdKm
+            )
 
-            guard let nearestTrail = displayedTrails.min(by: { left, right in
-                GeoMath.distanceToTrailKilometers(reference: tappedCoordinate, trail: left) <
-                    GeoMath.distanceToTrailKilometers(reference: tappedCoordinate, trail: right)
-            }) else {
-                DispatchQueue.main.async {
-                    self.parent.onTrailTap(nil)
-                }
-                return
-            }
-
-            let nearestDistance = GeoMath.distanceToTrailKilometers(reference: tappedCoordinate, trail: nearestTrail)
             DispatchQueue.main.async {
-                self.parent.onTrailTap(nearestDistance <= AppConfig.trailTapThresholdKm ? nearestTrail.id : nil)
+                self.parent.onTrailTap(selection)
             }
         }
 

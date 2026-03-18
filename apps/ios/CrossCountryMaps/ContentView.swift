@@ -28,8 +28,8 @@ struct ContentView: View {
                         onDestinationTap: { destinationID in
                             viewModel.selectDestination(id: destinationID, manual: true)
                         },
-                        onTrailTap: { trailID in
-                            viewModel.selectTrail(id: trailID)
+                        onTrailTap: { selection in
+                            viewModel.selectTrail(selection: selection)
                         },
                         onRegionDidChange: { center in
                             viewModel.updateVisibleRegionCenter(center)
@@ -149,7 +149,11 @@ struct ContentView: View {
     @ViewBuilder
     private var bottomOverlay: some View {
         if let trail = viewModel.selectedTrail {
-            TrailDetailCard(trail: trail, allTrails: viewModel.primaryTrails + viewModel.previewTrails) {
+            TrailDetailCard(
+                trail: trail,
+                allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                selectedSegment: viewModel.selectedTrailSegment
+            ) {
                 viewModel.selectTrail(id: nil)
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -269,10 +273,27 @@ private struct DestinationPickerSheet: View {
 private struct TrailDetailCard: View {
     let trail: TrailFeature
     let allTrails: [TrailFeature]
+    let selectedSegment: TrailSegment?
     let onClose: () -> Void
 
+    private var trailSegments: [TrailSegment] {
+        trail.trailSegments(allTrails: allTrails)
+    }
+
     private var sectionCount: Int {
-        trail.trailSegmentCount(allTrails: allTrails)
+        trailSegments.count
+    }
+
+    private var crossingCount: Int {
+        max(sectionCount - 1, 0)
+    }
+
+    private var selectedSectionIndex: Int? {
+        guard let selectedSegment else {
+            return nil
+        }
+
+        return trailSegments.firstIndex(of: selectedSegment).map { $0 + 1 }
     }
 
     var body: some View {
@@ -310,8 +331,15 @@ private struct TrailDetailCard: View {
                 detailChip(label: trail.compactGroomingLabel, systemImage: "hourglass")
                 detailChip(label: trail.formattedLengthLabel, systemImage: "ruler")
 
-                if sectionCount > 1 {
+                if let selectedSegment, let selectedSectionIndex {
+                    detailChip(label: "Section \(selectedSectionIndex)/\(sectionCount)", systemImage: "arrow.triangle.branch")
+                    detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
+                } else if sectionCount > 1 {
                     detailChip(label: "\(sectionCount) sections", systemImage: "arrow.triangle.branch")
+                }
+
+                if crossingCount > 0 {
+                    detailChip(label: "\(crossingCount) crossings", systemImage: "point.3.connected.trianglepath.dotted")
                 }
 
                 if trail.hasFloodlight == true {

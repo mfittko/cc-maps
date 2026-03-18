@@ -67,6 +67,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var locationFocusRequestID = 0
 
     @Published var selectedTrailID: String?
+    @Published private(set) var selectedTrailSegment: TrailSegment?
     @Published var visibleRegionCenter: CLLocationCoordinate2D?
 
     let locationService: BrowseLocationServing
@@ -155,6 +156,7 @@ final class BrowseViewModel: ObservableObject {
 
         selectedDestinationID = id
         selectedTrailID = nil
+        selectedTrailSegment = nil
         primaryTrails = []
         previewTrails = []
         nearbyPreviewDestinations = []
@@ -165,8 +167,14 @@ final class BrowseViewModel: ObservableObject {
         loadPrimaryTrails(for: id, token: primaryLoadToken)
     }
 
-    func selectTrail(id: String?) {
+    func selectTrail(id: String?, segment: TrailSegment? = nil) {
         selectedTrailID = id
+        selectedTrailSegment = id == nil ? nil : segment
+    }
+
+    func selectTrail(selection: TrailInspectionSelection?) {
+        selectedTrailID = selection?.trailID
+        selectedTrailSegment = selection?.segment
     }
 
     func enableAutoLocation() {
