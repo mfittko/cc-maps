@@ -12,6 +12,7 @@ This document now serves as a buildout record and status snapshot for the origin
 - Phase 5 is complete retroactive documentation of the post-MVP enhancements that shipped after the original handoff plan.
 - Phase 6 is complete: structural cleanup, responsibility splitting, and unit-test setup landed without changing product scope.
 - Phase 7 is planned: add a route-planning mode for composing and sharing multi-section ski loops without breaking the destination-first performance model.
+- Apple Phase 0 through Phase 3 are complete under `docs/iOS/`, `apps/ios/`, `contracts/route-plan/`, and `tests/fixtures/`: the Apple refinement package, monorepo placement, Xcode project foundation, shared route contract, schemas, browse fixtures, native iPhone browse MVP, and parity validation are now in the repository.
 
 ## Improvements that landed beyond the original written phase scope
 
@@ -53,6 +54,7 @@ Phase 7 is the first explicitly scoped post-cleanup feature phase. It covers a p
 - See `/docs/plan/phase-6.md` for the planned cleanup and architecture split.
 - See `/docs/plan/phase-7.md` for the planned route-planning mode and shareable multi-section course flow.
 - See `/docs/plan/README.md` for the phase index and completion notes.
+- See `/docs/iOS/PLAN.md` and `/docs/iOS/plan/README.md` for the Apple-specific phase status and completed foundation work.
 
 ## Relevant files in the current implementation
 
