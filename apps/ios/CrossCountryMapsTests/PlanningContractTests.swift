@@ -6,140 +6,144 @@ import XCTest
 
 final class PlanningContractTests: XCTestCase {
 
+    private static let edgeA = "10.750000:59.910000~10.760000:59.910000"
+    private static let edgeB = "10.760000:59.910000~10.770000:59.910000"
+    private static let edgeC = "10.770000:59.910000~10.780000:59.910000"
+
     // MARK: RoutePlanState unit tests
 
     func testInitialStateIsEmpty() {
         let plan = RoutePlanState()
         XCTAssertTrue(plan.isEmpty)
         XCTAssertEqual(plan.sectionCount, 0)
-        XCTAssertEqual(plan.anchorTrailIDs, [])
+        XCTAssertEqual(plan.anchorEdgeIDs, [])
     }
 
     func testToggleAnchorAppendsWhenAbsent() {
         var plan = RoutePlanState()
-        plan.toggleAnchor("trail-1")
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-1"])
-        XCTAssertTrue(plan.contains("trail-1"))
+        plan.toggleAnchorEdge(Self.edgeA)
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeA])
+        XCTAssertTrue(plan.contains(Self.edgeA))
     }
 
     func testToggleAnchorRemovesWhenPresent() {
-        var plan = RoutePlanState(anchorTrailIDs: ["trail-1", "trail-2"])
-        plan.toggleAnchor("trail-1")
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-2"])
-        XCTAssertFalse(plan.contains("trail-1"))
+        var plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA, Self.edgeB])
+        plan.toggleAnchorEdge(Self.edgeA)
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeB])
+        XCTAssertFalse(plan.contains(Self.edgeA))
     }
 
     func testMultipleTogglesPreserveInsertionOrder() {
         var plan = RoutePlanState()
-        plan.toggleAnchor("trail-A")
-        plan.toggleAnchor("trail-B")
-        plan.toggleAnchor("trail-C")
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-A", "trail-B", "trail-C"])
+        plan.toggleAnchorEdge(Self.edgeA)
+        plan.toggleAnchorEdge(Self.edgeB)
+        plan.toggleAnchorEdge(Self.edgeC)
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeA, Self.edgeB, Self.edgeC])
     }
 
     func testRemoveAtIndexLeavesOtherAnchorsStable() {
-        var plan = RoutePlanState(anchorTrailIDs: ["trail-A", "trail-B", "trail-C"])
+        var plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA, Self.edgeB, Self.edgeC])
         plan.removeAnchor(at: 1)
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-A", "trail-C"])
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeA, Self.edgeC])
     }
 
     func testRemoveAtOutOfBoundsIndexIsNoop() {
-        var plan = RoutePlanState(anchorTrailIDs: ["trail-A"])
+        var plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA])
         plan.removeAnchor(at: 5)
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-A"])
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeA])
     }
 
     func testReverseInvertsOrderWithoutMutatingIdentity() {
-        var plan = RoutePlanState(anchorTrailIDs: ["trail-A", "trail-B", "trail-C"])
+        var plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA, Self.edgeB, Self.edgeC])
         plan.reverse()
-        XCTAssertEqual(plan.anchorTrailIDs, ["trail-C", "trail-B", "trail-A"])
+        XCTAssertEqual(plan.anchorEdgeIDs, [Self.edgeC, Self.edgeB, Self.edgeA])
     }
 
     func testDoubleReverseRestoresOriginalOrder() {
-        let original = ["trail-A", "trail-B", "trail-C"]
-        var plan = RoutePlanState(anchorTrailIDs: original)
+        let original = [Self.edgeA, Self.edgeB, Self.edgeC]
+        var plan = RoutePlanState(anchorEdgeIDs: original)
         plan.reverse()
         plan.reverse()
-        XCTAssertEqual(plan.anchorTrailIDs, original)
+        XCTAssertEqual(plan.anchorEdgeIDs, original)
     }
 
     func testClearRemovesAllAnchors() {
-        var plan = RoutePlanState(anchorTrailIDs: ["trail-A", "trail-B"])
+        var plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA, Self.edgeB])
         plan.clear()
         XCTAssertTrue(plan.isEmpty)
-        XCTAssertEqual(plan.anchorTrailIDs, [])
+        XCTAssertEqual(plan.anchorEdgeIDs, [])
     }
 
     func testSectionCountMatchesAnchorCount() {
-        let plan = RoutePlanState(anchorTrailIDs: ["trail-A", "trail-B", "trail-C"])
+        let plan = RoutePlanState(anchorEdgeIDs: [Self.edgeA, Self.edgeB, Self.edgeC])
         XCTAssertEqual(plan.sectionCount, 3)
     }
 
     // MARK: Fixture-backed parity tests
 
-    func testOrderedTapSequenceMatchesFixture() throws {
-        let fixture: PlanningOrderedAnchorsFixture = try FixtureLoader.decode("planning-ordered-anchors.json")
+    func testOrderedTapSequenceMatchesSharedRouteFixture() throws {
+        let fixture: SharedRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
 
         var plan = RoutePlanState()
-        for trailID in fixture.tapSequence {
-            plan.toggleAnchor(trailID)
+        for edgeID in fixture.anchorEdgeIds {
+            plan.toggleAnchorEdge(edgeID)
         }
 
         XCTAssertEqual(
-            plan.anchorTrailIDs,
-            fixture.expectedAnchorIDs,
+            plan.anchorEdgeIDs,
+            fixture.anchorEdgeIds,
             "Anchor order after tap sequence must match fixture"
         )
     }
 
-    func testReverseMatchesFixture() throws {
-        let fixture: PlanningOrderedAnchorsFixture = try FixtureLoader.decode("planning-ordered-anchors.json")
+    func testReverseMatchesSharedRouteFixture() throws {
+        let fixture: SharedRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
 
-        var plan = RoutePlanState(anchorTrailIDs: fixture.expectedAnchorIDs)
+        var plan = RoutePlanState(anchorEdgeIDs: fixture.anchorEdgeIds)
         plan.reverse()
 
         XCTAssertEqual(
-            plan.anchorTrailIDs,
-            fixture.reversedAnchorIDs,
+            plan.anchorEdgeIDs,
+            Array(fixture.anchorEdgeIds.reversed()),
             "Reversed anchor order must match fixture"
         )
     }
 
-    func testRemoveAtIndex1MatchesFixture() throws {
-        let fixture: PlanningOrderedAnchorsFixture = try FixtureLoader.decode("planning-ordered-anchors.json")
+    func testRemoveAtIndex1MatchesSharedRouteFixture() throws {
+        let fixture: SharedRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
 
-        var plan = RoutePlanState(anchorTrailIDs: fixture.expectedAnchorIDs)
+        var plan = RoutePlanState(anchorEdgeIDs: fixture.anchorEdgeIds)
         plan.removeAnchor(at: 1)
 
         XCTAssertEqual(
-            plan.anchorTrailIDs,
-            fixture.afterRemovingIndex1,
+            plan.anchorEdgeIDs,
+            [fixture.anchorEdgeIds[0], fixture.anchorEdgeIds[2]],
             "Anchor list after removing index 1 must match fixture"
         )
     }
 
-    func testToggleRemoveFirstAnchorMatchesFixture() throws {
-        let fixture: PlanningOrderedAnchorsFixture = try FixtureLoader.decode("planning-ordered-anchors.json")
+    func testToggleRemoveFirstAnchorMatchesSharedRouteFixture() throws {
+        let fixture: SharedRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
 
-        var plan = RoutePlanState(anchorTrailIDs: fixture.expectedAnchorIDs)
-        plan.toggleAnchor(fixture.tapSequence[0])
+        var plan = RoutePlanState(anchorEdgeIDs: fixture.anchorEdgeIds)
+        plan.toggleAnchorEdge(fixture.anchorEdgeIds[0])
 
         XCTAssertEqual(
-            plan.anchorTrailIDs,
-            fixture.afterToggleRemoveA,
+            plan.anchorEdgeIDs,
+            Array(fixture.anchorEdgeIds.dropFirst()),
             "Toggle-removing the first anchor must match fixture"
         )
     }
 
-    func testClearMatchesFixture() throws {
-        let fixture: PlanningOrderedAnchorsFixture = try FixtureLoader.decode("planning-ordered-anchors.json")
+    func testClearMatchesSharedRouteFixture() throws {
+        let fixture: SharedRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
 
-        var plan = RoutePlanState(anchorTrailIDs: fixture.expectedAnchorIDs)
+        var plan = RoutePlanState(anchorEdgeIDs: fixture.anchorEdgeIds)
         plan.clear()
 
         XCTAssertEqual(
-            plan.anchorTrailIDs,
-            fixture.afterClear,
+            plan.anchorEdgeIDs,
+            [],
             "Anchor list after clear must match fixture"
         )
     }
@@ -187,7 +191,7 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.exitPlanningMode()
 
         XCTAssertFalse(viewModel.routePlan.isEmpty, "Route must survive planning-mode exit")
@@ -202,7 +206,7 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         XCTAssertFalse(viewModel.isInPlanningMode)
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", anchorEdgeID: Self.edgeA, segment: nil))
 
         XCTAssertEqual(viewModel.selectedTrailID, "trail-1", "Tap must open inspect when planning is off")
         XCTAssertTrue(viewModel.routePlan.isEmpty, "Route must remain empty when planning is off")
@@ -216,10 +220,10 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", anchorEdgeID: Self.edgeA, segment: nil))
 
         XCTAssertNil(viewModel.selectedTrailID, "Inspect selection must be nil when planning mode is on")
-        XCTAssertEqual(viewModel.routePlan.anchorTrailIDs, ["trail-1"], "Trail must be added to plan")
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA], "Trail must be added to plan")
     }
 
     @MainActor
@@ -244,11 +248,11 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-A", segment: nil))
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-B", segment: nil))
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-C", segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-A", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-B", anchorEdgeID: Self.edgeB, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-C", anchorEdgeID: Self.edgeC, segment: nil))
 
-        XCTAssertEqual(viewModel.routePlan.anchorTrailIDs, ["trail-A", "trail-B", "trail-C"])
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeB, Self.edgeC])
     }
 
     @MainActor
@@ -259,12 +263,12 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        for id in ["trail-A", "trail-B", "trail-C"] {
-            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: id, segment: nil))
+        for (trailID, edgeID) in [("trail-A", Self.edgeA), ("trail-B", Self.edgeB), ("trail-C", Self.edgeC)] {
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: edgeID, segment: nil))
         }
 
         viewModel.reverseRoute()
-        XCTAssertEqual(viewModel.routePlan.anchorTrailIDs, ["trail-C", "trail-B", "trail-A"])
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeC, Self.edgeB, Self.edgeA])
     }
 
     @MainActor
@@ -275,8 +279,8 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        for id in ["trail-A", "trail-B"] {
-            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: id, segment: nil))
+        for (trailID, edgeID) in [("trail-A", Self.edgeA), ("trail-B", Self.edgeB)] {
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: edgeID, segment: nil))
         }
 
         viewModel.clearRoute()
@@ -291,12 +295,12 @@ final class PlanningContractTests: XCTestCase {
             timingConfig: .immediate
         )
         viewModel.enterPlanningMode()
-        for id in ["trail-A", "trail-B", "trail-C"] {
-            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: id, segment: nil))
+        for (trailID, edgeID) in [("trail-A", Self.edgeA), ("trail-B", Self.edgeB), ("trail-C", Self.edgeC)] {
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: edgeID, segment: nil))
         }
 
         viewModel.removeRouteAnchor(at: 1)
-        XCTAssertEqual(viewModel.routePlan.anchorTrailIDs, ["trail-A", "trail-C"])
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeC])
     }
 
     @MainActor
@@ -321,7 +325,7 @@ final class PlanningContractTests: XCTestCase {
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-A", segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-A", anchorEdgeID: Self.edgeA, segment: nil))
         XCTAssertTrue(viewModel.isInPlanningMode)
         XCTAssertFalse(viewModel.routePlan.isEmpty)
 
@@ -334,13 +338,8 @@ final class PlanningContractTests: XCTestCase {
 
 // MARK: - Fixture types
 
-private struct PlanningOrderedAnchorsFixture: Decodable {
-    let tapSequence: [String]
-    let expectedAnchorIDs: [String]
-    let reversedAnchorIDs: [String]
-    let afterRemovingIndex1: [String]
-    let afterToggleRemoveA: [String]
-    let afterClear: [String]
+private struct SharedRoutePlanFixture: Decodable {
+    let anchorEdgeIds: [String]
 }
 
 // MARK: - Test helpers (mirror BrowseContractTests helpers)

@@ -324,10 +324,19 @@ struct TrailFeature: Decodable, Identifiable, Equatable {
     var shouldShowDisciplineAvailabilityLine: Bool {
         !(hasClassic == true && hasSkating == true)
     }
+
+    func planningAnchorEdgeIDs(allTrails: [TrailFeature]) -> [String] {
+        GeoMath.planningAnchorEdgeIDs(for: self, allTrails: allTrails)
+    }
+
+    func containsPlanningAnchorEdgeID(_ edgeID: String, allTrails: [TrailFeature]) -> Bool {
+        planningAnchorEdgeIDs(allTrails: allTrails).contains(edgeID)
+    }
 }
 
 struct TrailInspectionSelection: Equatable {
     let trailID: String
+    let anchorEdgeID: String?
     let segment: TrailSegment?
 }
 
@@ -478,6 +487,7 @@ enum GeoMath {
 
         return TrailInspectionSelection(
             trailID: nearestTrail.id,
+            anchorEdgeID: planningAnchorEdgeID(for: nearestTrail, reference: reference, allTrails: trails),
             segment: resolvedSegment(
                 for: reference,
                 trail: nearestTrail,
@@ -485,6 +495,29 @@ enum GeoMath {
                 crossingMatchThresholdKm: crossingMatchThresholdKm
             )
         )
+    }
+
+    static func planningAnchorEdgeIDs(for trail: TrailFeature, allTrails: [TrailFeature]) -> [String] {
+        enumeratePlanningEdges(in: allTrails)
+            .filter { $0.trailID == trail.id }
+            .map(\.edgeID)
+    }
+
+    static func planningAnchorEdgeID(
+        for trail: TrailFeature,
+        reference: CLLocationCoordinate2D,
+        allTrails: [TrailFeature]
+    ) -> String? {
+        let candidateEdges = enumeratePlanningEdges(in: allTrails).filter { $0.trailID == trail.id }
+
+        guard !candidateEdges.isEmpty else {
+            return nil
+        }
+
+        return candidateEdges.min(by: { left, right in
+            projectedDistance(reference: reference, start: left.start, end: left.end).distanceKm <
+                projectedDistance(reference: reference, start: right.start, end: right.end).distanceKm
+        })?.edgeID
     }
 
     static func resolvedSegment(
@@ -644,6 +677,56 @@ enum GeoMath {
         )
     }
 
+    private static func enumeratePlanningEdges(in trails: [TrailFeature]) -> [PlanningEdgeDescriptor] {
+        var occurrenceByBaseID: [String: Int] = [:]
+        var descriptors: [PlanningEdgeDescriptor] = []
+
+        for trail in trails {
+            for coordinates in trail.coordinateSets where coordinates.count > 1 {
+                for index in 1..<coordinates.count {
+                    let start = coordinates[index - 1]
+                    let end = coordinates[index]
+                    let baseID = canonicalEdgeBaseID(start: start, end: end)
+                    let occurrence = occurrenceByBaseID[baseID, default: 0] + 1
+                    occurrenceByBaseID[baseID] = occurrence
+
+                    descriptors.append(
+                        PlanningEdgeDescriptor(
+                            trailID: trail.id,
+                            edgeID: canonicalEdgeID(baseID: baseID, occurrence: occurrence),
+                            start: start,
+                            end: end
+                        )
+                    )
+                }
+            }
+        }
+
+        return descriptors
+    }
+
+    private static func canonicalEdgeBaseID(start: CLLocationCoordinate2D, end: CLLocationCoordinate2D) -> String {
+        let firstNodeID = canonicalNodeID(for: start)
+        let secondNodeID = canonicalNodeID(for: end)
+        let orderedNodeIDs = [firstNodeID, secondNodeID].sorted()
+        return orderedNodeIDs.joined(separator: "~")
+    }
+
+    private static func canonicalEdgeID(baseID: String, occurrence: Int) -> String {
+        occurrence > 1 ? "\(baseID):\(occurrence)" : baseID
+    }
+
+    private static func canonicalNodeID(for coordinate: CLLocationCoordinate2D) -> String {
+        let longitude = roundCoordinateComponent(coordinate.longitude)
+        let latitude = roundCoordinateComponent(coordinate.latitude)
+        return String(format: "%.6f:%.6f", longitude, latitude)
+    }
+
+    private static func roundCoordinateComponent(_ value: Double) -> Double {
+        let factor = 1_000_000.0
+        return (value * factor).rounded() / factor
+    }
+
     // MARK: - Crossing-based trail segments
 
     /// Returns the intersection coordinate of two line segments, or nil if they do not intersect.
@@ -781,6 +864,13 @@ enum GeoMath {
             )
         }
     }
+}
+
+private struct PlanningEdgeDescriptor {
+    let trailID: String
+    let edgeID: String
+    let start: CLLocationCoordinate2D
+    let end: CLLocationCoordinate2D
 }
 
 struct TrailSegment: Equatable {

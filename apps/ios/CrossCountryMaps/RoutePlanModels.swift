@@ -1,44 +1,44 @@
 import Foundation
 
-/// Ordered list of trail IDs that form a planned route.
+/// Ordered list of canonical graph edge IDs that form a planned route.
 /// Anchor identity is immutable: only order changes through explicit reverse or remove actions.
 struct RoutePlanState: Equatable {
-    private(set) var anchorTrailIDs: [String]
+    private(set) var anchorEdgeIDs: [String]
 
-    init(anchorTrailIDs: [String] = []) {
-        self.anchorTrailIDs = anchorTrailIDs
+    init(anchorEdgeIDs: [String] = []) {
+        self.anchorEdgeIDs = anchorEdgeIDs
     }
 
-    var isEmpty: Bool { anchorTrailIDs.isEmpty }
-    var sectionCount: Int { anchorTrailIDs.count }
+    var isEmpty: Bool { anchorEdgeIDs.isEmpty }
+    var sectionCount: Int { anchorEdgeIDs.count }
 
-    func contains(_ trailID: String) -> Bool {
-        anchorTrailIDs.contains(trailID)
+    func contains(_ edgeID: String) -> Bool {
+        anchorEdgeIDs.contains(edgeID)
     }
 
-    /// Appends the trail to the end of the plan if not already present.
-    /// If the trail is already in the plan, removes it (toggle semantics matching the web planner).
-    mutating func toggleAnchor(_ trailID: String) {
-        if let idx = anchorTrailIDs.firstIndex(of: trailID) {
-            anchorTrailIDs.remove(at: idx)
+    /// Appends the edge to the end of the plan if not already present.
+    /// If the edge is already in the plan, removes it (toggle semantics matching the web planner).
+    mutating func toggleAnchorEdge(_ edgeID: String) {
+        if let idx = anchorEdgeIDs.firstIndex(of: edgeID) {
+            anchorEdgeIDs.remove(at: idx)
         } else {
-            anchorTrailIDs.append(trailID)
+            anchorEdgeIDs.append(edgeID)
         }
     }
 
     /// Removes the anchor at the given index without affecting other anchor identities or their order.
     mutating func removeAnchor(at index: Int) {
-        guard anchorTrailIDs.indices.contains(index) else { return }
-        anchorTrailIDs.remove(at: index)
+        guard anchorEdgeIDs.indices.contains(index) else { return }
+        anchorEdgeIDs.remove(at: index)
     }
 
     /// Inverts anchor order without mutating anchor identities.
     mutating func reverse() {
-        anchorTrailIDs = anchorTrailIDs.reversed()
+        anchorEdgeIDs.reverse()
     }
 
     /// Removes all anchors and resets derived route state.
     mutating func clear() {
-        anchorTrailIDs.removeAll()
+        anchorEdgeIDs.removeAll()
     }
 }

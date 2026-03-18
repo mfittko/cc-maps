@@ -35,11 +35,25 @@ jobs:
           CODE_SIGNING_ALLOWED=NO
           build
 
+      - name: Resolve iPhone simulator
+        id: simulator
+        run: |
+          device_name=$(xcrun simctl list devices available | awk -F '[()]' '/iPhone/ && /Shutdown/ {gsub(/^ +| +$/, "", $1); print $1; exit}')
+
+          if [[ -z "$device_name" ]]; then
+            echo "No available iPhone simulator found" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          echo "Using simulator: $device_name"
+          echo "device_name=$device_name" >> "$GITHUB_OUTPUT"
+
       - name: Run iPhone XCTest suite with coverage
         run: >-
           xcodebuild test -project apps/ios/CrossCountryMaps.xcodeproj
           -scheme CrossCountryMaps
-          -destination 'platform=iOS Simulator,name=iPhone 16'
+          -destination 'platform=iOS Simulator,name=${{ steps.simulator.outputs.device_name }}'
           -enableCodeCoverage YES
           -resultBundlePath TestResults/CrossCountryMaps.xcresult
           CODE_SIGNING_ALLOWED=NO

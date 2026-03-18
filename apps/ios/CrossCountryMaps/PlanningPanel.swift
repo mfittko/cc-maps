@@ -60,14 +60,14 @@ struct PlanningPanel: View {
 
     private var anchorList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(plan.anchorTrailIDs.enumerated()), id: \.offset) { index, trailID in
+            ForEach(Array(plan.anchorEdgeIDs.enumerated()), id: \.element) { index, edgeID in
                 HStack(spacing: 10) {
                     Text("\(index + 1)")
                         .font(.caption.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.secondary)
                         .frame(width: 20, alignment: .trailing)
 
-                    Text(trailLabel(for: trailID))
+                    Text(trailLabel(for: edgeID))
                         .font(.footnote)
                         .lineLimit(1)
 
@@ -86,7 +86,7 @@ struct PlanningPanel: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
 
-                if index < plan.anchorTrailIDs.count - 1 {
+                if index < plan.anchorEdgeIDs.count - 1 {
                     Divider()
                         .padding(.leading, 46)
                 }
@@ -124,9 +124,9 @@ struct PlanningPanel: View {
         .padding(.vertical, 10)
     }
 
-    private func trailLabel(for trailID: String) -> String {
-        guard let trail = allTrails.first(where: { $0.id == trailID }) else {
-            return "Section \(trailID)"
+    private func trailLabel(for edgeID: String) -> String {
+        guard let trail = allTrails.first(where: { $0.containsPlanningAnchorEdgeID(edgeID, allTrails: allTrails) }) else {
+            return "Section \(edgeID)"
         }
         return "\(trail.trailTypeLabel) · \(trail.formattedLengthLabel)"
     }

@@ -186,7 +186,11 @@ final class BrowseViewModel: ObservableObject {
         }
 
         if isInPlanningMode {
-            routePlan.toggleAnchor(trailID)
+            guard let anchorEdgeID = selection?.anchorEdgeID else {
+                return
+            }
+
+            routePlan.toggleAnchorEdge(anchorEdgeID)
         } else {
             selectedTrailID = trailID
             selectedTrailSegment = selection?.segment
