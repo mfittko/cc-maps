@@ -22,6 +22,7 @@ yarn-error.log*
 coverage/
 playwright-report/
 test-results/
+TestResults/
 
 # xcode
 apps/ios/build/
