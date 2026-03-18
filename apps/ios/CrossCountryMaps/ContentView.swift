@@ -149,7 +149,7 @@ struct ContentView: View {
     @ViewBuilder
     private var bottomOverlay: some View {
         if let trail = viewModel.selectedTrail {
-            TrailDetailCard(trail: trail) {
+            TrailDetailCard(trail: trail, allTrails: viewModel.primaryTrails + viewModel.previewTrails) {
                 viewModel.selectTrail(id: nil)
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -268,7 +268,12 @@ private struct DestinationPickerSheet: View {
 
 private struct TrailDetailCard: View {
     let trail: TrailFeature
+    let allTrails: [TrailFeature]
     let onClose: () -> Void
+
+    private var sectionCount: Int {
+        trail.trailSegmentCount(allTrails: allTrails)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -304,6 +309,10 @@ private struct TrailDetailCard: View {
             HStack(spacing: 8) {
                 detailChip(label: trail.compactGroomingLabel, systemImage: "hourglass")
                 detailChip(label: trail.formattedLengthLabel, systemImage: "ruler")
+
+                if sectionCount > 1 {
+                    detailChip(label: "\(sectionCount) sections", systemImage: "arrow.triangle.branch")
+                }
 
                 if trail.hasFloodlight == true {
                     detailChip(label: "Floodlit", systemImage: "lightbulb.max")

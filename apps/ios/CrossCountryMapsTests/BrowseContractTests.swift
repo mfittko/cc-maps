@@ -57,6 +57,23 @@ final class BrowseContractTests: XCTestCase {
         XCTAssertEqual(trail.formattedLengthLabel, fixture.expected.formattedDistance)
     }
 
+    func testCrossingBasedSegmentCountMatchesSharedFixture() throws {
+        let fixture: TrailCrossingSegmentsFixture = try FixtureLoader.decode("trail-crossing-segments.json")
+        let selectedTrail = try fixture.makeSelectedTrail()
+        let allTrails = try [fixture.makeSelectedTrail()] + fixture.makeCrossingTrails()
+        let segments = selectedTrail.trailSegments(allTrails: allTrails)
+
+        XCTAssertEqual(
+            segments.count,
+            fixture.expected.segmentCount,
+            "Expected \(fixture.expected.segmentCount) crossing-based sections"
+        )
+        XCTAssertTrue(
+            segments.allSatisfy { $0.distanceKm >= fixture.expected.minSegmentDistanceKm },
+            "All segments should be at least \(fixture.expected.minSegmentDistanceKm) km"
+        )
+    }
+
     @MainActor
     func testBrowseBootstrapLoadsDestinationsBeforeDestinationScopedTrails() async throws {
         let apiClient = BrowseAPISpy(
@@ -286,6 +303,27 @@ private struct TrailDetailFixture: Decodable {
     func makeTrailFeature() throws -> TrailFeature {
         try JSONDecoder().decode(TrailFeature.self, from: JSONEncoder().encode(trailFeature))
     }
+}
+
+private struct TrailCrossingSegmentsFixture: Decodable {
+    let selectedTrail: TrailFixtureFeature
+    let crossingTrails: [TrailFixtureFeature]
+    let expected: ExpectedCrossingSegments
+
+    func makeSelectedTrail() throws -> TrailFeature {
+        try JSONDecoder().decode(TrailFeature.self, from: JSONEncoder().encode(selectedTrail))
+    }
+
+    func makeCrossingTrails() throws -> [TrailFeature] {
+        try crossingTrails.map { fixture in
+            try JSONDecoder().decode(TrailFeature.self, from: JSONEncoder().encode(fixture))
+        }
+    }
+}
+
+private struct ExpectedCrossingSegments: Decodable {
+    let segmentCount: Int
+    let minSegmentDistanceKm: Double
 }
 
 private struct ExpectedTrailDetail: Decodable {

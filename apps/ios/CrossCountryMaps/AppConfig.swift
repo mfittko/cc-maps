@@ -10,6 +10,7 @@ enum AppConfig {
     static let destinationSuggestionDebounceNanoseconds: UInt64 = 700_000_000
     static let initialFallbackDelayNanoseconds: UInt64 = 1_500_000_000
     static let trailTapThresholdKm = 0.05
+    static let trailSegmentLabelsMaxLatitudeDelta = 0.18
 
     static var isRunningTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil

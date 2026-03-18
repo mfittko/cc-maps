@@ -300,6 +300,14 @@ struct TrailFeature: Decodable, Identifiable, Equatable {
         String(format: "%.1f km", totalLengthKilometers)
     }
 
+    func trailSegments(allTrails: [TrailFeature]) -> [TrailSegment] {
+        GeoMath.trailSegments(trail: self, allTrails: allTrails)
+    }
+
+    func trailSegmentCount(allTrails: [TrailFeature]) -> Int {
+        GeoMath.trailSegments(trail: self, allTrails: allTrails, includeMidpoints: false).count
+    }
+
     var shouldShowDisciplineAvailabilityLine: Bool {
         !(hasClassic == true && hasSkating == true)
     }
@@ -503,6 +511,161 @@ enum GeoMath {
             x: coordinate.longitude * longitudeScale,
             y: coordinate.latitude * latitudeScale
         )
+    }
+
+    // MARK: - Crossing-based trail segments
+
+    /// Returns the intersection coordinate of two line segments, or nil if they do not intersect.
+    /// Segments are expressed as (start, end) pairs in (longitude, latitude) space.
+    static func segmentIntersection(
+        start1: CLLocationCoordinate2D, end1: CLLocationCoordinate2D,
+        start2: CLLocationCoordinate2D, end2: CLLocationCoordinate2D
+    ) -> CLLocationCoordinate2D? {
+        let d1Lng = end1.longitude - start1.longitude
+        let d1Lat = end1.latitude - start1.latitude
+        let d2Lng = end2.longitude - start2.longitude
+        let d2Lat = end2.latitude - start2.latitude
+        let denominator = d1Lng * d2Lat - d1Lat * d2Lng
+
+        guard abs(denominator) > 1e-12 else { return nil }
+
+        let startDeltaLng = start2.longitude - start1.longitude
+        let startDeltaLat = start2.latitude - start1.latitude
+        let factor1 = (startDeltaLng * d2Lat - startDeltaLat * d2Lng) / denominator
+        let factor2 = (startDeltaLng * d1Lat - startDeltaLat * d1Lng) / denominator
+
+        guard factor1 >= 0, factor1 <= 1, factor2 >= 0, factor2 <= 1 else { return nil }
+
+        return CLLocationCoordinate2D(
+            latitude: start1.latitude + factor1 * d1Lat,
+            longitude: start1.longitude + factor1 * d1Lng
+        )
+    }
+
+    /// Returns a coordinate linearly interpolated along `coordinateSets` at `distanceKm` from the start.
+    static func coordinateAlong(coordinateSets: [[CLLocationCoordinate2D]], distanceKm: Double) -> CLLocationCoordinate2D? {
+        var traversed = 0.0
+        for coordinates in coordinateSets {
+            for index in 1..<coordinates.count {
+                let start = coordinates[index - 1]
+                let end = coordinates[index]
+                let segmentLength = distanceKilometers(from: start, to: end)
+                if traversed + segmentLength >= distanceKm {
+                    let ratio = segmentLength == 0 ? 0 : (distanceKm - traversed) / segmentLength
+                    return CLLocationCoordinate2D(
+                        latitude: start.latitude + (end.latitude - start.latitude) * ratio,
+                        longitude: start.longitude + (end.longitude - start.longitude) * ratio
+                    )
+                }
+                traversed += segmentLength
+            }
+        }
+        // Return last coordinate when distanceKm >= total length
+        return coordinateSets.last?.last
+    }
+
+    /// Builds crossing-based trail segments for `trail` against `allTrails` in the same destination.
+    ///
+    /// Mirrors the JS `getCrossingMetrics` + `buildTrailSegments` logic.
+    /// Crossings closer than `dedupThresholdKm` to each other are merged. Segments shorter than
+    /// `minSegmentKm` are dropped.
+    static func trailSegments(
+        trail: TrailFeature,
+        allTrails: [TrailFeature],
+        minSegmentKm: Double = 0.05,
+        dedupThresholdKm: Double = 0.02,
+        includeMidpoints: Bool = true
+    ) -> [TrailSegment] {
+        let coordinateSets = trail.coordinateSets
+        var crossingDistances: [Double] = []
+        var traversed = 0.0
+
+        for coordinates in coordinateSets {
+            for index in 1..<coordinates.count {
+                let segStart = coordinates[index - 1]
+                let segEnd = coordinates[index]
+                let segLen = distanceKilometers(from: segStart, to: segEnd)
+
+                for candidate in allTrails where candidate.id != trail.id {
+                    for candidateCoords in candidate.coordinateSets {
+                        for ci in 1..<candidateCoords.count {
+                            if let intersection = segmentIntersection(
+                                start1: segStart, end1: segEnd,
+                                start2: candidateCoords[ci - 1], end2: candidateCoords[ci]
+                            ) {
+                                let distFromStart = traversed + distanceKilometers(from: segStart, to: intersection)
+                                crossingDistances.append(distFromStart)
+                            }
+                        }
+                    }
+                }
+
+                traversed += segLen
+            }
+        }
+
+        let totalLength = traversed
+
+        // Sort and dedup crossings that are very close together
+        let sortedCrossings = crossingDistances.sorted()
+        var uniqueCrossings: [Double] = []
+        for d in sortedCrossings {
+            if let last = uniqueCrossings.last, abs(last - d) < dedupThresholdKm {
+                continue
+            }
+            uniqueCrossings.append(d)
+        }
+
+        // Build path points: start + crossings + end
+        var points: [Double] = [0] + uniqueCrossings + [totalLength]
+
+        // Normalise: remove duplicate or very-close points
+        points = points.reduce(into: [Double]()) { result, point in
+            if let last = result.last, abs(last - point) < dedupThresholdKm {
+                result[result.count - 1] = point
+            } else {
+                result.append(point)
+            }
+        }
+
+        guard points.count >= 2 else { return [] }
+
+        return zip(points, points.dropFirst()).compactMap { startKm, endKm in
+            let distKm = endKm - startKm
+            guard distKm >= minSegmentKm else { return nil }
+            let midpoint: CLLocationCoordinate2D?
+
+            if includeMidpoints {
+                let midKm = startKm + distKm / 2
+                midpoint = coordinateAlong(coordinateSets: coordinateSets, distanceKm: midKm)
+            } else {
+                midpoint = nil
+            }
+
+            return TrailSegment(
+                startDistanceKm: startKm,
+                endDistanceKm: endKm,
+                distanceKm: distKm,
+                midpoint: midpoint
+            )
+        }
+    }
+}
+
+struct TrailSegment: Equatable {
+    let startDistanceKm: Double
+    let endDistanceKm: Double
+    let distanceKm: Double
+    let midpoint: CLLocationCoordinate2D?
+
+    static func == (lhs: TrailSegment, rhs: TrailSegment) -> Bool {
+        lhs.startDistanceKm == rhs.startDistanceKm &&
+        lhs.endDistanceKm == rhs.endDistanceKm &&
+        lhs.distanceKm == rhs.distanceKm
+    }
+
+    var formattedDistanceLabel: String {
+        String(format: "%.1f km", distanceKm)
     }
 }
 
