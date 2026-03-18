@@ -1,0 +1,50 @@
+{
+  "referenceCoordinates": [10.7292, 59.9668],
+  "thresholdKm": 0.05,
+  "destinations": [
+    {
+      "id": "100",
+      "name": "Sognsvann",
+      "coordinates": [10.729, 59.967]
+    },
+    {
+      "id": "200",
+      "name": "Frognerseteren",
+      "coordinates": [10.6704, 59.9798]
+    }
+  ],
+  "trailsGeoJson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "id": 501,
+          "destinationid": "100"
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [10.7289, 59.9667],
+            [10.7295, 59.9671]
+          ]
+        }
+      },
+      {
+        "type": "Feature",
+        "properties": {
+          "id": 502,
+          "destinationid": "200"
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [10.6701, 59.9796],
+            [10.6707, 59.98]
+          ]
+        }
+      }
+    ]
+  },
+  "expectedDestinationId": "100"
+}

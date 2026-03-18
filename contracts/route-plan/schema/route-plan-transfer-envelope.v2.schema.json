@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cc-maps/contracts/route-plan/schema/route-plan-transfer-envelope.v2.schema.json",
+  "title": "Route Plan Transfer Envelope v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "canonical"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "canonical": {
+      "$ref": "./route-plan-canonical.v2.schema.json"
+    },
+    "derived": {
+      "$ref": "./route-plan-derived-watch.v2.schema.json"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "canonical": {
+    "version": 2,
+    "destinationId": "100",
+    "destinationIds": ["100", "200"],
+    "anchorEdgeIds": [
+      "10.750000:59.910000~10.760000:59.910000",
+      "missing-edge",
+      "10.770000:59.910000~10.780000:59.910000"
+    ]
+  },
+  "expectedHydration": {
+    "status": "partial",
+    "validAnchorEdgeIds": [
+      "10.750000:59.910000~10.760000:59.910000",
+      "10.770000:59.910000~10.780000:59.910000"
+    ],
+    "staleAnchorEdgeIds": [
+      "missing-edge"
+    ]
+  }
+}

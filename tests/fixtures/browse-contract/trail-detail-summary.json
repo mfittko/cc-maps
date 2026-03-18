@@ -1,0 +1,33 @@
+{
+  "trailFeature": {
+    "type": "Feature",
+    "properties": {
+      "id": 701,
+      "destinationid": "100",
+      "trailtypesymbol": 30,
+      "prepsymbol": 20,
+      "has_classic": true,
+      "has_skating": true,
+      "has_floodlight": true,
+      "is_scootertrail": false,
+      "warningtext": "Icy crossing near junction"
+    },
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [10.75, 59.91],
+        [10.76, 59.91],
+        [10.77, 59.91]
+      ]
+    }
+  },
+  "expected": {
+    "trailTypeLabel": "Machine groomed",
+    "groomingLabel": "Prepared within 6 hours",
+    "compactGroomingLabel": "6h",
+    "groomingColorHex": "#20bf55",
+    "disciplineLabels": ["Classic", "Skating", "Floodlit"],
+    "warningText": "Icy crossing near junction",
+    "formattedDistance": "1.1 km"
+  }
+}

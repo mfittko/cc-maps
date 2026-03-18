@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "destinationId": "north",
+  "destinationIds": ["100", "north"],
+  "anchorEdgeIds": [
+    "10.750000:59.910000~10.760000:59.910000"
+  ]
+}

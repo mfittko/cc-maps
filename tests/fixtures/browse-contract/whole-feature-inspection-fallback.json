@@ -1,0 +1,42 @@
+{
+  "clickCoordinates": [10.75, 59.91],
+  "crossingMatchThresholdKm": 0.01,
+  "trailMatchThresholdKm": 0.05,
+  "destinations": [
+    {
+      "id": "100",
+      "name": "Primary",
+      "coordinates": [10.7522, 59.9139]
+    }
+  ],
+  "trailsGeoJson": {
+    "type": "FeatureCollection",
+    "features": [
+      {
+        "type": "Feature",
+        "properties": {
+          "id": 801,
+          "destinationid": "100",
+          "trailtypesymbol": 30,
+          "prepsymbol": 20,
+          "has_classic": true,
+          "has_skating": true,
+          "has_floodlight": false,
+          "is_scootertrail": false,
+          "warningtext": ""
+        },
+        "geometry": {
+          "type": "LineString",
+          "coordinates": [
+            [10.75, 59.91],
+            [10.7502, 59.91]
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "segment": null,
+    "featureId": 801
+  }
+}

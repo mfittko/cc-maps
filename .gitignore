@@ -23,5 +23,11 @@ coverage/
 playwright-report/
 test-results/
 
+# xcode
+apps/ios/build/
+apps/ios/**/xcuserdata/
+apps/ios/**/*.xcuserstate
+
 # system
 .DS_Store
+

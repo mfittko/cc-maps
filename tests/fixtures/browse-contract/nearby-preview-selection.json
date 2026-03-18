@@ -1,0 +1,39 @@
+{
+  "referenceCoordinates": [10.7522, 59.9139],
+  "radiusKm": 20,
+  "maxPreviews": 3,
+  "selectedDestinationId": "100",
+  "destinations": [
+    {
+      "id": "100",
+      "name": "Primary",
+      "coordinates": [10.7522, 59.9139]
+    },
+    {
+      "id": "200",
+      "name": "Preview One",
+      "coordinates": [10.7722, 59.9139]
+    },
+    {
+      "id": "300",
+      "name": "Preview Two",
+      "coordinates": [10.8022, 59.9139]
+    },
+    {
+      "id": "400",
+      "name": "Preview Three",
+      "coordinates": [10.8522, 59.9139]
+    },
+    {
+      "id": "500",
+      "name": "Preview Four",
+      "coordinates": [10.9522, 59.9139]
+    },
+    {
+      "id": "600",
+      "name": "Too Far",
+      "coordinates": [11.1522, 59.9139]
+    }
+  ],
+  "expectedDestinationIds": ["200", "300", "400"]
+}

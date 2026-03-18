@@ -1,0 +1,21 @@
+{
+  "referenceCoordinates": [10.7522, 59.9139],
+  "destinations": [
+    {
+      "id": "100",
+      "name": "Sognsvann",
+      "coordinates": [10.729, 59.967]
+    },
+    {
+      "id": "200",
+      "name": "Frognerseteren",
+      "coordinates": [10.6704, 59.9798]
+    },
+    {
+      "id": "300",
+      "name": "Skullerud",
+      "coordinates": [10.892, 59.81]
+    }
+  ],
+  "expectedDestinationId": "100"
+}

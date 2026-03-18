@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cc-maps/contracts/route-plan/schema/route-plan-derived-watch.v2.schema.json",
+  "title": "Route Plan Derived Watch v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["routeGeometry", "totalDistanceKm", "sectionSummaries"],
+  "properties": {
+    "routeLabel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "routeGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "coordinates"],
+      "properties": {
+        "type": {
+          "const": "LineString"
+        },
+        "coordinates": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "totalDistanceKm": {
+      "type": "number",
+      "minimum": 0
+    },
+    "elevationGainM": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "elevationLossM": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "sectionSummaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["anchorEdgeId", "destinationId", "distanceKm"],
+        "properties": {
+          "anchorEdgeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destinationId": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "distanceKm": {
+            "type": "number",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
