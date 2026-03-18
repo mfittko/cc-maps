@@ -37,6 +37,8 @@ KISS execution rule for this phase: keep it as a single documentation issue. The
 6. A parity inventory artifact in this phase doc or a linked Apple spec section that classifies shipped web behavior into required, simplifiable, and deferred buckets.
 7. A phase ownership map that assigns the first responsible phase for each major Apple work area.
 
+The canonical parity inventory and phase ownership map for this phase live in `docs/iOS/spec.md`.
+
 ## Detailed workstreams
 
 ### 1. Repo structure decision and boundaries
@@ -65,7 +67,9 @@ The parity inventory must classify each behavior with four fields:
 1. Behavior name.
 2. Native v1 bucket: required, allowed to simplify, or deferred.
 3. Behavioral reference source.
-4. Owning Apple phase.
+4. First responsible Apple phase.
+
+The phase field identifies the first responsible Apple phase, not the only later phase that may depend on contract, persistence, or transfer work defined earlier in the plan.
 
 At minimum, the inventory must explicitly classify these shipped web behaviors:
 
@@ -135,7 +139,8 @@ Creates downstream dependencies:
 2. State consistently that the web app is the behavioral reference for native parity.
 3. State consistently that the watch is a planned-route companion and not a route-authoring surface.
 4. State consistently that destination-first loading remains the performance boundary and that unbounded trail loading is not part of the intended Apple flow.
-5. Confirm the downstream phase order:
+5. Treat `docs/iOS/spec.md` as the canonical home of the parity inventory and phase ownership map.
+6. Confirm the downstream phase order:
 	- Phase 1 creates the Apple subtree and validates Xcode viability.
 	- Phase 2 defines the shared route contract and fixtures.
 	- Phase 3 delivers iPhone destination and trail parity.
@@ -154,7 +159,7 @@ Creates downstream dependencies:
 1. The Apple work has a documented home in the repository, including explicit reserved paths for Apple code, Apple docs, route contracts, and route fixtures.
 2. The native program has a defined phase sequence, and each later phase has a one-sentence ownership boundary that matches the Apple plan documents.
 3. The native clone strategy is explicit and leaves little room for redesign drift by stating that the shipped web app is the behavioral reference and that Apple work shares contracts and fixtures, not UI code.
-4. The parity inventory clearly identifies required, simplifiable, and deferred behaviors, and each listed behavior includes a source reference and owning Apple phase.
+4. The parity inventory clearly identifies required, simplifiable, and deferred behaviors, and each listed behavior includes a source reference and first responsible Apple phase.
 5. The route-contract work area is reserved for the next phase with concrete repo paths and a statement that Phase 2 owns the actual contract and fixture definitions.
 6. Documentation alignment is complete across the Apple docs package: no conflicting statements remain about monorepo placement, native stack, behavioral reference, watch role, or destination-first loading constraints.
 

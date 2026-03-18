@@ -1,5 +1,16 @@
 # Phase 3: Native iPhone Destination And Trail Clone MVP
 
+## Status
+
+Phase 3 is complete.
+
+Closeout scope delivered:
+
+1. Native iPhone browse-and-inspect flow under `apps/ios/` with destination-first loading, manual destination selection stabilization, destination-scoped primary trail loading, bounded nearby previews, inspect-first trail tapping, and a map-first SwiftUI plus MapKit presentation.
+2. Shared fixture-backed parity coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail categories, and whole-feature inspection fallback.
+3. Native XCTest coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail labels, bootstrap request order, manual-selection lockout, stale primary-response invalidation, and fit-trigger stability during nearby preview loading.
+4. iPhone simulator validation against the checked-in Xcode project and the local Next.js API surface.
+
 ## 1. Refined problem statement
 
 Phase 3 delivers the first real native iPhone product surface for Cross-Country maps. The goal is not to explore a new Apple-specific concept. The goal is to prove that the current shipped web product can be cloned natively with `SwiftUI` and `MapKit` while preserving the product's bounded destination-first runtime model.
@@ -72,6 +83,7 @@ Clarifying scope constraints:
 	- map-fit triggers
 	- nearby preview bounds
 	- inspect-first trail details
+7. A native XCTest target that consumes the shared browse-contract fixtures before broader iPhone UI assertions are added.
 7. Documentation updates produced during implementation if the shipped native behavior forces a justified simplification relative to this refinement.
 
 ## 4. Detailed workstreams
@@ -271,6 +283,7 @@ Required evidence package:
 2. Verify fallback selection when geolocation is unavailable or denied.
 3. Verify that a manual destination choice from the native picker suppresses later automatic destination switching.
 4. Verify that a manual destination choice from a map destination annotation behaves the same way.
+5. Keep the early fixture-backed browse contract under `tests/fixtures/browse-contract/` and validate it with `tests/browse-contract.test.js` so native parity work starts from the shipped web outcomes rather than reinterpreting them ad hoc.
 
 ### 7.3 Primary trail-scope validation
 
@@ -293,6 +306,7 @@ Required evidence package:
 3. Verify that the details surface shows trail type, classic and skating availability when present, grooming freshness, optional warning text, and computed length for interval selection when available.
 4. Verify interval selection against fixture cases where crossing-based interval resolution should be deterministic.
 5. Verify the documented fallback path when interval derivation is unavailable.
+6. Use fixture-backed contract cases for trail-detail categories and whole-feature fallback before adding native-specific UI assertions.
 
 ### 7.6 End-to-end parity review
 
@@ -306,7 +320,22 @@ Required evidence package:
 	- inspect-first trail details
 	- map-fit behavior
 
-## 8. Risks and mitigations
+## 8. Closeout evidence
+
+Validation completed for the implemented Phase 3 scope:
+
+1. Shared browse-contract fixtures pass in `tests/browse-contract.test.js`.
+2. Native browse parity tests pass in `apps/ios/CrossCountryMapsTests/BrowseContractTests.swift`.
+3. Native closeout coverage now explicitly proves request order, manual-selection stabilization, stale primary-response invalidation, and the rule that nearby preview loading does not trigger a second primary fit request.
+4. Repeated iPhone simulator build, install, launch, and manual UX review were completed against the checked-in `CrossCountryMaps.xcodeproj`.
+
+Known Phase 3 simplifications retained intentionally:
+
+1. Trail inspection remains whole-feature based in the current native MapKit implementation; deterministic interval selection and route-aware trail details remain future work.
+2. Elevation summary is not part of Phase 3 browse parity and remains in Phase 4 route-summary and route-aware detail scope.
+3. The app still depends on the existing Next.js API routes for runtime data rather than direct native Sporet access.
+
+## 9. Risks and mitigations
 
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
@@ -317,7 +346,7 @@ Required evidence package:
 | `MapKit` overlay updates become expensive or unstable. | Native browsing becomes sluggish and creates the wrong baseline for planning work. | Separate primary, preview, and selected-trail overlay concerns. Update only the overlay sets that changed. |
 | Trail-tap inspection is under-specified and degrades to whole-feature ambiguity. | The iPhone surface becomes materially weaker than the web app's inspect behavior. | Validate deterministic interval-selection fixtures first, then allow a documented whole-feature fallback only where interval resolution is not reliable. |
 
-## 9. Non-goals / out of scope
+## 10. Non-goals / out of scope
 
 1. Full route planning parity.
 2. GPX export.
@@ -330,7 +359,7 @@ Required evidence package:
 9. Pixel-identical visual replication of the web basemap, terrain presentation, or Mapbox-specific styling.
 10. General cross-destination planning or multi-destination primary trail browsing.
 
-## 10. Handoff notes for coding agent
+## 11. Handoff notes for coding agent
 
 1. Preserve the destination-first model as the core runtime boundary. If a design choice pressures the app toward loading many destinations' trails up front, reject that approach.
 2. Keep Sporet access behind the existing `/api/destinations` and `/api/trails` routes. Do not bypass the Next.js proxy in this phase.
@@ -343,7 +372,7 @@ Required evidence package:
 9. Treat simulator or device evidence as part of the phase output, not an optional afterthought.
 10. If a native platform constraint forces a simplification, record it in implementation notes and compare it directly against the corresponding web behavior instead of silently drifting.
 
-## 11. AC/DoD/Non-goal coverage table
+## 12. AC/DoD/Non-goal coverage table
 
 | Item | Type (AC/DoD/Non-goal) | Status (Met/Partial/Unmet/Unverified) | Evidence (spec/tests/behavior) | Notes |
 | --- | --- | --- | --- | --- |

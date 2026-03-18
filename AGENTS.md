@@ -97,20 +97,25 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 
 - Current proven validation command: `npm run build`
 - The repository uses Vitest for extracted pure logic and API contract coverage.
+- Work test-driven by default: define or update the contract in tests and fixtures before or alongside implementation, especially when behavior is derived from the shipped web app.
+- For Apple work, start from shared parity fixtures and contract tests before expanding native UI code so the iPhone and watch implementations clone web behavior instead of reinterpreting it.
 - CI must run `npm run test:coverage` and fail if coverage drops below 90% for lines, statements, branches, or functions across the covered modules.
 - Use `npm ci` for dependency installation when the lockfile is present.
 - For focused work, prefer targeted tests first, then finish with `npm run test:coverage` and `npm run build` when the change affects shared logic or shipped behavior.
 - Prefer testing pure logic such as geometry helpers, trail analysis, persistence helpers, and request-shaping utilities over brittle UI-heavy tests as a first step.
+- When adding a new behavior contract, prefer fixture-backed tests that encode the current web outcome and let downstream native work consume the same fixtures.
 - If coverage reveals dead or unreachable code, remove that code instead of writing tests whose only purpose is to cover it.
 
 ## Working rules for future agents
 
 - Read the relevant phase docs before changing scope-sensitive behavior.
 - If you change runtime behavior, update `README.md`, `docs/spec.md`, and any affected phase docs.
+- Treat test design as part of implementation, not a follow-up task: add or adjust the relevant tests early enough that they define the intended behavior before the code settles.
 - Prefer focused changes over broad rewrites.
 - Prefer the built-in file edit tool for code changes instead of shell redirection, ad hoc scripting, or Python wrappers that write files indirectly.
 - If you notice undocumented shipped behavior, document it instead of leaving it implicit.
 - If you are refactoring, make the safety net stronger as you go: extract pure logic, then test it.
+- If you are cloning web behavior into Apple code, capture parity with fixtures or contract tests first, then implement against that contract.
 - If the task is unclear about whether it is feature work or cleanup work, default to preserving current behavior and ask only if the distinction materially affects the outcome.
 
 ## Multi-agent workflow

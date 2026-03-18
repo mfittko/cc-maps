@@ -10,6 +10,7 @@ The codebase is no longer just at the original MVP baseline. In addition to the 
 - The primary flow is destination-first and does not depend on an unbounded trail fetch.
 - Minimal PWA metadata is present through the manifest and app icons, but there is no service worker or offline caching layer.
 - A few map UX improvements shipped outside the original written phase scope and are now documented in this repository.
+- The Apple work is no longer just planned: Apple Phase 0 through Phase 3 are complete, and the repository now contains the native foundation subtree under `apps/ios/`, the shared route-contract package under `contracts/route-plan/`, iPhone browse parity coverage, and Apple phase tracking under `docs/iOS/`.
 
 ## Main files
 

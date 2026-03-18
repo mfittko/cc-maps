@@ -153,6 +153,64 @@ The native Apple work should follow these explicit simplification rules:
 4. When a choice exists between a clever Apple-specific redesign and a straightforward clone of existing behavior, prefer the straightforward clone.
 5. Keep the watch scope intentionally small: use planned routes on watch rather than full route authoring.
 
+## Native V1 Parity Inventory
+
+This inventory is the canonical Phase 0 parity artifact. Later Apple phases should consume this table instead of reclassifying shipped web behavior ad hoc.
+
+The phase column identifies the first responsible Apple phase for a behavior, not the only phase that may depend on earlier contract, hydration, or transfer work.
+
+For parity review, bounded nearby preview behavior means a 20 km suggestion radius, at most 3 preview destinations, and debounced recalculation in browse mode. Route-planning participation may only extend beyond the primary destination when the active route requires nearby sectors already allowed by the bounded planner model.
+
+### Required shipped behavior
+
+| Behavior | Native v1 bucket | Behavioral reference source | First responsible Apple phase |
+| --- | --- | --- | --- |
+| Destination-first loading flow | Required | `README.md`; `docs/spec.md` Destination-first flow | Phase 3 |
+| Destination selection and stable manual-selection behavior | Required | `README.md`; `docs/spec.md` Destination-first flow | Phase 3 |
+| Destination-scoped trail loading | Required | `README.md`; `docs/spec.md` Trail loading and rendering | Phase 3 |
+| Nearby destination suggestions and bounded preview trail rendering in browse mode | Required | `README.md`; `docs/spec.md` Trail loading and rendering | Phase 3 |
+| Trail inspection and trail detail summaries | Required | `README.md`; `docs/spec.md` Trail details panel | Phase 3 |
+| Inspect-first behavior outside planning mode | Required | `README.md`; `docs/spec.md` Planning mode and route sharing | Phase 4 |
+| Route-required nearby preview-sector participation in planning and hydration | Required | `docs/spec.md` Planning mode and route sharing; `docs/plan/phase-7.md` | Phase 4 |
+| Ordered-anchor route planning | Required | `README.md`; `docs/spec.md` Planning mode and route sharing; `docs/plan/phase-7.md` | Phase 4 |
+| Route persistence across reload or relaunch | Required | `README.md`; `docs/spec.md` Persistence and shareability; `docs/plan/phase-7.md` | Phase 4 |
+| Shareable route state or URL semantics | Required | `README.md`; `docs/spec.md` Persistence and shareability; `docs/plan/phase-7.md` | Phase 4 |
+| GPX export | Required | `README.md`; `docs/spec.md` Planning mode and route sharing | Phase 4 |
+| Route-aware trail details outside planning mode | Required | `README.md`; `docs/spec.md` Trail details panel | Phase 4 |
+| Planned-route send-to-watch action | Required | Explicit Apple request inputs in this spec; `docs/iOS/plan/phase-0.md` | Phase 5 |
+
+### Allowed simplifications for native v1
+
+| Simplification | Native v1 bucket | Behavioral reference source | First responsible Apple phase |
+| --- | --- | --- | --- |
+| Visual styling differences caused by MapKit replacing Mapbox GL JS | Allowed to simplify | `docs/iOS/spec.md` Decision Summary; Simplicity Rules | Phase 3 |
+| Small layout differences caused by SwiftUI control patterns | Allowed to simplify | `docs/iOS/spec.md` Simplicity Rules | Phase 3 |
+| Watch-specific reduction of route detail density | Allowed to simplify | `docs/iOS/spec.md` Apple Watch app; UX Requirements | Phase 6 |
+| Native adaptation of share surfaces so long as share, export, and send-to-watch remain distinct actions | Allowed to simplify | `docs/iOS/spec.md` UX Requirements | Phase 4 |
+
+### Deferred from native v1 unless later promoted
+
+| Deferred behavior | Native v1 bucket | Behavioral reference source | First responsible Apple phase |
+| --- | --- | --- | --- |
+| Any major new workflow not already present on the web | Deferred | `docs/iOS/spec.md` Non-goals | None; requires scope change |
+| Offline-first sync and offline route packages | Deferred | `docs/iOS/spec.md` Non-goals | None; requires scope change |
+| Turn-by-turn navigation or workout-engine features | Deferred | `docs/iOS/spec.md` Non-goals | None; requires scope change |
+| Public saved-route catalogs or user accounts | Deferred | `docs/iOS/spec.md` Non-goals | None; requires scope change |
+
+## Phase Ownership Map
+
+This table assigns the first responsible Apple phase for each major work area so later phases do not reopen earlier structural decisions.
+
+| Work area | First responsible phase | Ownership boundary |
+| --- | --- | --- |
+| Monorepo placement, Apple docs package, and parity governance | Phase 0 | Decide repo shape, parity boundaries, and phase sequencing only |
+| Apple subtree, Xcode project, targets, schemes, and buildability | Phase 1 | Create `apps/ios/` and validate native shells without feature scope |
+| Shared route contract, migrations, schemas, and fixtures | Phase 2 | Define canonical versus derived payload rules and fixture set |
+| iPhone destination browsing, destination selection, trail loading, nearby suggestions, and inspection | Phase 3 | Deliver browse-and-inspect parity without planner scope |
+| iPhone planning, persistence, share semantics, GPX export, and route-aware details | Phase 4 | Deliver planning parity without watch transfer ownership |
+| Phone-owned watch delivery, acknowledgements, retries, and persistence handoff | Phase 5 | Deliver reliable send-to-watch behavior using the Phase 2 envelope |
+| Watch route review, lightweight map, active-use context, and release alignment | Phase 6 | Deliver the watch companion experience without route authoring |
+
 ## Monorepo Structure
 
 The Apple work should be added as a clearly bounded product subtree.

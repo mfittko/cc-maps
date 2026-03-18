@@ -1,5 +1,24 @@
 # Phase 2: Shared Route Contract And Fixtures
 
+## 0. Implementation status
+
+Status: complete.
+
+Delivered in the repository:
+
+1. `contracts/route-plan/README.md` defines the canonical payload, derived watch payload, transfer envelope, hydration rules, and storage boundaries.
+2. `contracts/route-plan/schema/` contains versioned JSON Schema artifacts for the canonical route payload, derived watch payload, and transfer envelope.
+3. `contracts/route-plan/migrations.md` documents current web URL parity, local-storage parity, normalization expectations, legacy version migration, and stale-anchor semantics.
+4. `contracts/route-plan/parity.md` maps the fixture set to the current shipped web helper rules.
+5. `tests/fixtures/route-plan/` contains canonical, transfer, migration, partial-hydration, normalization, empty-route, and invalid-payload fixtures.
+6. `tests/route-plan-contract.test.js` validates the fixture set against the current route-plan and route-graph helpers.
+
+Validation completed:
+
+1. Fixture-backed parity tests pass for canonical URL round-trip, legacy v1 migration, partial hydration, empty hydration, destination-id normalization, and invalid-payload rejection.
+2. The shipped route-plan helper now rejects empty anchor identifiers consistently across storage and URL semantics.
+3. `npm run build` succeeds with the Phase 2 contract artifacts in place.
+
 ## 1. Refined problem statement
 
 The web app already ships a bounded, compact route-plan identity and deterministic route-graph edge identifiers, but that behavior currently lives as implementation detail in web helpers rather than as a cross-platform contract package. Phase 2 exists to turn the shipped web semantics into an explicit, versioned, platform-neutral contract that later iPhone and Apple Watch phases can consume without guessing.

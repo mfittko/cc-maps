@@ -1,5 +1,26 @@
 # Phase 1: Apple Project Foundation And Early Xcode Validation
 
+## 0. Implementation status
+
+Status: complete.
+
+Delivered in the repository:
+
+1. `apps/ios/` exists as the Apple subtree.
+2. `apps/ios/CrossCountryMaps.xcodeproj` is checked in with shared `CrossCountryMaps` and `CrossCountryMapsWatch` schemes.
+3. `apps/ios/Config/` contains checked-in base, debug, and release xcconfig files.
+4. `apps/ios/CrossCountryMaps/` contains the minimal iPhone SwiftUI shell with a bounded MapKit surface.
+5. `apps/ios/CrossCountryMapsWatch/` contains the minimal Apple Watch SwiftUI companion shell.
+6. `apps/ios/README.md` documents prerequisites, build paths, run paths, signing notes, and paired simulator guidance.
+
+Validation completed:
+
+1. `xcodebuild -list -project apps/ios/CrossCountryMaps.xcodeproj` exposes both expected targets and shared schemes.
+2. The `CrossCountryMaps` scheme builds successfully for an iOS simulator.
+3. The `CrossCountryMapsWatch` scheme builds successfully for a watchOS simulator.
+4. A paired iPhone and Apple Watch simulator set was created and booted successfully for validation.
+5. Both `com.mfittko.ccmaps` and `com.mfittko.ccmaps.watch` were installed and launched successfully in Simulator.
+
 ## 1. Refined problem statement
 
 Create the first real Apple project structure for Cross-Country maps under `apps/ios/`, prove that the iPhone app and Apple Watch companion are viable Xcode targets, and surface project-level blockers before feature work begins.
