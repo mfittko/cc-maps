@@ -32,3 +32,4 @@ apps/ios/**/*.xcuserstate
 # system
 .DS_Store
 
+.build/
