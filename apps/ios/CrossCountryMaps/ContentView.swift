@@ -20,7 +20,10 @@ struct ContentView: View {
                         nearbyPreviewDestinationIDs: Set(viewModel.nearbyPreviewDestinations.map(\.id)),
                         primaryTrails: viewModel.primaryTrails,
                         previewTrails: viewModel.previewTrails,
+                        routePlan: viewModel.routePlan,
+                        isInPlanningMode: viewModel.isInPlanningMode,
                         selectedTrailID: viewModel.selectedTrailID,
+                        selectedTrailSegment: viewModel.selectedTrailSegment,
                         fitRequestID: viewModel.fitRequestID,
                         currentLocation: viewModel.currentLocation,
                         locationFocusRequestID: viewModel.locationFocusRequestID,
@@ -151,7 +154,7 @@ struct ContentView: View {
         if viewModel.isInPlanningMode {
             PlanningPanel(
                 plan: viewModel.routePlan,
-                allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                allTrails: viewModel.primaryTrails,
                 onExitPlanning: { viewModel.exitPlanningMode() },
                 onReverse: { viewModel.reverseRoute() },
                 onClear: { viewModel.clearRoute() },
@@ -332,8 +335,10 @@ private struct TrailDetailCard: View {
                         .tracking(1.4)
                         .foregroundStyle(.secondary)
 
-                    Text(trail.trailTypeLabel)
-                        .font(.title3.weight(.bold))
+                    if trail.trailTypeSymbol != 30 {
+                        Text(trail.trailTypeLabel)
+                            .font(.title3.weight(.bold))
+                    }
                 }
 
                 Spacer()

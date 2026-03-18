@@ -8,6 +8,19 @@ struct PlanningPanel: View {
     let onClear: () -> Void
     let onRemove: (Int) -> Void
 
+    private var plannedSections: [PlanningSection] {
+        GeoMath.planningSections(for: plan.anchorEdgeIDs, allTrails: allTrails)
+    }
+
+    private var anchorListHeight: CGFloat {
+        let rowHeight: CGFloat = 35
+        return CGFloat(plan.anchorEdgeIDs.count) * rowHeight
+    }
+
+    private var scrollAreaMaxHeight: CGFloat {
+        UIScreen.main.bounds.height * 0.35
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
@@ -15,7 +28,11 @@ struct PlanningPanel: View {
             if plan.isEmpty {
                 emptyState
             } else {
-                anchorList
+                ScrollView {
+                    anchorList
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: min(anchorListHeight, scrollAreaMaxHeight))
                 Divider()
                     .padding(.horizontal, 16)
                 actionRow
@@ -63,11 +80,11 @@ struct PlanningPanel: View {
             ForEach(Array(plan.anchorEdgeIDs.enumerated()), id: \.element) { index, edgeID in
                 HStack(spacing: 10) {
                     Text("\(index + 1)")
-                        .font(.caption.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 20, alignment: .trailing)
+                        .font(.caption.monospacedDigit().weight(.bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 22, alignment: .trailing)
 
-                    Text(trailLabel(for: edgeID))
+                    Text(trailLabel(for: edgeID, index: index))
                         .font(.footnote)
                         .lineLimit(1)
 
@@ -124,10 +141,19 @@ struct PlanningPanel: View {
         .padding(.vertical, 10)
     }
 
-    private func trailLabel(for edgeID: String) -> String {
+    private func trailLabel(for edgeID: String, index: Int) -> String {
         guard let trail = allTrails.first(where: { $0.containsPlanningAnchorEdgeID(edgeID, allTrails: allTrails) }) else {
             return "Section \(edgeID)"
         }
-        return "\(trail.trailTypeLabel) · \(trail.formattedLengthLabel)"
+
+        let distanceLabel = plannedSections.indices.contains(index)
+            ? plannedSections[index].formattedDistanceLabel
+            : trail.formattedLengthLabel
+
+        if trail.trailTypeSymbol == 30 {
+            return distanceLabel
+        }
+
+        return "\(trail.trailTypeLabel) · \(distanceLabel)"
     }
 }
