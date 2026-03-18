@@ -475,6 +475,7 @@ describe('map-domain', () => {
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(trailsGeoJson, destinations, 1.25, 0.05);
     expect(labelsGeoJson.features.length).toBeGreaterThan(0);
     expect(labelsGeoJson.features[0].properties.label).toMatch(/km$/);
+    expect(labelsGeoJson.features[0].properties.distanceKm).toBeGreaterThan(0);
   });
 
   it('filters segment labels to the active traversal when provided', () => {

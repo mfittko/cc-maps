@@ -83,7 +83,7 @@ const DEM_SOURCE_ID = 'mapbox-dem';
 const BUILDINGS_LAYER_ID = '3d-buildings';
 const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
 const MIN_SEGMENT_DISTANCE_KM = 0.05;
-const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 12;
+const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 10.5;
 const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
@@ -2540,22 +2540,13 @@ export default function Home() {
         type: 'geojson',
         data: labelsGeoJson,
       });
+    }
 
-      map.addLayer({
-        id: TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID,
-        type: 'circle',
-        source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
-        minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 13, 12, 18],
-          'circle-color': 'rgba(248, 252, 248, 0.82)',
-          'circle-blur': 0.75,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': 'rgba(255, 255, 255, 0.95)',
-          'circle-opacity': 0.95,
-        },
-      });
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
+      map.removeLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
+    }
 
+    if (!map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
       map.addLayer({
         id: TRAIL_SEGMENT_LABELS_LAYER_ID,
         type: 'symbol',
@@ -2563,12 +2554,14 @@ export default function Home() {
         minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
         layout: {
           'text-field': ['get', 'label'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 8, 11, 12, 13],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 13],
           'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
           'text-offset': [0, 0],
           'text-anchor': 'center',
-          'text-allow-overlap': true,
-          'text-ignore-placement': true,
+          'text-padding': 2,
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'distanceKm'], 0]],
           'symbol-placement': 'point',
         },
         paint: {
@@ -2578,10 +2571,6 @@ export default function Home() {
           'text-halo-blur': 1,
         },
       });
-    }
-
-    if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
-      map.moveLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
     }
 
     if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
