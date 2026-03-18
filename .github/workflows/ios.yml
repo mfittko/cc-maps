@@ -4,7 +4,19 @@ on:
   push:
     branches:
       - main
+    paths:
+      - .github/workflows/**
+      - apps/ios/**
+      - docs/iOS/**
+      - contracts/route-plan/**
+      - tests/fixtures/route-plan/**
   pull_request:
+    paths:
+      - .github/workflows/**
+      - apps/ios/**
+      - docs/iOS/**
+      - contracts/route-plan/**
+      - tests/fixtures/route-plan/**
 
 jobs:
   ios-build-and-test:
@@ -44,20 +56,36 @@ jobs:
       - name: Resolve iPhone simulator
         id: simulator
         run: |
-          destinations_file=$(mktemp)
-          xcodebuild -project apps/ios/CrossCountryMaps.xcodeproj \
-            -scheme CrossCountryMaps \
-            -showdestinations > "$destinations_file"
+          simulator_json=$(mktemp)
+          xcrun simctl list devices available --json > "$simulator_json"
+          cat "$simulator_json"
 
-          cat "$destinations_file"
+          simulator=$(
+            /usr/bin/ruby -rjson -e '
+              devices = JSON.parse(File.read(ARGV[0])).fetch("devices", {})
+              ios_runtime, ios_devices = devices
+                .select { |runtime, _| runtime.start_with?("com.apple.CoreSimulator.SimRuntime.iOS-") }
+                .sort_by do |runtime, _|
+                  runtime.sub("com.apple.CoreSimulator.SimRuntime.iOS-", "")
+                    .split("-")
+                    .map(&:to_i)
+                end
+                .last
 
-          simulator_line=$(awk '/platform:iOS Simulator/ && /id:/ && $0 !~ /placeholder/ {print; exit}' "$destinations_file")
+              selected_device = Array(ios_devices).find { |device| device["isAvailable"] && device["name"].start_with?("iPhone") }
 
-          device_name=$(printf '%s\n' "$simulator_line" | awk -F '[,:}]' '{for (i = 1; i <= NF; i += 1) if ($i ~ /name/) {gsub(/^ +| +$/, "", $(i + 1)); print $(i + 1)}}')
-          device_udid=$(printf '%s\n' "$simulator_line" | awk -F '[,:}]' '{for (i = 1; i <= NF; i += 1) if ($i ~ /id/) {gsub(/^ +| +$/, "", $(i + 1)); print $(i + 1)}}')
-          device_os=$(printf '%s\n' "$simulator_line" | awk -F '[,:}]' '{for (i = 1; i <= NF; i += 1) if ($i ~ /OS/) {gsub(/^ +| +$/, "", $(i + 1)); print $(i + 1)}}')
+              if ios_runtime.nil? || selected_device.nil?
+                exit 1
+              end
 
-          if [[ -z "$device_name" || -z "$device_udid" ]]; then
+              runtime_version = ios_runtime.sub("com.apple.CoreSimulator.SimRuntime.iOS-", "").tr("-", ".")
+              puts [selected_device.fetch("name"), selected_device.fetch("udid"), runtime_version].join("\t")
+            ' "$simulator_json"
+          ) || true
+
+          IFS=$'\t' read -r device_name device_udid device_os <<< "$simulator"
+
+          if [[ -z "$device_name" || -z "$device_udid" || -z "$device_os" ]]; then
             echo "No eligible iPhone simulator destination found for CrossCountryMaps" >&2
             xcrun simctl list devices available
             exit 1
