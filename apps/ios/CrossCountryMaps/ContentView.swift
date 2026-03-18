@@ -148,7 +148,17 @@ struct ContentView: View {
 
     @ViewBuilder
     private var bottomOverlay: some View {
-        if let trail = viewModel.selectedTrail {
+        if viewModel.isInPlanningMode {
+            PlanningPanel(
+                plan: viewModel.routePlan,
+                allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                onExitPlanning: { viewModel.exitPlanningMode() },
+                onReverse: { viewModel.reverseRoute() },
+                onClear: { viewModel.clearRoute() },
+                onRemove: { index in viewModel.removeRouteAnchor(at: index) }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if let trail = viewModel.selectedTrail {
             TrailDetailCard(
                 trail: trail,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
@@ -171,12 +181,29 @@ struct ContentView: View {
                 Text("Ready")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 16)
+                planRouteButton
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
             .background(.ultraThinMaterial, in: Capsule())
             .shadow(color: Color.black.opacity(0.08), radius: 16, y: 6)
         }
+    }
+
+    private var planRouteButton: some View {
+        Button {
+            viewModel.enterPlanningMode()
+        } label: {
+            Label("Plan", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.blue.opacity(0.15), in: Capsule())
+                .foregroundStyle(.blue)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Enter route planning mode")
     }
 
     private var autoFollowButton: some View {

@@ -66,6 +66,8 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
     private(set) var handledLocationUpdateCount = 0
+    @Published private(set) var isInPlanningMode = false
+    @Published private(set) var routePlan = RoutePlanState()
 
     @Published var selectedTrailID: String?
     @Published private(set) var selectedTrailSegment: TrailSegment?
@@ -155,6 +157,9 @@ final class BrowseViewModel: ObservableObject {
         primaryLoadToken = UUID()
         previewLoadToken = UUID()
 
+        isInPlanningMode = false
+        routePlan.clear()
+
         selectedDestinationID = id
         selectedTrailID = nil
         selectedTrailSegment = nil
@@ -174,8 +179,40 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func selectTrail(selection: TrailInspectionSelection?) {
-        selectedTrailID = selection?.trailID
-        selectedTrailSegment = selection?.segment
+        guard let trailID = selection?.trailID else {
+            selectedTrailID = nil
+            selectedTrailSegment = nil
+            return
+        }
+
+        if isInPlanningMode {
+            routePlan.toggleAnchor(trailID)
+        } else {
+            selectedTrailID = trailID
+            selectedTrailSegment = selection?.segment
+        }
+    }
+
+    func enterPlanningMode() {
+        selectedTrailID = nil
+        selectedTrailSegment = nil
+        isInPlanningMode = true
+    }
+
+    func exitPlanningMode() {
+        isInPlanningMode = false
+    }
+
+    func reverseRoute() {
+        routePlan.reverse()
+    }
+
+    func clearRoute() {
+        routePlan.clear()
+    }
+
+    func removeRouteAnchor(at index: Int) {
+        routePlan.removeAnchor(at: index)
     }
 
     func enableAutoLocation() {

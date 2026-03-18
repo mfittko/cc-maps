@@ -8,20 +8,24 @@
 
 /* Begin PBXBuildFile section */
 		41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */; };
+		4A81169B92C6860E0F9A0063 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE227589903682313B4BB7C /* PlanningPanel.swift */; };
 		4C14AEEB66A637EB8AFA200D /* default-destination-fallback.json in Resources */ = {isa = PBXBuildFile; fileRef = BAE3E55E59417244266E684F /* default-destination-fallback.json */; };
 		51856EF4ADC7716004857868 /* crossing-interval-inspection.json in Resources */ = {isa = PBXBuildFile; fileRef = A976DB7912080A9359A42657 /* crossing-interval-inspection.json */; };
+		5304865C5961811BD71D0793 /* PlanningContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB1AA07079DB9A3FA0ED691D /* PlanningContractTests.swift */; };
 		5F89979F73CCA8C5CEB97F53 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2334348096308B55FE4C36B /* WatchRootView.swift */; };
 		639BC3D1840A8CFD84D80F74 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */; };
 		6589FD79DC4EB7D363336B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A9B3E04102827C74346A5C25 /* Assets.xcassets */; };
 		73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16688666BC97DFBF7FDA4CFB /* LocationService.swift */; };
 		7699B67569E39A738236EC2D /* trail-crossing-segments.json in Resources */ = {isa = PBXBuildFile; fileRef = C5175CEDF36819537F540ABE /* trail-crossing-segments.json */; };
 		97FB9CDE5C4B8DAC2E3CDB0F /* trail-proximity-auto-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */; };
+		9CBC3486F6AF4557C36269A9 /* RoutePlanModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA4047056C56412595C77135 /* RoutePlanModels.swift */; };
 		A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */; };
 		BE414A6A350828C6BA0CF04B /* nearby-preview-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = 52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */; };
 		BE81F6A0E726E532971168AA /* CrossCountryMapsWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */; };
 		C19BB6CF52957AB7F3F1842D /* CrossCountryMapsWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */; };
 		C87560287E548378B8EE026B /* FixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D3CC1F911553A0595F997D /* FixtureLoader.swift */; };
 		D320924F6E881082838AE642 /* CrossCountryMapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */; };
+		D8A8F2D638D8044D781B6EB6 /* planning-ordered-anchors.json in Resources */ = {isa = PBXBuildFile; fileRef = CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */; };
 		DE8A31DF4AAF2A67464DE92F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 583E7F6C8CFB5500BA913E48 /* Assets.xcassets */; };
 		E40D39C31F2A0F9CE5287B73 /* whole-feature-inspection-fallback.json in Resources */ = {isa = PBXBuildFile; fileRef = D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */; };
 		E570E23FE1C068E681DE6DED /* BrowseContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB26E456444DE15DF361628 /* BrowseContractTests.swift */; };
@@ -66,6 +70,7 @@
 		1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrailMapView.swift; sourceTree = "<group>"; };
 		3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseModels.swift; sourceTree = "<group>"; };
+		3EE227589903682313B4BB7C /* PlanningPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanningPanel.swift; sourceTree = "<group>"; };
 		41E7EAF5750E180DD11E45C2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4966F3FF4BFAC13EFB8B055D /* CrossCountryMapsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrossCountryMapsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "nearby-preview-selection.json"; sourceTree = "<group>"; };
@@ -79,9 +84,12 @@
 		A9B3E04102827C74346A5C25 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMapsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		BA4047056C56412595C77135 /* RoutePlanModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoutePlanModels.swift; sourceTree = "<group>"; };
 		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
 		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
 		C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
+		CB1AA07079DB9A3FA0ED691D /* PlanningContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanningContractTests.swift; sourceTree = "<group>"; };
+		CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "planning-ordered-anchors.json"; sourceTree = "<group>"; };
 		CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-proximity-auto-selection.json"; sourceTree = "<group>"; };
 		D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "whole-feature-inspection-fallback.json"; sourceTree = "<group>"; };
 		D8D3CC1F911553A0595F997D /* FixtureLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FixtureLoader.swift; sourceTree = "<group>"; };
@@ -121,7 +129,9 @@
 			isa = PBXGroup;
 			children = (
 				E1C5633F106530897864ECA7 /* BrowseContractFixtures */,
+				66E009BE82B5EFF262B18BB0 /* PlanningContractFixtures */,
 				EDB26E456444DE15DF361628 /* BrowseContractTests.swift */,
+				CB1AA07079DB9A3FA0ED691D /* PlanningContractTests.swift */,
 				D8D3CC1F911553A0595F997D /* FixtureLoader.swift */,
 			);
 			name = CrossCountryMapsTests;
@@ -161,10 +171,12 @@
 				7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */,
 				1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */,
 				3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */,
+				BA4047056C56412595C77135 /* RoutePlanModels.swift */,
 				16688666BC97DFBF7FDA4CFB /* LocationService.swift */,
 				67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */,
 				2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */,
 				866B0D9DC4E6ADAA91BD7A3F /* ContentView.swift */,
+				3EE227589903682313B4BB7C /* PlanningPanel.swift */,
 				583E7F6C8CFB5500BA913E48 /* Assets.xcassets */,
 				41E7EAF5750E180DD11E45C2 /* Info.plist */,
 			);
@@ -202,6 +214,15 @@
 			);
 			name = BrowseContractFixtures;
 			path = "../../../tests/fixtures/browse-contract";
+			sourceTree = "<group>";
+		};
+		66E009BE82B5EFF262B18BB0 /* PlanningContractFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */,
+			);
+			name = PlanningContractFixtures;
+			path = "../../../tests/fixtures/planning-contract";
 			sourceTree = "<group>";
 		};
 		E1CB15354FF682E209E94686 = {
@@ -348,6 +369,7 @@
 				F2FD149DFE5AE709BDE23DEC /* trail-detail-summary.json in Resources */,
 				97FB9CDE5C4B8DAC2E3CDB0F /* trail-proximity-auto-selection.json in Resources */,
 				E40D39C31F2A0F9CE5287B73 /* whole-feature-inspection-fallback.json in Resources */,
+				D8A8F2D638D8044D781B6EB6 /* planning-ordered-anchors.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -367,6 +389,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E570E23FE1C068E681DE6DED /* BrowseContractTests.swift in Sources */,
+				5304865C5961811BD71D0793 /* PlanningContractTests.swift in Sources */,
 				C87560287E548378B8EE026B /* FixtureLoader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -378,10 +401,12 @@
 				D320924F6E881082838AE642 /* CrossCountryMapsApp.swift in Sources */,
 				639BC3D1840A8CFD84D80F74 /* AppConfig.swift in Sources */,
 				41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */,
+				9CBC3486F6AF4557C36269A9 /* RoutePlanModels.swift in Sources */,
 				73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */,
 				A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */,
 				FBCD282ABF6C11E5C782AF10 /* TrailMapView.swift in Sources */,
 				FBC8B16BA4E7436B04A1FBFC /* ContentView.swift in Sources */,
+				4A81169B92C6860E0F9A0063 /* PlanningPanel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
