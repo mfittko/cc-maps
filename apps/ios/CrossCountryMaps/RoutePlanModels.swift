@@ -26,6 +26,10 @@ struct RoutePlanState: Equatable {
         }
     }
 
+    mutating func replaceAnchorEdges(with edgeIDs: [String]) {
+        anchorEdgeIDs = edgeIDs
+    }
+
     /// Removes the anchor at the given index without affecting other anchor identities or their order.
     mutating func removeAnchor(at index: Int) {
         guard anchorEdgeIDs.indices.contains(index) else { return }
