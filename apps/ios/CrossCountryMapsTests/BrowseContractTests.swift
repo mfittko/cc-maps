@@ -173,9 +173,12 @@ final class BrowseContractTests: XCTestCase {
         }
 
         let callCountBeforeLocationUpdate = apiClient.callLog.count
+        let handledLocationUpdatesBefore = viewModel.handledLocationUpdateCount
         locationService.sendLocation(CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522))
 
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        await waitUntil {
+            viewModel.handledLocationUpdateCount == handledLocationUpdatesBefore + 1
+        }
 
         XCTAssertTrue(viewModel.isManualDestinationSelection)
         XCTAssertEqual(viewModel.selectedDestinationID, "2")
@@ -218,7 +221,10 @@ final class BrowseContractTests: XCTestCase {
         }
 
         apiClient.resumeTrails(for: "1")
-        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        await waitUntil {
+            apiClient.completedTrailDestinationIDs.filter { $0 == "1" }.count == 1
+        }
 
         XCTAssertEqual(viewModel.selectedDestinationID, "2")
         XCTAssertEqual(viewModel.primaryTrails.map(\.id), ["202"])
@@ -561,6 +567,7 @@ private final class BrowseAPISpy: BrowseAPIClient {
     private var trailContinuations: [String: CheckedContinuation<Void, Never>] = [:]
 
     var callLog: [Call] = []
+    var completedTrailDestinationIDs: [String] = []
     var suspendedTrailDestinationIDs: Set<String> = []
 
     init(
@@ -587,6 +594,7 @@ private final class BrowseAPISpy: BrowseAPIClient {
             }
         }
 
+        completedTrailDestinationIDs.append(destinationID)
         return trailFixtures[destinationID] ?? TrailFeatureCollection(features: [])
     }
 

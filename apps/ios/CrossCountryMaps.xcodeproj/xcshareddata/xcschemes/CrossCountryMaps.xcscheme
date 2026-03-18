@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "0B3F1D1B67AB18BB6619C75D"
+               BlueprintIdentifier = "42B3A0F41B1475503EE77CE8"
                BuildableName = "CrossCountryMaps.app"
                BlueprintName = "CrossCountryMaps"
                ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -28,7 +28,7 @@
             buildForAnalyzing = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "69098C201D50D0AF19FFB95C"
+               BlueprintIdentifier = "2F7BA55454CE40181AD8912C"
                BuildableName = "CrossCountryMapsTests.xctest"
                BlueprintName = "CrossCountryMapsTests"
                ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -44,7 +44,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0B3F1D1B67AB18BB6619C75D"
+            BlueprintIdentifier = "42B3A0F41B1475503EE77CE8"
             BuildableName = "CrossCountryMaps.app"
             BlueprintName = "CrossCountryMaps"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -55,7 +55,7 @@
             skipped = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "69098C201D50D0AF19FFB95C"
+               BlueprintIdentifier = "2F7BA55454CE40181AD8912C"
                BuildableName = "CrossCountryMapsTests.xctest"
                BlueprintName = "CrossCountryMapsTests"
                ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -77,7 +77,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0B3F1D1B67AB18BB6619C75D"
+            BlueprintIdentifier = "42B3A0F41B1475503EE77CE8"
             BuildableName = "CrossCountryMaps.app"
             BlueprintName = "CrossCountryMaps"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -94,7 +94,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "0B3F1D1B67AB18BB6619C75D"
+            BlueprintIdentifier = "42B3A0F41B1475503EE77CE8"
             BuildableName = "CrossCountryMaps.app"
             BlueprintName = "CrossCountryMaps"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">

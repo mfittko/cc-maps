@@ -3,54 +3,58 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 46;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
-		3B49984D1895E3269A286193 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 51E712E80F36C9535FF892E9 /* Assets.xcassets */; };
-		4D4B94B6AFB6CEEF4A27B6D2 /* BrowseContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CD0FA0E97483B7B68CED237 /* BrowseContractTests.swift */; };
-		5E8D50555346F65467F3AEB5 /* CrossCountryMapsWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48F7C1B92D2C516650DA60BB /* CrossCountryMapsWatchApp.swift */; };
-		6BD19176F0DCC73D88AF082A /* BrowseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = D14C7AC73E6CC9F6B03166D7 /* BrowseModels.swift */; };
-		6F6719B841F44530D5840795 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C45630DB17D907945AB18B16 /* WatchRootView.swift */; };
-		7D4444B57E2E5E0617CD73BB /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA3021D21AA2DFD3F151F30 /* BrowseViewModel.swift */; };
-		8BE2A09AADDCA3CD7FCEBDC4 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F633053DBFD065158C0D0460 /* Foundation.framework */; };
-		936FADB2B7B7266896AD87E9 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 923331CE98839A82378DBD59 /* Foundation.framework */; };
-		9589F86CD4F32E895B9B6BC6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2ADBA33A2C829614A17F3ECB /* Assets.xcassets */; };
-		9E7E0001793460470B16C046 /* TrailMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93683C4E82C9D2892DFEBE16 /* TrailMapView.swift */; };
-		B19F95DE6681143966789B6C /* CrossCountryMapsWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 86E726BE9831E77FB10134FF /* CrossCountryMapsWatch.app */; };
-		B9AD5FD516BF4D967A6FC413 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E43D6A1FE797EB1BE7BFDD3 /* AppConfig.swift */; };
-		BA2C039B331ABBD8C6B2E9F7 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 923331CE98839A82378DBD59 /* Foundation.framework */; };
-		BE32567C2231E3614ACCE5C4 /* CrossCountryMapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4F84B8AB1A5C8DC17A294CD /* CrossCountryMapsApp.swift */; };
-		C7884596EE54F66CB64D6EAB /* FixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A96576CD2FB758BB1275ACF /* FixtureLoader.swift */; };
-		F074827B1D4D959BE83A0948 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D31E01F119E9967CE84922 /* LocationService.swift */; };
-		FDABB760FED4146512353A59 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8055DBA51B76CF04EA1AD86B /* ContentView.swift */; };
+		41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */; };
+		4C14AEEB66A637EB8AFA200D /* default-destination-fallback.json in Resources */ = {isa = PBXBuildFile; fileRef = BAE3E55E59417244266E684F /* default-destination-fallback.json */; };
+		51856EF4ADC7716004857868 /* crossing-interval-inspection.json in Resources */ = {isa = PBXBuildFile; fileRef = A976DB7912080A9359A42657 /* crossing-interval-inspection.json */; };
+		5F89979F73CCA8C5CEB97F53 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2334348096308B55FE4C36B /* WatchRootView.swift */; };
+		639BC3D1840A8CFD84D80F74 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */; };
+		6589FD79DC4EB7D363336B2D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A9B3E04102827C74346A5C25 /* Assets.xcassets */; };
+		73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16688666BC97DFBF7FDA4CFB /* LocationService.swift */; };
+		7699B67569E39A738236EC2D /* trail-crossing-segments.json in Resources */ = {isa = PBXBuildFile; fileRef = C5175CEDF36819537F540ABE /* trail-crossing-segments.json */; };
+		97FB9CDE5C4B8DAC2E3CDB0F /* trail-proximity-auto-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */; };
+		A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */; };
+		BE414A6A350828C6BA0CF04B /* nearby-preview-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = 52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */; };
+		BE81F6A0E726E532971168AA /* CrossCountryMapsWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */; };
+		C19BB6CF52957AB7F3F1842D /* CrossCountryMapsWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */; };
+		C87560287E548378B8EE026B /* FixtureLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8D3CC1F911553A0595F997D /* FixtureLoader.swift */; };
+		D320924F6E881082838AE642 /* CrossCountryMapsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */; };
+		DE8A31DF4AAF2A67464DE92F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 583E7F6C8CFB5500BA913E48 /* Assets.xcassets */; };
+		E40D39C31F2A0F9CE5287B73 /* whole-feature-inspection-fallback.json in Resources */ = {isa = PBXBuildFile; fileRef = D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */; };
+		E570E23FE1C068E681DE6DED /* BrowseContractTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDB26E456444DE15DF361628 /* BrowseContractTests.swift */; };
+		F2FD149DFE5AE709BDE23DEC /* trail-detail-summary.json in Resources */ = {isa = PBXBuildFile; fileRef = DC908B22E54481619D452934 /* trail-detail-summary.json */; };
+		FBC8B16BA4E7436B04A1FBFC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 866B0D9DC4E6ADAA91BD7A3F /* ContentView.swift */; };
+		FBCD282ABF6C11E5C782AF10 /* TrailMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		1BB053023AABBBF726BFA89B /* PBXContainerItemProxy */ = {
+		5A0C9B1DFA4D82FCBB9E1F90 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 46FED63B1C74B917B16893AE /* Project object */;
+			containerPortal = 0A4CBA21294C85ECCB681A87 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 0B3F1D1B67AB18BB6619C75D;
-			remoteInfo = CrossCountryMaps;
-		};
-		C5D26B058A5ED80696A084EA /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 46FED63B1C74B917B16893AE /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 6FC3BDD6C5E51BD91D211F40;
+			remoteGlobalIDString = DB940431406112B6B06CCC3C;
 			remoteInfo = CrossCountryMapsWatch;
+		};
+		C62546557946941A00DEF20C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0A4CBA21294C85ECCB681A87 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 42B3A0F41B1475503EE77CE8;
+			remoteInfo = CrossCountryMaps;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		3F2B06207FD2B7F752A1FC40 /* Embed Watch Content */ = {
+		592CE631D377E93BB8A57A36 /* Embed Watch Content */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
 			dstSubfolderSpec = 16;
 			files = (
-				B19F95DE6681143966789B6C /* CrossCountryMapsWatch.app in Embed Watch Content */,
+				BE81F6A0E726E532971168AA /* CrossCountryMapsWatch.app in Embed Watch Content */,
 			);
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -58,203 +62,219 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		172B0861D85FA44BDB2F466B /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
-		1D2EA34534876A2A01E5E9AE /* CrossCountryMapsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrossCountryMapsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		2ADBA33A2C829614A17F3ECB /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		2FA3021D21AA2DFD3F151F30 /* BrowseViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
-		392AB3D952A599A839EF8879 /* CrossCountryMaps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMaps.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		48F7C1B92D2C516650DA60BB /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
-		51E712E80F36C9535FF892E9 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		5A96576CD2FB758BB1275ACF /* FixtureLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FixtureLoader.swift; sourceTree = "<group>"; };
-		8055DBA51B76CF04EA1AD86B /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		869C20EEE820C57B34A7A643 /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
-		86E726BE9831E77FB10134FF /* CrossCountryMapsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMapsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		8CD0FA0E97483B7B68CED237 /* BrowseContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseContractTests.swift; sourceTree = "<group>"; };
-		8E43D6A1FE797EB1BE7BFDD3 /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
-		8F978696458F446EDBADBC28 /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
-		923331CE98839A82378DBD59 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		93683C4E82C9D2892DFEBE16 /* TrailMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrailMapView.swift; sourceTree = "<group>"; };
-		C3B2A38D101B4FECE087BCA5 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		C45630DB17D907945AB18B16 /* WatchRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
-		C4F84B8AB1A5C8DC17A294CD /* CrossCountryMapsApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsApp.swift; sourceTree = "<group>"; };
-		C9AAB22E87A0AB6A2737578A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		D14C7AC73E6CC9F6B03166D7 /* BrowseModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseModels.swift; sourceTree = "<group>"; };
-		E6D31E01F119E9967CE84922 /* LocationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
-		F633053DBFD065158C0D0460 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS11.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		16688666BC97DFBF7FDA4CFB /* LocationService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrailMapView.swift; sourceTree = "<group>"; };
+		3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseModels.swift; sourceTree = "<group>"; };
+		41E7EAF5750E180DD11E45C2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4966F3FF4BFAC13EFB8B055D /* CrossCountryMapsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrossCountryMapsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "nearby-preview-selection.json"; sourceTree = "<group>"; };
+		583E7F6C8CFB5500BA913E48 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		5D53A787AD4DB50C6341DE9D /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
+		7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsApp.swift; sourceTree = "<group>"; };
+		866B0D9DC4E6ADAA91BD7A3F /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		8E99E4EBE6C83D143B1FB821 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A976DB7912080A9359A42657 /* crossing-interval-inspection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "crossing-interval-inspection.json"; sourceTree = "<group>"; };
+		A9B3E04102827C74346A5C25 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMapsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
+		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
+		C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
+		CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-proximity-auto-selection.json"; sourceTree = "<group>"; };
+		D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "whole-feature-inspection-fallback.json"; sourceTree = "<group>"; };
+		D8D3CC1F911553A0595F997D /* FixtureLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FixtureLoader.swift; sourceTree = "<group>"; };
+		DC908B22E54481619D452934 /* trail-detail-summary.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-detail-summary.json"; sourceTree = "<group>"; };
+		E2334348096308B55FE4C36B /* WatchRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
+		EDB26E456444DE15DF361628 /* BrowseContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseContractTests.swift; sourceTree = "<group>"; };
+		F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		F6A1153F290C025F98FD3574 /* CrossCountryMaps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMaps.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		01DE3896D14040501670E0DE /* Frameworks */ = {
+		2433AAA108733AB961AEE1C8 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BA2C039B331ABBD8C6B2E9F7 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9DB8121FE8C1A31BE0D1A218 /* Frameworks */ = {
+		53B7CA662209335BB6D8A669 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8BE2A09AADDCA3CD7FCEBDC4 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		DB09613979AD6ED00479C109 /* Frameworks */ = {
+		BD2582E19C36DD7C2652DF7C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				936FADB2B7B7266896AD87E9 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		09D7A7B57E03C56D5FBBC6F2 /* CrossCountryMaps */ = {
+		415F5900EB05D0D093446523 /* CrossCountryMapsTests */ = {
 			isa = PBXGroup;
 			children = (
-				C4F84B8AB1A5C8DC17A294CD /* CrossCountryMapsApp.swift */,
-				8E43D6A1FE797EB1BE7BFDD3 /* AppConfig.swift */,
-				D14C7AC73E6CC9F6B03166D7 /* BrowseModels.swift */,
-				E6D31E01F119E9967CE84922 /* LocationService.swift */,
-				2FA3021D21AA2DFD3F151F30 /* BrowseViewModel.swift */,
-				93683C4E82C9D2892DFEBE16 /* TrailMapView.swift */,
-				8055DBA51B76CF04EA1AD86B /* ContentView.swift */,
-				51E712E80F36C9535FF892E9 /* Assets.xcassets */,
-				C3B2A38D101B4FECE087BCA5 /* Info.plist */,
-			);
-			name = CrossCountryMaps;
-			path = CrossCountryMaps;
-			sourceTree = "<group>";
-		};
-		10A5211C4798C1F306D94600 = {
-			isa = PBXGroup;
-			children = (
-				4B4909538A56951C61B49F68 /* Products */,
-				B43E24345B0053EBEA91F67C /* Frameworks */,
-				AC6E95EF4C7D0456B7FBD888 /* Config */,
-				09D7A7B57E03C56D5FBBC6F2 /* CrossCountryMaps */,
-				5D8EE1FB4BFD281A168E2EAC /* CrossCountryMapsWatch */,
-				C1605494A6AC31587DF8C627 /* CrossCountryMapsTests */,
-			);
-			sourceTree = "<group>";
-		};
-		3C3B5B9666AF2DEEA18FC553 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				923331CE98839A82378DBD59 /* Foundation.framework */,
-			);
-			name = iOS;
-			sourceTree = "<group>";
-		};
-		4B4909538A56951C61B49F68 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				392AB3D952A599A839EF8879 /* CrossCountryMaps.app */,
-				86E726BE9831E77FB10134FF /* CrossCountryMapsWatch.app */,
-				1D2EA34534876A2A01E5E9AE /* CrossCountryMapsTests.xctest */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		5D8EE1FB4BFD281A168E2EAC /* CrossCountryMapsWatch */ = {
-			isa = PBXGroup;
-			children = (
-				48F7C1B92D2C516650DA60BB /* CrossCountryMapsWatchApp.swift */,
-				C45630DB17D907945AB18B16 /* WatchRootView.swift */,
-				2ADBA33A2C829614A17F3ECB /* Assets.xcassets */,
-				C9AAB22E87A0AB6A2737578A /* Info.plist */,
-			);
-			name = CrossCountryMapsWatch;
-			path = CrossCountryMapsWatch;
-			sourceTree = "<group>";
-		};
-		A6B98D9FBFE2713C7AE77D6B /* watchOS */ = {
-			isa = PBXGroup;
-			children = (
-				F633053DBFD065158C0D0460 /* Foundation.framework */,
-			);
-			name = watchOS;
-			sourceTree = "<group>";
-		};
-		AC6E95EF4C7D0456B7FBD888 /* Config */ = {
-			isa = PBXGroup;
-			children = (
-				869C20EEE820C57B34A7A643 /* Base.xcconfig */,
-				8F978696458F446EDBADBC28 /* Debug.xcconfig */,
-				172B0861D85FA44BDB2F466B /* Release.xcconfig */,
-			);
-			name = Config;
-			path = Config;
-			sourceTree = "<group>";
-		};
-		B43E24345B0053EBEA91F67C /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				3C3B5B9666AF2DEEA18FC553 /* iOS */,
-				A6B98D9FBFE2713C7AE77D6B /* watchOS */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		C1605494A6AC31587DF8C627 /* CrossCountryMapsTests */ = {
-			isa = PBXGroup;
-			children = (
-				8CD0FA0E97483B7B68CED237 /* BrowseContractTests.swift */,
-				5A96576CD2FB758BB1275ACF /* FixtureLoader.swift */,
+				E1C5633F106530897864ECA7 /* BrowseContractFixtures */,
+				EDB26E456444DE15DF361628 /* BrowseContractTests.swift */,
+				D8D3CC1F911553A0595F997D /* FixtureLoader.swift */,
 			);
 			name = CrossCountryMapsTests;
 			path = CrossCountryMapsTests;
 			sourceTree = "<group>";
 		};
+		8A1B88A62554D31AA4805847 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		91AC6B976E87BB0D890A2DCE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */,
+				F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */,
+				5D53A787AD4DB50C6341DE9D /* Release.xcconfig */,
+			);
+			name = Config;
+			path = Config;
+			sourceTree = "<group>";
+		};
+		ACEE1C57E0402005E1D7135A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				8A1B88A62554D31AA4805847 /* iOS */,
+				DCFA01B0C9D31CCB6C765C2A /* watchOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C60DE6BCDEB90B0ABF946CFC /* CrossCountryMaps */ = {
+			isa = PBXGroup;
+			children = (
+				7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */,
+				1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */,
+				3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */,
+				16688666BC97DFBF7FDA4CFB /* LocationService.swift */,
+				67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */,
+				2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */,
+				866B0D9DC4E6ADAA91BD7A3F /* ContentView.swift */,
+				583E7F6C8CFB5500BA913E48 /* Assets.xcassets */,
+				41E7EAF5750E180DD11E45C2 /* Info.plist */,
+			);
+			name = CrossCountryMaps;
+			path = CrossCountryMaps;
+			sourceTree = "<group>";
+		};
+		C93454FAB72C8D08EED50A55 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F6A1153F290C025F98FD3574 /* CrossCountryMaps.app */,
+				B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */,
+				4966F3FF4BFAC13EFB8B055D /* CrossCountryMapsTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DCFA01B0C9D31CCB6C765C2A /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = watchOS;
+			sourceTree = "<group>";
+		};
+		E1C5633F106530897864ECA7 /* BrowseContractFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				A976DB7912080A9359A42657 /* crossing-interval-inspection.json */,
+				BAE3E55E59417244266E684F /* default-destination-fallback.json */,
+				52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */,
+				C5175CEDF36819537F540ABE /* trail-crossing-segments.json */,
+				DC908B22E54481619D452934 /* trail-detail-summary.json */,
+				CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */,
+				D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */,
+			);
+			name = BrowseContractFixtures;
+			path = "../../../tests/fixtures/browse-contract";
+			sourceTree = "<group>";
+		};
+		E1CB15354FF682E209E94686 = {
+			isa = PBXGroup;
+			children = (
+				C93454FAB72C8D08EED50A55 /* Products */,
+				ACEE1C57E0402005E1D7135A /* Frameworks */,
+				91AC6B976E87BB0D890A2DCE /* Config */,
+				C60DE6BCDEB90B0ABF946CFC /* CrossCountryMaps */,
+				E4C1AACEF0A896280C5EDDB1 /* CrossCountryMapsWatch */,
+				415F5900EB05D0D093446523 /* CrossCountryMapsTests */,
+			);
+			sourceTree = "<group>";
+		};
+		E4C1AACEF0A896280C5EDDB1 /* CrossCountryMapsWatch */ = {
+			isa = PBXGroup;
+			children = (
+				C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */,
+				E2334348096308B55FE4C36B /* WatchRootView.swift */,
+				A9B3E04102827C74346A5C25 /* Assets.xcassets */,
+				8E99E4EBE6C83D143B1FB821 /* Info.plist */,
+			);
+			name = CrossCountryMapsWatch;
+			path = CrossCountryMapsWatch;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0B3F1D1B67AB18BB6619C75D /* CrossCountryMaps */ = {
+		2F7BA55454CE40181AD8912C /* CrossCountryMapsTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 95E795C2AF81202CA4B6D34A /* Build configuration list for PBXNativeTarget "CrossCountryMaps" */;
+			buildConfigurationList = D882ED99F12FC3D1EF1CD837 /* Build configuration list for PBXNativeTarget "CrossCountryMapsTests" */;
 			buildPhases = (
-				2B70B8E9FB36766EDE2760AF /* Sources */,
-				01DE3896D14040501670E0DE /* Frameworks */,
-				A3C6562695B9CED2052B8AE5 /* Resources */,
-				3F2B06207FD2B7F752A1FC40 /* Embed Watch Content */,
+				2550D7F1BDE920B67F8AC379 /* Sources */,
+				BD2582E19C36DD7C2652DF7C /* Frameworks */,
+				A138515BCD9184984513F235 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
-				759246EF3C8464835989A1C4 /* PBXTargetDependency */,
-			);
-			name = CrossCountryMaps;
-			productName = CrossCountryMaps;
-			productReference = 392AB3D952A599A839EF8879 /* CrossCountryMaps.app */;
-			productType = "com.apple.product-type.application";
-		};
-		69098C201D50D0AF19FFB95C /* CrossCountryMapsTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 86642225E0C4ADE17D0C207F /* Build configuration list for PBXNativeTarget "CrossCountryMapsTests" */;
-			buildPhases = (
-				C7B81D327B3A75E52682152A /* Sources */,
-				DB09613979AD6ED00479C109 /* Frameworks */,
-				A98EDC70183E8B485CBA1F78 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				0F6A3C6F52CB07B5D3947175 /* PBXTargetDependency */,
+				375341A56675CA4E7274D9E5 /* PBXTargetDependency */,
 			);
 			name = CrossCountryMapsTests;
 			productName = CrossCountryMapsTests;
-			productReference = 1D2EA34534876A2A01E5E9AE /* CrossCountryMapsTests.xctest */;
+			productReference = 4966F3FF4BFAC13EFB8B055D /* CrossCountryMapsTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		6FC3BDD6C5E51BD91D211F40 /* CrossCountryMapsWatch */ = {
+		42B3A0F41B1475503EE77CE8 /* CrossCountryMaps */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B246E21B618E77734099BA84 /* Build configuration list for PBXNativeTarget "CrossCountryMapsWatch" */;
+			buildConfigurationList = 2A75C15F9C6658EF1EEB5EFB /* Build configuration list for PBXNativeTarget "CrossCountryMaps" */;
 			buildPhases = (
-				3C77A6E77CC6EED2E8B24865 /* Sources */,
-				9DB8121FE8C1A31BE0D1A218 /* Frameworks */,
-				49EAE70F7BFDBBE45AA25649 /* Resources */,
+				4FA99CF3EB197243526F1001 /* Sources */,
+				2433AAA108733AB961AEE1C8 /* Frameworks */,
+				C7CBB2BB2F01FAAA3990EA5A /* Resources */,
+				592CE631D377E93BB8A57A36 /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				029A375787D248918F6A6C1A /* PBXTargetDependency */,
+			);
+			name = CrossCountryMaps;
+			productName = CrossCountryMaps;
+			productReference = F6A1153F290C025F98FD3574 /* CrossCountryMaps.app */;
+			productType = "com.apple.product-type.application";
+		};
+		DB940431406112B6B06CCC3C /* CrossCountryMapsWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1C61AFC56F4A008DE4E7E21 /* Build configuration list for PBXNativeTarget "CrossCountryMapsWatch" */;
+			buildPhases = (
+				606B8C580CA64EA27D06B68C /* Sources */,
+				53B7CA662209335BB6D8A669 /* Frameworks */,
+				01109DB9507F1DE75B47183F /* Resources */,
 			);
 			buildRules = (
 			);
@@ -262,150 +282,139 @@
 			);
 			name = CrossCountryMapsWatch;
 			productName = CrossCountryMapsWatch;
-			productReference = 86E726BE9831E77FB10134FF /* CrossCountryMapsWatch.app */;
+			productReference = B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		46FED63B1C74B917B16893AE /* Project object */ = {
+		0A4CBA21294C85ECCB681A87 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
-					0B3F1D1B67AB18BB6619C75D = {
+					2F7BA55454CE40181AD8912C = {
+						CreatedOnToolsVersion = 16.2;
+						TestTargetID = 42B3A0F41B1475503EE77CE8;
+					};
+					42B3A0F41B1475503EE77CE8 = {
 						CreatedOnToolsVersion = 16.2;
 					};
-					69098C201D50D0AF19FFB95C = {
-						CreatedOnToolsVersion = 16.2;
-						TestTargetID = 0B3F1D1B67AB18BB6619C75D;
-					};
-					6FC3BDD6C5E51BD91D211F40 = {
+					DB940431406112B6B06CCC3C = {
 						CreatedOnToolsVersion = 16.2;
 					};
 				};
 			};
-			buildConfigurationList = 930FBB30BFC71E2D801AB4D4 /* Build configuration list for PBXProject "CrossCountryMaps" */;
-			compatibilityVersion = "Xcode 3.2";
+			buildConfigurationList = 9080C2472839378150FFD5B0 /* Build configuration list for PBXProject "CrossCountryMaps" */;
+			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = 10A5211C4798C1F306D94600;
+			mainGroup = E1CB15354FF682E209E94686;
 			minimizedProjectReferenceProxies = 0;
 			preferredProjectObjectVersion = 77;
-			productRefGroup = 4B4909538A56951C61B49F68 /* Products */;
+			productRefGroup = C93454FAB72C8D08EED50A55 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				0B3F1D1B67AB18BB6619C75D /* CrossCountryMaps */,
-				6FC3BDD6C5E51BD91D211F40 /* CrossCountryMapsWatch */,
-				69098C201D50D0AF19FFB95C /* CrossCountryMapsTests */,
+				42B3A0F41B1475503EE77CE8 /* CrossCountryMaps */,
+				DB940431406112B6B06CCC3C /* CrossCountryMapsWatch */,
+				2F7BA55454CE40181AD8912C /* CrossCountryMapsTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		49EAE70F7BFDBBE45AA25649 /* Resources */ = {
+		01109DB9507F1DE75B47183F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9589F86CD4F32E895B9B6BC6 /* Assets.xcassets in Resources */,
+				6589FD79DC4EB7D363336B2D /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A3C6562695B9CED2052B8AE5 /* Resources */ = {
+		A138515BCD9184984513F235 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				3B49984D1895E3269A286193 /* Assets.xcassets in Resources */,
+				51856EF4ADC7716004857868 /* crossing-interval-inspection.json in Resources */,
+				4C14AEEB66A637EB8AFA200D /* default-destination-fallback.json in Resources */,
+				BE414A6A350828C6BA0CF04B /* nearby-preview-selection.json in Resources */,
+				7699B67569E39A738236EC2D /* trail-crossing-segments.json in Resources */,
+				F2FD149DFE5AE709BDE23DEC /* trail-detail-summary.json in Resources */,
+				97FB9CDE5C4B8DAC2E3CDB0F /* trail-proximity-auto-selection.json in Resources */,
+				E40D39C31F2A0F9CE5287B73 /* whole-feature-inspection-fallback.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A98EDC70183E8B485CBA1F78 /* Resources */ = {
+		C7CBB2BB2F01FAAA3990EA5A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DE8A31DF4AAF2A67464DE92F /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		2B70B8E9FB36766EDE2760AF /* Sources */ = {
+		2550D7F1BDE920B67F8AC379 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				BE32567C2231E3614ACCE5C4 /* CrossCountryMapsApp.swift in Sources */,
-				B9AD5FD516BF4D967A6FC413 /* AppConfig.swift in Sources */,
-				6BD19176F0DCC73D88AF082A /* BrowseModels.swift in Sources */,
-				F074827B1D4D959BE83A0948 /* LocationService.swift in Sources */,
-				7D4444B57E2E5E0617CD73BB /* BrowseViewModel.swift in Sources */,
-				9E7E0001793460470B16C046 /* TrailMapView.swift in Sources */,
-				FDABB760FED4146512353A59 /* ContentView.swift in Sources */,
+				E570E23FE1C068E681DE6DED /* BrowseContractTests.swift in Sources */,
+				C87560287E548378B8EE026B /* FixtureLoader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		3C77A6E77CC6EED2E8B24865 /* Sources */ = {
+		4FA99CF3EB197243526F1001 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				5E8D50555346F65467F3AEB5 /* CrossCountryMapsWatchApp.swift in Sources */,
-				6F6719B841F44530D5840795 /* WatchRootView.swift in Sources */,
+				D320924F6E881082838AE642 /* CrossCountryMapsApp.swift in Sources */,
+				639BC3D1840A8CFD84D80F74 /* AppConfig.swift in Sources */,
+				41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */,
+				73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */,
+				A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */,
+				FBCD282ABF6C11E5C782AF10 /* TrailMapView.swift in Sources */,
+				FBC8B16BA4E7436B04A1FBFC /* ContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C7B81D327B3A75E52682152A /* Sources */ = {
+		606B8C580CA64EA27D06B68C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				4D4B94B6AFB6CEEF4A27B6D2 /* BrowseContractTests.swift in Sources */,
-				C7884596EE54F66CB64D6EAB /* FixtureLoader.swift in Sources */,
+				C19BB6CF52957AB7F3F1842D /* CrossCountryMapsWatchApp.swift in Sources */,
+				5F89979F73CCA8C5CEB97F53 /* WatchRootView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		0F6A3C6F52CB07B5D3947175 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			name = CrossCountryMaps;
-			target = 0B3F1D1B67AB18BB6619C75D /* CrossCountryMaps */;
-			targetProxy = 1BB053023AABBBF726BFA89B /* PBXContainerItemProxy */;
-		};
-		759246EF3C8464835989A1C4 /* PBXTargetDependency */ = {
+		029A375787D248918F6A6C1A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = CrossCountryMapsWatch;
-			target = 6FC3BDD6C5E51BD91D211F40 /* CrossCountryMapsWatch */;
-			targetProxy = C5D26B058A5ED80696A084EA /* PBXContainerItemProxy */;
+			target = DB940431406112B6B06CCC3C /* CrossCountryMapsWatch */;
+			targetProxy = 5A0C9B1DFA4D82FCBB9E1F90 /* PBXContainerItemProxy */;
+		};
+		375341A56675CA4E7274D9E5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = CrossCountryMaps;
+			target = 42B3A0F41B1475503EE77CE8 /* CrossCountryMaps */;
+			targetProxy = C62546557946941A00DEF20C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		156FF502D0AEDEFD58E9B089 /* Debug */ = {
+		004A56F58B7D05662E809E43 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8F978696458F446EDBADBC28 /* Debug.xcconfig */;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps.tests;
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CrossCountryMaps.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CrossCountryMaps";
-			};
-			name = Debug;
-		};
-		2DA44FE007B02C955A04F042 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 172B0861D85FA44BDB2F466B /* Release.xcconfig */;
+			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -413,8 +422,11 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				INFOPLIST_FILE = CrossCountryMaps/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_APP_BUNDLE_IDENTIFIER)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -424,84 +436,32 @@
 			};
 			name = Release;
 		};
-		365D27215353B6CAD01F3BA7 /* Debug */ = {
+		1B400002FC8B5877FA0E63F3 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8F978696458F446EDBADBC28 /* Debug.xcconfig */;
+			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = "";
-				INFOPLIST_FILE = CrossCountryMaps/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps;
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
-				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(WATCH_APP_BUNDLE_IDENTIFIER)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = 1;
-			};
-			name = Debug;
-		};
-		63628B66888449AB4DEC1D05 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 172B0861D85FA44BDB2F466B /* Release.xcconfig */;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
 		};
-		70F0173780887F65A757789F /* Debug */ = {
+		3E31D8BBC1E3752FE4C71BE8 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8F978696458F446EDBADBC28 /* Debug.xcconfig */;
+			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -561,55 +521,42 @@
 			};
 			name = Debug;
 		};
-		A488EDB3141D4834582B0AB7 /* Debug */ = {
+		5F9944CFB4194C3DB7A85376 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 8F978696458F446EDBADBC28 /* Debug.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "";
-				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps.watch;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Debug;
-		};
-		B47EB12A3FEAA803283444ED /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 172B0861D85FA44BDB2F466B /* Release.xcconfig */;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = "";
-				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps.watch;
-				SDKROOT = watchos;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = "watchsimulator watchos";
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				TARGETED_DEVICE_FAMILY = 4;
-				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
-			};
-			name = Release;
-		};
-		C73DE7146DD49727EA769F8B /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 172B0861D85FA44BDB2F466B /* Release.xcconfig */;
+			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mfittko.ccmaps.tests;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_TEST_BUNDLE_IDENTIFIER)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CrossCountryMaps.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CrossCountryMaps";
+			};
+			name = Debug;
+		};
+		83B1F4C954D6AD804DE79996 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_TEST_BUNDLE_IDENTIFIER)";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -619,46 +566,146 @@
 			};
 			name = Release;
 		};
+		99652E698EB6B21F90A887D2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E380B1072D02DA4A35385F56 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = "";
+				INFOPLIST_FILE = CrossCountryMaps/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_APP_BUNDLE_IDENTIFIER)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F91A7877532562C96226BDE6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "";
+				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(WATCH_APP_BUNDLE_IDENTIFIER)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchsimulator watchos";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		86642225E0C4ADE17D0C207F /* Build configuration list for PBXNativeTarget "CrossCountryMapsTests" */ = {
+		2A75C15F9C6658EF1EEB5EFB /* Build configuration list for PBXNativeTarget "CrossCountryMaps" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C73DE7146DD49727EA769F8B /* Release */,
-				156FF502D0AEDEFD58E9B089 /* Debug */,
+				004A56F58B7D05662E809E43 /* Release */,
+				E380B1072D02DA4A35385F56 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		930FBB30BFC71E2D801AB4D4 /* Build configuration list for PBXProject "CrossCountryMaps" */ = {
+		9080C2472839378150FFD5B0 /* Build configuration list for PBXProject "CrossCountryMaps" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				70F0173780887F65A757789F /* Debug */,
-				63628B66888449AB4DEC1D05 /* Release */,
+				3E31D8BBC1E3752FE4C71BE8 /* Debug */,
+				99652E698EB6B21F90A887D2 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		95E795C2AF81202CA4B6D34A /* Build configuration list for PBXNativeTarget "CrossCountryMaps" */ = {
+		B1C61AFC56F4A008DE4E7E21 /* Build configuration list for PBXNativeTarget "CrossCountryMapsWatch" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				2DA44FE007B02C955A04F042 /* Release */,
-				365D27215353B6CAD01F3BA7 /* Debug */,
+				1B400002FC8B5877FA0E63F3 /* Release */,
+				F91A7877532562C96226BDE6 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B246E21B618E77734099BA84 /* Build configuration list for PBXNativeTarget "CrossCountryMapsWatch" */ = {
+		D882ED99F12FC3D1EF1CD837 /* Build configuration list for PBXNativeTarget "CrossCountryMapsTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B47EB12A3FEAA803283444ED /* Release */,
-				A488EDB3141D4834582B0AB7 /* Debug */,
+				83B1F4C954D6AD804DE79996 /* Release */,
+				5F9944CFB4194C3DB7A85376 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
-	rootObject = 46FED63B1C74B917B16893AE /* Project object */;
+	rootObject = 0A4CBA21294C85ECCB681A87 /* Project object */;
 }

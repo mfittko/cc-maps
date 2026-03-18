@@ -55,7 +55,7 @@ struct Destination: Identifiable, Equatable {
         self.coordinate = coordinate
     }
 
-    init(feature: DestinationFeature, fallback: CLLocationCoordinate2D) {
+    init(feature: DestinationFeature) {
         id = String(feature.properties.id)
         name = feature.properties.name
         prepSymbol = feature.properties.prepSymbol

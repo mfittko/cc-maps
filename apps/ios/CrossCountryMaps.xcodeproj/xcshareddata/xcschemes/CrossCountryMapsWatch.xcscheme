@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "6FC3BDD6C5E51BD91D211F40"
+               BlueprintIdentifier = "DB940431406112B6B06CCC3C"
                BuildableName = "CrossCountryMapsWatch.app"
                BlueprintName = "CrossCountryMapsWatch"
                ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -30,7 +30,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6FC3BDD6C5E51BD91D211F40"
+            BlueprintIdentifier = "DB940431406112B6B06CCC3C"
             BuildableName = "CrossCountryMapsWatch.app"
             BlueprintName = "CrossCountryMapsWatch"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -53,7 +53,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6FC3BDD6C5E51BD91D211F40"
+            BlueprintIdentifier = "DB940431406112B6B06CCC3C"
             BuildableName = "CrossCountryMapsWatch.app"
             BlueprintName = "CrossCountryMapsWatch"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">
@@ -70,7 +70,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "6FC3BDD6C5E51BD91D211F40"
+            BlueprintIdentifier = "DB940431406112B6B06CCC3C"
             BuildableName = "CrossCountryMapsWatch.app"
             BlueprintName = "CrossCountryMapsWatch"
             ReferencedContainer = "container:CrossCountryMaps.xcodeproj">

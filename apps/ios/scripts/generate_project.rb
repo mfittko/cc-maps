@@ -10,10 +10,11 @@ PROJECT_PATH = File.join(ROOT, "#{PROJECT_NAME}.xcodeproj")
 IOS_TARGET_NAME = 'CrossCountryMaps'
 WATCH_TARGET_NAME = 'CrossCountryMapsWatch'
 IOS_TEST_TARGET_NAME = 'CrossCountryMapsTests'
-IOS_BUNDLE_ID = 'com.mfittko.ccmaps'
-WATCH_BUNDLE_ID = 'com.mfittko.ccmaps.watch'
-IOS_TEST_BUNDLE_ID = 'com.mfittko.ccmaps.tests'
 LAST_UPGRADE_CHECK = '1600'
+OBJECT_VERSION = 77
+
+BROWSE_FIXTURE_DIR = File.expand_path('../../tests/fixtures/browse-contract', ROOT)
+BROWSE_FIXTURE_PROJECT_PATH = '../../../tests/fixtures/browse-contract'
 
 def assign_target_settings(target, base_config:, debug_config:, release_config:, settings:)
   target.build_configuration_list.build_configurations.each do |config|
@@ -41,10 +42,22 @@ def add_resources(target, group, file_names)
   end
 end
 
+def strip_system_framework_references(target)
+  target.frameworks_build_phase.files.each(&:remove_from_project)
+end
+
+def strip_framework_file_references(project)
+  project.files
+    .select { |file_ref| file_ref.path&.end_with?('Foundation.framework') }
+    .each(&:remove_from_project)
+end
+
 FileUtils.rm_rf(PROJECT_PATH)
 
 project = Xcodeproj::Project.new(PROJECT_PATH)
+project.instance_variable_set(:@object_version, OBJECT_VERSION)
 project.root_object.development_region = 'en'
+project.root_object.compatibility_version = Xcodeproj::Constants::COMPATIBILITY_VERSION_BY_OBJECT_VERSION[OBJECT_VERSION]
 project.root_object.attributes['LastUpgradeCheck'] = LAST_UPGRADE_CHECK
 project.root_object.attributes['LastSwiftUpdateCheck'] = LAST_UPGRADE_CHECK
 project.root_object.attributes['TargetAttributes'] = {}
@@ -54,6 +67,7 @@ config_group = main_group.new_group('Config', 'Config')
 ios_group = main_group.new_group(IOS_TARGET_NAME, IOS_TARGET_NAME)
 watch_group = main_group.new_group(WATCH_TARGET_NAME, WATCH_TARGET_NAME)
 ios_test_group = main_group.new_group(IOS_TEST_TARGET_NAME, IOS_TEST_TARGET_NAME)
+browse_fixture_group = ios_test_group.new_group('BrowseContractFixtures', BROWSE_FIXTURE_PROJECT_PATH)
 
 base_config = config_group.new_file('Base.xcconfig')
 debug_config = config_group.new_file('Debug.xcconfig')
@@ -90,7 +104,7 @@ assign_target_settings(
     'INFOPLIST_FILE' => 'CrossCountryMaps/Info.plist',
     'IPHONEOS_DEPLOYMENT_TARGET' => '17.0',
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks',
-    'PRODUCT_BUNDLE_IDENTIFIER' => IOS_BUNDLE_ID,
+    'PRODUCT_BUNDLE_IDENTIFIER' => '$(IOS_APP_BUNDLE_IDENTIFIER)',
     'SDKROOT' => 'iphoneos',
     'SUPPORTED_PLATFORMS' => 'iphonesimulator iphoneos',
     'SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD' => 'NO',
@@ -109,7 +123,7 @@ assign_target_settings(
     'CODE_SIGN_ENTITLEMENTS' => '',
     'INFOPLIST_FILE' => 'CrossCountryMapsWatch/Info.plist',
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks',
-    'PRODUCT_BUNDLE_IDENTIFIER' => WATCH_BUNDLE_ID,
+    'PRODUCT_BUNDLE_IDENTIFIER' => '$(WATCH_APP_BUNDLE_IDENTIFIER)',
     'SDKROOT' => 'watchos',
     'SUPPORTED_PLATFORMS' => 'watchsimulator watchos',
     'SWIFT_EMIT_LOC_STRINGS' => 'YES',
@@ -128,7 +142,7 @@ assign_target_settings(
     'GENERATE_INFOPLIST_FILE' => 'YES',
     'IPHONEOS_DEPLOYMENT_TARGET' => '17.0',
     'LD_RUNPATH_SEARCH_PATHS' => '$(inherited) @executable_path/Frameworks @loader_path/Frameworks',
-    'PRODUCT_BUNDLE_IDENTIFIER' => IOS_TEST_BUNDLE_ID,
+    'PRODUCT_BUNDLE_IDENTIFIER' => '$(IOS_TEST_BUNDLE_IDENTIFIER)',
     'SDKROOT' => 'iphoneos',
     'SUPPORTED_PLATFORMS' => 'iphonesimulator iphoneos',
     'SWIFT_EMIT_LOC_STRINGS' => 'NO',
@@ -165,6 +179,16 @@ add_sources(
     'FixtureLoader.swift'
   ]
 )
+add_resources(
+  ios_test_target,
+  browse_fixture_group,
+  Dir.children(BROWSE_FIXTURE_DIR).sort
+)
+
+strip_system_framework_references(ios_target)
+strip_system_framework_references(watch_target)
+strip_system_framework_references(ios_test_target)
+strip_framework_file_references(project)
 
 ios_target.add_dependency(watch_target)
 ios_test_target.add_dependency(ios_target)

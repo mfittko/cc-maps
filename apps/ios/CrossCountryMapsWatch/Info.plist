@@ -21,6 +21,6 @@
 	<key>WKApplication</key>
 	<true/>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.mfittko.ccmaps</string>
+	<string>$(IOS_APP_BUNDLE_IDENTIFIER)</string>
 </dict>
 </plist>

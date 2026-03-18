@@ -65,6 +65,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var isManualDestinationSelection = false
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
+    private(set) var handledLocationUpdateCount = 0
 
     @Published var selectedTrailID: String?
     @Published private(set) var selectedTrailSegment: TrailSegment?
@@ -200,7 +201,7 @@ final class BrowseViewModel: ObservableObject {
         do {
             let response = try await apiClient.fetchDestinations()
             let loadedDestinations = response.features
-                .map { Destination(feature: $0, fallback: AppConfig.defaultCenter) }
+                .map { Destination(feature: $0) }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
             destinations = loadedDestinations
@@ -266,6 +267,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func handleLocationUpdate(_ coordinate: CLLocationCoordinate2D) async {
+        handledLocationUpdateCount += 1
         currentLocation = coordinate
 
         guard !isManualDestinationSelection, !destinations.isEmpty else {
