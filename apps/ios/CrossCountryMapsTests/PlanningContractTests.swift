@@ -148,6 +148,54 @@ final class PlanningContractTests: XCTestCase {
         )
     }
 
+    func testPlanningSectionsPreserveRequestedAnchorOrder() throws {
+        let trails = [
+            try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+            try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+            try makeTrailSegment(id: 303, destinationId: 1, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+        ]
+
+        let sections = GeoMath.planningSections(for: [Self.edgeC, Self.edgeA], allTrails: trails)
+
+        XCTAssertEqual(sections.map(\.edgeID), [Self.edgeC, Self.edgeA])
+        XCTAssertEqual(sections.map(\.trailID), ["303", "101"])
+        XCTAssertEqual(sections.map(\.formattedDistanceLabel), ["0.6 km", "0.6 km"])
+    }
+
+    func testReorderedAnchorEdgeIDsFollowConnectedGraphPath() throws {
+        let trails = [
+            try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+            try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+            try makeTrailSegment(id: 303, destinationId: 1, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+        ]
+
+        let reordered = GeoMath.reorderedAnchorEdgeIDs([Self.edgeA, Self.edgeC, Self.edgeB], allTrails: trails)
+
+        XCTAssertEqual(reordered, [Self.edgeA, Self.edgeB, Self.edgeC])
+    }
+
+    func testPlanningSectionsPreserveFullSectionGeometry() throws {
+        let bentEdgeID = "10.750000:59.910000~10.770000:59.920000"
+        let trails = [
+            try makeBentTrail(
+                id: 404,
+                destinationId: 1,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                    CLLocationCoordinate2D(latitude: 59.915, longitude: 10.76),
+                    CLLocationCoordinate2D(latitude: 59.92, longitude: 10.77),
+                ]
+            )
+        ]
+
+        let sections = GeoMath.planningSections(for: [bentEdgeID], allTrails: trails)
+
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections[0].coordinates.count, 3)
+        XCTAssertNotNil(sections[0].midpoint)
+        XCTAssertGreaterThan(sections[0].distanceKm, 0)
+    }
+
     // MARK: BrowseViewModel planning-mode transition tests
 
     @MainActor
@@ -371,6 +419,64 @@ private func makeTrail(id: Int, destinationId: Int, latitude: Double, longitude:
                 [longitude, latitude],
                 [longitude + 0.01, latitude + 0.01],
             ],
+        ],
+    ]
+
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return try JSONDecoder().decode(TrailFeature.self, from: data)
+}
+
+private func makeTrailSegment(
+    id: Int,
+    destinationId: Int,
+    startLongitude: Double,
+    startLatitude: Double,
+    endLongitude: Double,
+    endLatitude: Double
+) throws -> TrailFeature {
+    let object: [String: Any] = [
+        "type": "Feature",
+        "properties": [
+            "id": id,
+            "destinationid": destinationId,
+            "trailtypesymbol": 30,
+            "prepsymbol": 20,
+            "has_classic": true,
+            "has_skating": true,
+            "st_length(shape)": 1000,
+        ],
+        "geometry": [
+            "type": "LineString",
+            "coordinates": [
+                [startLongitude, startLatitude],
+                [endLongitude, endLatitude],
+            ],
+        ],
+    ]
+
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return try JSONDecoder().decode(TrailFeature.self, from: data)
+}
+
+private func makeBentTrail(
+    id: Int,
+    destinationId: Int,
+    coordinates: [CLLocationCoordinate2D]
+) throws -> TrailFeature {
+    let object: [String: Any] = [
+        "type": "Feature",
+        "properties": [
+            "id": id,
+            "destinationid": destinationId,
+            "trailtypesymbol": 30,
+            "prepsymbol": 20,
+            "has_classic": true,
+            "has_skating": true,
+            "st_length(shape)": 1000,
+        ],
+        "geometry": [
+            "type": "LineString",
+            "coordinates": coordinates.map { [$0.longitude, $0.latitude] },
         ],
     ]
 
