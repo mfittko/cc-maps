@@ -13,7 +13,15 @@ The app exposes minimal PWA metadata through a manifest and icons, but it does n
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_MAPBOX_TOKEN` | Required client-side token for loading Mapbox styles and controls. |
+| `MAPBOX_ACCESS_TOKEN` | Optional server-side override token for `POST /api/elevation`. When unset, the endpoint falls back to `NEXT_PUBLIC_MAPBOX_TOKEN`. |
 | `SPORET_API_BASE_URL` | Optional override for the Sporet ArcGIS base URL. Defaults to the public service. |
+
+Current minimal Mapbox token scopes:
+
+- `NEXT_PUBLIC_MAPBOX_TOKEN`: `styles:read`, `fonts:read`, `styles:tiles`
+- `MAPBOX_ACCESS_TOKEN`: `styles:tiles`
+
+`MAPBOX_ACCESS_TOKEN` is an optional server-side override. The elevation endpoint prefers it when present and otherwise falls back to `NEXT_PUBLIC_MAPBOX_TOKEN`. It does not have to be a different token from `NEXT_PUBLIC_MAPBOX_TOKEN`.
 
 Default Sporet base URL:
 
@@ -190,9 +198,12 @@ Response shape: GeoJSON `FeatureCollection` with line features.
 
 1. Install dependencies with `npm install`.
 2. Create `.env.local` from `.env.local.example`.
-3. Provide a valid `NEXT_PUBLIC_MAPBOX_TOKEN`.
-4. Run `npm run dev`.
-5. Open `http://localhost:3000`.
+3. Provide a valid `NEXT_PUBLIC_MAPBOX_TOKEN` for browser map rendering.
+4. Optionally provide `MAPBOX_ACCESS_TOKEN` for the server-side elevation endpoint.
+5. The elevation endpoint prefers `MAPBOX_ACCESS_TOKEN` and falls back to `NEXT_PUBLIC_MAPBOX_TOKEN` when it is unset.
+6. The token used for the elevation endpoint only needs the `styles:tiles` scope.
+7. Run `npm run dev`.
+8. Open `http://localhost:3000`.
 
 For production-safe validation in this repository, use `npm run build`.
 

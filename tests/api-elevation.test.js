@@ -95,8 +95,25 @@ describe('/api/elevation', () => {
   });
 
   describe('configuration validation', () => {
-    it('returns 503 when MAPBOX_ACCESS_TOKEN is not configured', async () => {
-      process.env = { ...originalEnv, MAPBOX_ACCESS_TOKEN: '' };
+    it('falls back to NEXT_PUBLIC_MAPBOX_TOKEN when MAPBOX_ACCESS_TOKEN is not configured', async () => {
+      sampleElevationsAlongCoordinates.mockResolvedValue([100, 105, 103]);
+      process.env = {
+        ...originalEnv,
+        MAPBOX_ACCESS_TOKEN: '',
+        NEXT_PUBLIC_MAPBOX_TOKEN: 'public-fallback-token',
+      };
+      const res = createRes();
+      await handler(createReq(), res);
+
+      expect(res.statusCode).toBe(200);
+      expect(sampleElevationsAlongCoordinates).toHaveBeenCalledWith(
+        VALID_LINE_GEOMETRY.coordinates,
+        'public-fallback-token'
+      );
+    });
+
+    it('returns 503 when neither MAPBOX_ACCESS_TOKEN nor NEXT_PUBLIC_MAPBOX_TOKEN is configured', async () => {
+      process.env = { ...originalEnv, MAPBOX_ACCESS_TOKEN: '', NEXT_PUBLIC_MAPBOX_TOKEN: '' };
       const res = createRes();
       await handler(createReq(), res);
 

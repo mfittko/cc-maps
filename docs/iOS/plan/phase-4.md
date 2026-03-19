@@ -460,7 +460,13 @@ Route elevation summary (ascent and descent) is required by the Phase 4 planning
 
 ### Elevation source and endpoint contract
 
-The server-side elevation endpoint is `POST /api/elevation`. It accepts resolved route traversal geometry and ordered route-section geometry, fetches Mapbox Terrain-RGB raster tiles server-side through the Mapbox Raster Tiles API, decodes pixel elevation values, and returns derived ascent and descent metrics. The endpoint uses a server-side `MAPBOX_ACCESS_TOKEN` environment variable and does not depend on the public browser token (`NEXT_PUBLIC_MAPBOX_TOKEN`).
+The server-side elevation endpoint is `POST /api/elevation`. It accepts resolved route traversal geometry and ordered route-section geometry, fetches Mapbox Terrain-RGB raster tiles server-side through the Mapbox Raster Tiles API, decodes pixel elevation values, and returns derived ascent and descent metrics. The endpoint prefers a server-side `MAPBOX_ACCESS_TOKEN` environment variable and falls back to the public browser token (`NEXT_PUBLIC_MAPBOX_TOKEN`) when the server override is unset.
+
+For the current implementation, `MAPBOX_ACCESS_TOKEN` only needs the minimum required scope:
+
+- `styles:tiles`
+
+No extra secret scopes are required for this endpoint. `MAPBOX_ACCESS_TOKEN` is now an optional override, and the endpoint may reuse the same underlying token value as `NEXT_PUBLIC_MAPBOX_TOKEN` if that token already includes `styles:tiles`. A dedicated token is optional operational hygiene, not a protocol requirement.
 
 The endpoint reuses `getSampledCoordinatesAlongFeature` and `getElevationChangeMetrics` from `lib/map-domain.js` to stay consistent with web elevation reduction behavior. The tile decoding logic and sampling helpers live in `lib/terrain-rgb.js`.
 

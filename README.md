@@ -46,8 +46,23 @@ cp .env.local.example .env.local
 
 ```bash
 NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxxYourMapboxAccessTokenxxx
+MAPBOX_ACCESS_TOKEN=sk.xxxYourServerSideMapboxTokenxxx
 SPORET_API_BASE_URL=https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapServer
 ```
+
+`NEXT_PUBLIC_MAPBOX_TOKEN` is the browser token used by Mapbox GL JS. For the current web app, the minimal public scopes are:
+
+- `styles:read`
+- `fonts:read`
+- `styles:tiles`
+
+`MAPBOX_ACCESS_TOKEN` is an optional server-side override used by `POST /api/elevation` to fetch Mapbox Terrain-RGB raster tiles. The endpoint prefers `MAPBOX_ACCESS_TOKEN` and falls back to `NEXT_PUBLIC_MAPBOX_TOKEN` when the server override is unset. For the current implementation, the token used there only needs the minimum required scope:
+
+- `styles:tiles`
+
+No additional secret scopes are required for the current elevation endpoint.
+
+You can omit `MAPBOX_ACCESS_TOKEN` entirely and let the endpoint reuse `NEXT_PUBLIC_MAPBOX_TOKEN`, or set it to the same value if you prefer explicit configuration. A dedicated server-side token is still reasonable if you want separate rotation, usage tracking, or tighter future scope control, but it is not required by the current code path.
 
 4. Start the development server.
 

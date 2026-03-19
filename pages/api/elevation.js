@@ -18,7 +18,7 @@ const ELEVATION_SOURCE = {
 };
 
 function getMapboxToken() {
-  return process.env.MAPBOX_ACCESS_TOKEN || '';
+  return process.env.MAPBOX_ACCESS_TOKEN || process.env.NEXT_PUBLIC_MAPBOX_TOKEN || '';
 }
 
 function countCoordinates(geometry) {
