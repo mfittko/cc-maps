@@ -26,6 +26,7 @@ protocol BrowseAPIClient {
     func fetchDestinations() async throws -> DestinationFeatureCollection
     func fetchTrails(destinationID: String) async throws -> TrailFeatureCollection
     func fetchNearbyTrails(reference: CLLocationCoordinate2D) async throws -> TrailFeatureCollection
+    func fetchElevation(request: ElevationApiRequest) async throws -> ElevationApiResponse
 }
 
 protocol BrowseLocationServing: AnyObject {
@@ -231,6 +232,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var selectedPlannedSectionEdgeID: String?
     @Published private(set) var focusedPlannedSectionCoordinates: [CLLocationCoordinate2D] = []
     @Published private(set) var plannedSectionFocusRequestID = 0
+    @Published private(set) var routeElevation: ElevationApiResponse?
 
     @Published var selectedTrailID: String?
     @Published private(set) var selectedTrailSegment: TrailSegment?
@@ -249,6 +251,7 @@ final class BrowseViewModel: ObservableObject {
     private var previewLoadToken = UUID()
     private var fallbackTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
+    private var elevationTask: Task<Void, Never>?
     private var pendingIncomingRoutePlan: CanonicalRoutePlan?
     private var pendingRestoreContext: PendingRouteRestoreContext?
     private var pendingStoredDestinationID = ""
@@ -304,7 +307,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     var routeSummary: RouteSummary {
-        RouteSummary.from(sections: plannedSections)
+        RouteSummary.from(sections: plannedSections, elevationResponse: routeElevation)
     }
 
     var routeUsesPreviewDestinations: Bool {
@@ -344,13 +347,14 @@ final class BrowseViewModel: ObservableObject {
         }
 
         let summary = routeSummary
-        let selectedSection = plannedSections[matchingIndex]
+        let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
 
         return RouteAwareTrailDetailContext(
             selectedSectionNumber: matchingIndex + 1,
             totalSections: summary.sectionCount,
             totalDistanceKm: summary.totalDistanceKm,
-            totalElevationMeters: summary.totalElevationMeters
+            ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
+            descentMeters: routeMetrics.map { Double($0.descentMeters) }
         )
     }
 
@@ -438,6 +442,9 @@ final class BrowseViewModel: ObservableObject {
         routePlan.clear()
         activeRouteDestinationIDs = []
         clearSelectedPlannedSection()
+        routeElevation = nil
+        elevationTask?.cancel()
+        elevationTask = nil
 
         selectedDestinationID = id
         selectedTrailID = nil
@@ -939,6 +946,9 @@ final class BrowseViewModel: ObservableObject {
             activeRouteDestinationIDs = routeDestinationIDs(for: reorderedAnchorEdgeIDs, allTrails: allTrails)
             persistCurrentRoutePlan()
             fitRequestID += 1
+
+            let sections = GeoMath.planningSections(for: reorderedAnchorEdgeIDs, allTrails: allTrails)
+            scheduleElevationFetch(sections: sections, destinationID: selectedDestinationID)
         }
 
         if pendingRestoreContext.shouldEnterPlanningMode {
@@ -966,6 +976,7 @@ final class BrowseViewModel: ObservableObject {
 
         if anchorEdgeIDs.isEmpty {
             activeRouteDestinationIDs = []
+            routeElevation = nil
             routePlanStore.clearRoutePlan(for: selectedDestinationID)
             schedulePreviewEvaluation()
             return
@@ -974,6 +985,9 @@ final class BrowseViewModel: ObservableObject {
         activeRouteDestinationIDs = routeDestinationIDs(for: anchorEdgeIDs, allTrails: allTrails)
         persistCurrentRoutePlan()
         schedulePreviewEvaluation()
+
+        let sections = GeoMath.planningSections(for: anchorEdgeIDs, allTrails: allTrails)
+        scheduleElevationFetch(sections: sections, destinationID: selectedDestinationID)
     }
 
     private func routeDestinationIDs(for anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
@@ -1043,6 +1057,49 @@ final class BrowseViewModel: ObservableObject {
         focusedPlannedSectionCoordinates = []
     }
 
+    private func scheduleElevationFetch(sections: [PlanningSection], destinationID: String) {
+        elevationTask?.cancel()
+
+        guard !sections.isEmpty else {
+            routeElevation = nil
+            return
+        }
+
+        let anchorEdgeIDs = routePlan.anchorEdgeIDs
+        let traversal = sections.map { section in
+            lineStringGeometry(from: section.coordinates)
+        }
+        let sectionEntries = sections.map { section in
+            ElevationSectionRequest(
+                sectionKey: section.edgeID,
+                geometry: lineStringGeometry(from: section.coordinates)
+            )
+        }
+        let request = ElevationApiRequest(
+            destinationId: destinationID,
+            routeTraversal: traversal,
+            routeSections: sectionEntries
+        )
+
+        elevationTask = Task {
+            do {
+                let response = try await apiClient.fetchElevation(request: request)
+                // Discard stale results if destination or route changed during the await
+                guard selectedDestinationID == destinationID,
+                      routePlan.anchorEdgeIDs == anchorEdgeIDs else {
+                    return
+                }
+                routeElevation = response
+            } catch {
+                guard selectedDestinationID == destinationID,
+                      routePlan.anchorEdgeIDs == anchorEdgeIDs else {
+                    return
+                }
+                routeElevation = nil
+            }
+        }
+    }
+
     private var autoEligibleDestination: Destination? {
         guard let currentLocation else {
             return nil
@@ -1080,6 +1137,23 @@ struct APIClient: BrowseAPIClient {
                 URLQueryItem(name: "lat", value: String(reference.latitude)),
             ]
         )
+    }
+
+    func fetchElevation(request: ElevationApiRequest) async throws -> ElevationApiResponse {
+        let requestURL = try makeURL(path: "/api/elevation", queryItems: [])
+        let requestBody = try JSONEncoder().encode(request)
+        var urlRequest = URLRequest(url: requestURL)
+        urlRequest.httpMethod = "POST"
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.httpBody = requestBody
+        let (data, response) = try await URLSession.shared.data(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return try decoder.decode(ElevationApiResponse.self, from: data)
     }
 
     private func fetch<Response: Decodable>(path: String, queryItems: [URLQueryItem] = []) async throws -> Response {

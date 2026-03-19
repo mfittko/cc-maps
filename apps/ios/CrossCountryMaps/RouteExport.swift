@@ -143,18 +143,24 @@ struct RouteSummary: Equatable {
     let sectionCount: Int
     let totalDistanceKm: Double
     /// `nil` means elevation data is unavailable for this route.
-    let totalElevationMeters: Double?
+    let ascentMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let descentMeters: Double?
 
     var formattedDistanceLabel: String {
         String(format: "%.1f km", totalDistanceKm)
     }
 
     var formattedElevationLabel: String? {
-        guard let meters = totalElevationMeters else {
+        guard let ascent = ascentMeters else {
             return nil
         }
 
-        return String(format: "↑ %.0f m", meters)
+        if let descent = descentMeters {
+            return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
+        }
+
+        return String(format: "↑ %.0f m", ascent)
     }
 
     /// Human-readable note shown when elevation data is not available.
@@ -162,8 +168,18 @@ struct RouteSummary: Equatable {
 
     static func from(sections: [PlanningSection]) -> RouteSummary {
         let total = sections.reduce(0) { $0 + $1.distanceKm }
-        // Elevation is not currently available from the Sporet data source.
-        return RouteSummary(sectionCount: sections.count, totalDistanceKm: total, totalElevationMeters: nil)
+        return RouteSummary(sectionCount: sections.count, totalDistanceKm: total, ascentMeters: nil, descentMeters: nil)
+    }
+
+    static func from(sections: [PlanningSection], elevationResponse: ElevationApiResponse?) -> RouteSummary {
+        let total = sections.reduce(0) { $0 + $1.distanceKm }
+        let routeMetrics = elevationResponse?.route.status == "ok" ? elevationResponse?.route.metrics : nil
+        return RouteSummary(
+            sectionCount: sections.count,
+            totalDistanceKm: total,
+            ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
+            descentMeters: routeMetrics.map { Double($0.descentMeters) }
+        )
     }
 }
 
@@ -171,7 +187,10 @@ struct RouteAwareTrailDetailContext: Equatable {
     let selectedSectionNumber: Int
     let totalSections: Int
     let totalDistanceKm: Double
-    let totalElevationMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let ascentMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let descentMeters: Double?
 
     var formattedSectionLabel: String {
         "Section \(selectedSectionNumber) of \(totalSections)"
@@ -182,10 +201,14 @@ struct RouteAwareTrailDetailContext: Equatable {
     }
 
     var formattedElevationLabel: String? {
-        guard let totalElevationMeters else {
+        guard let ascent = ascentMeters else {
             return nil
         }
 
-        return String(format: "↑ %.0f m", totalElevationMeters)
+        if let descent = descentMeters {
+            return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
+        }
+
+        return String(format: "↑ %.0f m", ascent)
     }
 }

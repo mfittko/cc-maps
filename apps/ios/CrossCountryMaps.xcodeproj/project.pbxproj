@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */; };
+		4A2B7C8D1EF3A9B04C5D6E71 /* ElevationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B7C8C1EF3A9B04C5D6E71 /* ElevationModels.swift */; };
 		4A81169B92C6860E0F9A0063 /* PlanningPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EE227589903682313B4BB7C /* PlanningPanel.swift */; };
 		4C14AEEB66A637EB8AFA200D /* default-destination-fallback.json in Resources */ = {isa = PBXBuildFile; fileRef = BAE3E55E59417244266E684F /* default-destination-fallback.json */; };
 		51856EF4ADC7716004857868 /* crossing-interval-inspection.json in Resources */ = {isa = PBXBuildFile; fileRef = A976DB7912080A9359A42657 /* crossing-interval-inspection.json */; };
@@ -87,6 +88,7 @@
 		B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		BA4047056C56412595C77135 /* RoutePlanModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoutePlanModels.swift; sourceTree = "<group>"; };
 		9D9105A391AB74684F9121A1 /* RouteExport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RouteExport.swift; sourceTree = "<group>"; };
+		4A2B7C8C1EF3A9B04C5D6E71 /* ElevationModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ElevationModels.swift; sourceTree = "<group>"; };
 		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
 		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
 		C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
@@ -175,6 +177,7 @@
 				3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */,
 				BA4047056C56412595C77135 /* RoutePlanModels.swift */,
 				9D9105A391AB74684F9121A1 /* RouteExport.swift */,
+				4A2B7C8C1EF3A9B04C5D6E71 /* ElevationModels.swift */,
 				16688666BC97DFBF7FDA4CFB /* LocationService.swift */,
 				67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */,
 				2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */,
@@ -406,6 +409,7 @@
 				41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */,
 				9CBC3486F6AF4557C36269A9 /* RoutePlanModels.swift in Sources */,
 				9D9105A491AB74684F9121A1 /* RouteExport.swift in Sources */,
+				4A2B7C8D1EF3A9B04C5D6E71 /* ElevationModels.swift in Sources */,
 				73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */,
 				A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */,
 				FBCD282ABF6C11E5C782AF10 /* TrailMapView.swift in Sources */,
