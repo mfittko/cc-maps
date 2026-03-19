@@ -196,6 +196,27 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertGreaterThan(sections[0].distanceKm, 0)
     }
 
+    func testPlanningGraphRetainsVeryShortSections() throws {
+        let shortEdgeID = "10.750000:59.910000~10.750200:59.910000"
+        let trails = [
+            try makeTrailSegment(
+                id: 505,
+                destinationId: 2,
+                startLongitude: 10.75,
+                startLatitude: 59.91,
+                endLongitude: 10.7502,
+                endLatitude: 59.91
+            )
+        ]
+
+        let sections = GeoMath.planningSections(for: [shortEdgeID], allTrails: trails)
+
+        XCTAssertEqual(sections.count, 1)
+        XCTAssertEqual(sections[0].edgeID, shortEdgeID)
+        XCTAssertLessThan(sections[0].distanceKm, 0.05)
+        XCTAssertGreaterThan(sections[0].distanceKm, 0)
+    }
+
     // MARK: BrowseViewModel planning-mode transition tests
 
     @MainActor

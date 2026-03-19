@@ -193,7 +193,7 @@ final class BrowseViewModel: ObservableObject {
             routePlan.toggleAnchorEdge(anchorEdgeID)
             routePlan.replaceAnchorEdges(with: GeoMath.reorderedAnchorEdgeIDs(
                 routePlan.anchorEdgeIDs,
-                allTrails: primaryTrails
+                allTrails: primaryTrails + previewTrails
             ))
         } else {
             selectedTrailID = trailID
@@ -421,6 +421,11 @@ final class BrowseViewModel: ObservableObject {
 
             previewTrails = nextPreviewTrails
             previewPhase = .success
+
+            let trails = primaryTrails + nextPreviewTrails
+            Task.detached(priority: .background) {
+                GeoMath.warmPlanningGraph(for: trails)
+            }
         } catch {
             guard token == previewLoadToken else {
                 return

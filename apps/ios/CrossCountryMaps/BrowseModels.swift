@@ -580,6 +580,14 @@ enum GeoMath {
             return []
         }
 
+        let cacheKey = planningSectionsCacheKey(anchorEdgeIDs: anchorEdgeIDs, trails: allTrails)
+        cacheLock.lock()
+        if let cachedSections = planningSectionsCache[cacheKey] {
+            cacheLock.unlock()
+            return cachedSections
+        }
+        cacheLock.unlock()
+
         let descriptorsByID = planningGraph(in: allTrails).edgesByID
 
         var sections = anchorEdgeIDs.compactMap { edgeID in
@@ -608,15 +616,19 @@ enum GeoMath {
             }
         }
 
+        cacheLock.lock()
+        planningSectionsCache[cacheKey] = sections
+        cacheLock.unlock()
+
         return sections
     }
 
     static func reorderedAnchorEdgeIDs(_ anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
-        let graph = planningGraph(in: allTrails)
-
         guard anchorEdgeIDs.count >= 2 else {
             return anchorEdgeIDs
         }
+
+        let graph = planningGraph(in: allTrails)
 
         let uniqueEdgeIDs = anchorEdgeIDs.reduce(into: [String]()) { result, edgeID in
             guard graph.edgesByID[edgeID] != nil, !result.contains(edgeID) else {
@@ -876,6 +888,8 @@ enum GeoMath {
 
     private static let cacheLock = NSLock()
     private static var crossingDistancesCache: [String: [Double]] = [:]
+    private static var trailBoundsCache: [String: TrailBounds] = [:]
+    private static var planningSectionsCache: [String: [PlanningSection]] = [:]
 
     private static func cachedCrossingDistances(trail: TrailFeature, allTrails: [TrailFeature]) -> [Double] {
         let cacheKey = trail.id + "|" + allTrails.map(\.id).joined(separator: ",")
@@ -887,6 +901,7 @@ enum GeoMath {
         cacheLock.unlock()
 
         let coordinateSets = trail.coordinateSets
+        let trailBounds = cachedTrailBounds(for: trail)
         var crossingDistances: [Double] = []
         var traversed = 0.0
 
@@ -897,6 +912,10 @@ enum GeoMath {
                 let segLen = distanceKilometers(from: segStart, to: segEnd)
 
                 for candidate in allTrails where candidate.id != trail.id {
+                    guard trailBounds.intersects(cachedTrailBounds(for: candidate)) else {
+                        continue
+                    }
+
                     for candidateCoords in candidate.coordinateSets {
                         for ci in 1..<candidateCoords.count {
                             if let intersection = segmentIntersection(
@@ -920,13 +939,26 @@ enum GeoMath {
         return crossingDistances
     }
 
+    private static func cachedTrailBounds(for trail: TrailFeature) -> TrailBounds {
+        cacheLock.lock()
+        if let cached = trailBoundsCache[trail.id] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let bounds = TrailBounds(coordinates: trail.coordinateSets.flatMap { $0 })
+
+        cacheLock.lock()
+        trailBoundsCache[trail.id] = bounds
+        cacheLock.unlock()
+        return bounds
+    }
+
     private static var planningGraphCache: [String: PlanningGraph] = [:]
 
     private static func planningGraph(in trails: [TrailFeature]) -> PlanningGraph {
-        let signature = trails.map {
-            let pointCount = $0.coordinateSets.reduce(0) { $0 + $1.count }
-            return "\($0.id):\($0.destinationId ?? ""):\(pointCount):\(Int($0.shapeLengthMeters ?? 0))"
-        }.joined(separator: "|")
+        let signature = planningGraphSignature(for: trails)
 
         cacheLock.lock()
         if let cachedGraph = planningGraphCache[signature] {
@@ -944,6 +976,7 @@ enum GeoMath {
             let segments = trailSegments(
                 trail: trail,
                 allTrails: trails,
+                minSegmentKm: 0,
                 includeMidpoints: true
             )
 
@@ -1005,6 +1038,17 @@ enum GeoMath {
         planningGraphCache[signature] = graph
         cacheLock.unlock()
         return graph
+    }
+
+    private static func planningSectionsCacheKey(anchorEdgeIDs: [String], trails: [TrailFeature]) -> String {
+        anchorEdgeIDs.joined(separator: ",") + "||" + planningGraphSignature(for: trails)
+    }
+
+    private static func planningGraphSignature(for trails: [TrailFeature]) -> String {
+        trails.map {
+            let pointCount = $0.coordinateSets.reduce(0) { $0 + $1.count }
+            return "\($0.id):\($0.destinationId ?? ""):\(pointCount):\(Int($0.shapeLengthMeters ?? 0))"
+        }.joined(separator: "|")
     }
 
     static func extractCoordinatesForSegment(
@@ -1279,6 +1323,47 @@ struct TrailSegment: Equatable {
 
     var formattedDistanceLabel: String {
         String(format: "%.1f km", distanceKm)
+    }
+}
+
+private struct TrailBounds {
+    let minLatitude: Double
+    let maxLatitude: Double
+    let minLongitude: Double
+    let maxLongitude: Double
+
+    init(coordinates: [CLLocationCoordinate2D]) {
+        guard let first = coordinates.first else {
+            minLatitude = 0
+            maxLatitude = 0
+            minLongitude = 0
+            maxLongitude = 0
+            return
+        }
+
+        var minLat = first.latitude
+        var maxLat = first.latitude
+        var minLng = first.longitude
+        var maxLng = first.longitude
+
+        for coordinate in coordinates.dropFirst() {
+            minLat = min(minLat, coordinate.latitude)
+            maxLat = max(maxLat, coordinate.latitude)
+            minLng = min(minLng, coordinate.longitude)
+            maxLng = max(maxLng, coordinate.longitude)
+        }
+
+        minLatitude = minLat
+        maxLatitude = maxLat
+        minLongitude = minLng
+        maxLongitude = maxLng
+    }
+
+    func intersects(_ other: TrailBounds) -> Bool {
+        !(maxLatitude < other.minLatitude ||
+          other.maxLatitude < minLatitude ||
+          maxLongitude < other.minLongitude ||
+          other.maxLongitude < minLongitude)
     }
 }
 

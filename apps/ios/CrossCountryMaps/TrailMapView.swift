@@ -80,6 +80,8 @@ struct TrailMapView: UIViewRepresentable {
         var lastLocationFocusRequestID = 0
         var lastAutoFollowEnabled = false
         var cachedSegmentAnnotations: [TrailSegmentAnnotation] = []
+        var lastPlannedSectionsSignature = ""
+        var cachedPlannedSections: [PlanningSection] = []
 
         init(_ parent: TrailMapView) {
             self.parent = parent
@@ -166,7 +168,7 @@ struct TrailMapView: UIViewRepresentable {
 
             let displayedTrails = parent.primaryTrails + parent.previewTrails
             let selectedTrailOverlays = buildSelectedTrailOverlays(trails: displayedTrails)
-            let plannedSectionOverlays = buildPlannedSectionOverlays(trails: parent.primaryTrails)
+            let plannedSectionOverlays = buildPlannedSectionOverlays(trails: displayedTrails)
 
             mapView.addOverlays(selectedTrailOverlays + plannedSectionOverlays, level: .aboveLabels)
         }
@@ -183,7 +185,7 @@ struct TrailMapView: UIViewRepresentable {
             let existingDirections = mapView.annotations.filter { $0 is RouteDirectionAnnotation }
             mapView.removeAnnotations(existingDirections)
 
-            let directionAnnotations = buildRouteDirectionAnnotations(trails: parent.primaryTrails)
+            let directionAnnotations = buildRouteDirectionAnnotations(trails: parent.primaryTrails + parent.previewTrails)
             mapView.addAnnotations(directionAnnotations)
         }
 
@@ -234,19 +236,22 @@ struct TrailMapView: UIViewRepresentable {
 
             let tapPoint = recognizer.location(in: mapView)
 
-            if let hitView = mapView.hitTest(tapPoint, with: nil), hitView is MKAnnotationView || hitView.superview is MKAnnotationView {
+            if let hitView = mapView.hitTest(tapPoint, with: nil),
+               let annotationView = annotationView(containing: hitView),
+               annotationView.annotation is DestinationAnnotation {
                 return
             }
 
             let tappedCoordinate = mapView.convert(tapPoint, toCoordinateFrom: mapView)
             let displayedTrails = parent.primaryTrails + parent.previewTrails
-            let primaryTrails = parent.primaryTrails
             let isInPlanningMode = parent.isInPlanningMode
+            let planningTrails = displayedTrails
+            let tapCandidateTrails = displayedTrails
 
             // Fast path: trail match + segment resolution (no graph needed)
             let quickSelection = GeoMath.inspectableTrailSelection(
                 reference: tappedCoordinate,
-                trails: displayedTrails,
+                trails: tapCandidateTrails,
                 trailMatchThresholdKm: AppConfig.trailTapThresholdKm,
                 includePlanningAnchor: false
             )
@@ -256,19 +261,27 @@ struct TrailMapView: UIViewRepresentable {
                 pendingPlanningWork?.cancel()
 
                 let onTrailTap = parent.onTrailTap
+                var scheduledWorkItem: DispatchWorkItem?
                 let workItem = DispatchWorkItem { [weak self] in
-                    guard let self, !self.pendingPlanningWork!.isCancelled else { return }
+                    guard let self,
+                          let scheduledWorkItem,
+                          !scheduledWorkItem.isCancelled,
+                          self.pendingPlanningWork === scheduledWorkItem else {
+                        return
+                    }
 
-                    // Use only primary trails for planning graph — preview trails are irrelevant
                     let anchorEdgeID = quickSelection?.trailID != nil
                         ? GeoMath.planningAnchorEdgeIDForTap(
                             trailID: quickSelection!.trailID,
                             reference: tappedCoordinate,
-                            allTrails: primaryTrails
+                            allTrails: planningTrails
                         )
                         : nil
 
-                    guard !self.pendingPlanningWork!.isCancelled else { return }
+                    guard !scheduledWorkItem.isCancelled,
+                          self.pendingPlanningWork === scheduledWorkItem else {
+                        return
+                    }
 
                     let selection = anchorEdgeID != nil
                         ? TrailInspectionSelection(
@@ -282,6 +295,7 @@ struct TrailMapView: UIViewRepresentable {
                         onTrailTap(selection)
                     }
                 }
+                scheduledWorkItem = workItem
                 pendingPlanningWork = workItem
                 DispatchQueue.global(qos: .userInitiated).async(execute: workItem)
             } else {
@@ -352,7 +366,7 @@ struct TrailMapView: UIViewRepresentable {
                 return []
             }
 
-            let plannedSections = GeoMath.planningSections(for: parent.routePlan.anchorEdgeIDs, allTrails: trails)
+            let plannedSections = plannedSections(for: trails)
 
             return plannedSections.enumerated().compactMap { index, section in
                 guard section.coordinates.count >= 2 else {
@@ -372,7 +386,7 @@ struct TrailMapView: UIViewRepresentable {
                 return []
             }
 
-            let plannedSections = GeoMath.planningSections(for: parent.routePlan.anchorEdgeIDs, allTrails: trails)
+            let plannedSections = plannedSections(for: trails)
             let spacingKm = 0.35
 
             return plannedSections.flatMap { section -> [RouteDirectionAnnotation] in
@@ -411,7 +425,7 @@ struct TrailMapView: UIViewRepresentable {
 
         func segmentAnnotations(for trails: [TrailFeature], shouldShowLabels: Bool) -> [TrailSegmentAnnotation] {
             let plannedSections = parent.isInPlanningMode
-                ? GeoMath.planningSections(for: parent.routePlan.anchorEdgeIDs, allTrails: parent.primaryTrails)
+                ? plannedSections(for: parent.primaryTrails + parent.previewTrails)
                 : []
 
             // Planned route labels are always visible; other labels respect zoom level
@@ -474,6 +488,32 @@ struct TrailMapView: UIViewRepresentable {
                 }
 
             return cachedSegmentAnnotations
+        }
+
+        func plannedSections(for trails: [TrailFeature]) -> [PlanningSection] {
+            let signature = parent.routePlan.anchorEdgeIDs.joined(separator: ",") + "||" + trails.map(\.id).joined(separator: ",")
+
+            guard signature != lastPlannedSectionsSignature else {
+                return cachedPlannedSections
+            }
+
+            lastPlannedSectionsSignature = signature
+            cachedPlannedSections = GeoMath.planningSections(for: parent.routePlan.anchorEdgeIDs, allTrails: trails)
+            return cachedPlannedSections
+        }
+
+        private func annotationView(containing view: UIView) -> MKAnnotationView? {
+            var currentView: UIView? = view
+
+            while let candidate = currentView {
+                if let annotationView = candidate as? MKAnnotationView {
+                    return annotationView
+                }
+
+                currentView = candidate.superview
+            }
+
+            return nil
         }
 
         func refreshTrailSegmentLabelVisibility(on mapView: MKMapView) {
@@ -704,6 +744,7 @@ final class TrailSegmentAnnotationView: MKAnnotationView {
         super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
 
         canShowCallout = false
+        isUserInteractionEnabled = false
         collisionMode = .rectangle
         centerOffset = CGPoint(x: 0, y: -2)
 

@@ -154,7 +154,7 @@ struct ContentView: View {
         if viewModel.isInPlanningMode {
             PlanningPanel(
                 plan: viewModel.routePlan,
-                allTrails: viewModel.primaryTrails,
+                allTrails: viewModel.primaryTrails + viewModel.previewTrails,
                 onExitPlanning: { viewModel.exitPlanningMode() },
                 onReverse: { viewModel.reverseRoute() },
                 onClear: { viewModel.clearRoute() },

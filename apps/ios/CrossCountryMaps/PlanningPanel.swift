@@ -12,6 +12,10 @@ struct PlanningPanel: View {
         GeoMath.planningSections(for: plan.anchorEdgeIDs, allTrails: allTrails)
     }
 
+    private var trailsByID: [String: TrailFeature] {
+        Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+    }
+
     private var anchorListHeight: CGFloat {
         let rowHeight: CGFloat = 35
         return CGFloat(plan.anchorEdgeIDs.count) * rowHeight
@@ -142,13 +146,17 @@ struct PlanningPanel: View {
     }
 
     private func trailLabel(for edgeID: String, index: Int) -> String {
-        guard let trail = allTrails.first(where: { $0.containsPlanningAnchorEdgeID(edgeID, allTrails: allTrails) }) else {
+        guard plannedSections.indices.contains(index) else {
             return "Section \(edgeID)"
         }
 
-        let distanceLabel = plannedSections.indices.contains(index)
-            ? plannedSections[index].formattedDistanceLabel
-            : trail.formattedLengthLabel
+        let section = plannedSections[index]
+
+        guard let trail = trailsByID[section.trailID] else {
+            return "Section \(edgeID)"
+        }
+
+        let distanceLabel = section.formattedDistanceLabel
 
         if trail.trailTypeSymbol == 30 {
             return distanceLabel
