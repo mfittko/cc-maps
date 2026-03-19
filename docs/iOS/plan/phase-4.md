@@ -207,8 +207,9 @@ Required planning-summary behavior:
 4. The planning surface must show route elevation summary when that data is available from the same derived route state used by the web planner.
 5. If elevation summary is unavailable for a valid route, the UI must communicate unavailability explicitly rather than displaying a misleading zero value.
 6. Summary values must refresh deterministically after add, remove, reverse, clear, and successful hydration.
-7. If Apple later broadens segment-distance labeling beyond the selected trail, that expanded label density belongs to the planning surface or route-review context for the active route or visible planned network, not to default browse-mode inspection.
-8. Any such broader label pass must remain zoom-gated, collision-aware, and bounded to the active planning context rather than all loaded trails.
+7. Selecting a planned section from the planning surface must highlight that section on the map and bring it into the unobscured visible map frame rather than leaving it hidden behind the planning chrome.
+8. If Apple later broadens segment-distance labeling beyond the selected trail, that expanded label density belongs to the planning surface or route-review context for the active route or visible planned network, not to default browse-mode inspection.
+9. Any such broader label pass must remain zoom-gated, collision-aware, and bounded to the active planning context rather than all loaded trails.
 
 Required non-planning route-aware detail behavior:
 
@@ -221,7 +222,8 @@ Objective parity checks:
 
 1. The same planned route fixture must produce the same total distance and section count on iPhone as on the web.
 2. A planned segment selected outside planning mode must expose the same route-context categories on iPhone that the web app already ships: route section index, overall route distance, and total route elevation metrics when available.
-3. If a later planning-mode iteration adds broader on-map segment-distance labels, verify that label visibility remains bounded to planning-relevant geometry, respects a minimum zoom threshold, and prefers longer sections when the map becomes crowded.
+3. Selecting a section from the planning list must visibly strengthen that section's map highlight and fit it into the unobscured map frame without triggering a broad primary-network refit.
+4. If a later planning-mode iteration adds broader on-map segment-distance labels, verify that label visibility remains bounded to planning-relevant geometry, respects a minimum zoom threshold, and prefers longer sections when the map becomes crowded.
 
 ### 4.6 Nearby preview-sector participation and bounded route semantics
 
