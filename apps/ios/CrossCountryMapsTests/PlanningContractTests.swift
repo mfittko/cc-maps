@@ -1293,6 +1293,7 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testViewModelRequestsElevationAfterAnchorUpdate() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let apiClient = BrowseAPISpy(
             destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
             trailsByDestination: [
@@ -1311,7 +1312,9 @@ final class PlanningContractTests: XCTestCase {
         let viewModel = BrowseViewModel(
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
-            timingConfig: .immediate
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
         )
 
         viewModel.start()
@@ -1439,8 +1442,10 @@ final class PlanningContractTests: XCTestCase {
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
 
-        await waitUntil {
-            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 1
         }
         XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 300, accuracy: 0.01)
 
@@ -1457,7 +1462,7 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertNil(viewModel.routeSummary.ascentMeters)
         XCTAssertNil(viewModel.routeSummary.descentMeters)
 
-        await waitUntil {
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
             viewModel.routeSummary.ascentMeters == 420 &&
                 viewModel.routeSummary.descentMeters == 210
         }
@@ -1468,6 +1473,7 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testSelectedRouteDetailContextIncludesSelectedSectionElevation() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let apiClient = BrowseAPISpy(
             destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
             trailsByDestination: [
@@ -1489,7 +1495,9 @@ final class PlanningContractTests: XCTestCase {
         let viewModel = BrowseViewModel(
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
-            timingConfig: .immediate
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
         )
 
         viewModel.start()
@@ -1501,8 +1509,10 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
 
-        await waitUntil {
-            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 2
         }
 
         let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
@@ -1534,6 +1544,7 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testSelectedRouteDetailContextUsesAnchorEdgeFallbackForSectionElevation() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let apiClient = BrowseAPISpy(
             destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
             trailsByDestination: [
@@ -1555,7 +1566,9 @@ final class PlanningContractTests: XCTestCase {
         let viewModel = BrowseViewModel(
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
-            timingConfig: .immediate
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
         )
 
         viewModel.start()
@@ -1567,7 +1580,11 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
 
-        await waitUntil { viewModel.routeElevation != nil }
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 2
+        }
 
         let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
 
@@ -1587,6 +1604,7 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testSelectedRouteDetailContextUsesUnavailableSectionElevationCopy() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let apiClient = BrowseAPISpy(
             destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
             trailsByDestination: [
@@ -1608,7 +1626,9 @@ final class PlanningContractTests: XCTestCase {
         let viewModel = BrowseViewModel(
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
-            timingConfig: .immediate
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
         )
 
         viewModel.start()
@@ -1628,13 +1648,8 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectTrail(
             selection: TrailInspectionSelection(
                 trailID: selectedSection.trailID,
-                anchorEdgeID: nil,
-                segment: TrailSegment(
-                    startDistanceKm: selectedSection.startDistanceKm,
-                    endDistanceKm: selectedSection.endDistanceKm,
-                    distanceKm: selectedSection.distanceKm,
-                    midpoint: selectedSection.midpoint
-                )
+                anchorEdgeID: selectedSection.edgeID,
+                segment: nil
             )
         )
 
