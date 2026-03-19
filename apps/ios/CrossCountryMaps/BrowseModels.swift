@@ -324,10 +324,23 @@ struct TrailFeature: Decodable, Identifiable, Equatable {
     var shouldShowDisciplineAvailabilityLine: Bool {
         !(hasClassic == true && hasSkating == true)
     }
+
+    func planningAnchorEdgeIDs(allTrails: [TrailFeature]) -> [String] {
+        GeoMath.planningAnchorEdgeIDs(for: self, allTrails: allTrails)
+    }
+
+    func containsPlanningAnchorEdgeID(_ edgeID: String, allTrails: [TrailFeature]) -> Bool {
+        planningAnchorEdgeIDs(allTrails: allTrails).contains(edgeID)
+    }
+
+    func planningSections(allTrails: [TrailFeature]) -> [PlanningSection] {
+        GeoMath.planningSections(for: planningAnchorEdgeIDs(allTrails: allTrails), allTrails: allTrails)
+    }
 }
 
 struct TrailInspectionSelection: Equatable {
     let trailID: String
+    let anchorEdgeID: String?
     let segment: TrailSegment?
 }
 
@@ -373,6 +386,17 @@ enum GeoMath {
         let start = CLLocation(latitude: from.latitude, longitude: from.longitude)
         let end = CLLocation(latitude: to.latitude, longitude: to.longitude)
         return start.distance(from: end) / 1000
+    }
+
+    static func bearing(from: CLLocationCoordinate2D, to: CLLocationCoordinate2D) -> Double {
+        let fromLat = from.latitude * .pi / 180
+        let toLat = to.latitude * .pi / 180
+        let deltaLng = (to.longitude - from.longitude) * .pi / 180
+
+        let y = sin(deltaLng) * cos(toLat)
+        let x = cos(fromLat) * sin(toLat) - sin(fromLat) * cos(toLat) * cos(deltaLng)
+        let radians = atan2(y, x)
+        return radians * 180 / .pi
     }
 
     static func totalLengthKilometers(for coordinateSets: [[CLLocationCoordinate2D]]) -> Double {
@@ -462,7 +486,8 @@ enum GeoMath {
         reference: CLLocationCoordinate2D,
         trails: [TrailFeature],
         trailMatchThresholdKm: Double,
-        crossingMatchThresholdKm: Double = 0.01
+        crossingMatchThresholdKm: Double = 0.01,
+        includePlanningAnchor: Bool = false
     ) -> TrailInspectionSelection? {
         guard let nearestTrail = trails.min(by: { left, right in
             distanceToTrailKilometers(reference: reference, trail: left) <
@@ -478,6 +503,9 @@ enum GeoMath {
 
         return TrailInspectionSelection(
             trailID: nearestTrail.id,
+            anchorEdgeID: includePlanningAnchor
+                ? planningAnchorEdgeID(for: nearestTrail, reference: reference, allTrails: trails)
+                : nil,
             segment: resolvedSegment(
                 for: reference,
                 trail: nearestTrail,
@@ -485,6 +513,196 @@ enum GeoMath {
                 crossingMatchThresholdKm: crossingMatchThresholdKm
             )
         )
+    }
+
+    static func planningAnchorEdgeIDs(for trail: TrailFeature, allTrails: [TrailFeature]) -> [String] {
+        planningGraph(in: allTrails)
+            .edgesByTrailID[trail.id, default: []]
+            .map(\.edgeID)
+    }
+
+    static func planningAnchorEdgeIDForTap(
+        trailID: String,
+        reference: CLLocationCoordinate2D,
+        allTrails: [TrailFeature]
+    ) -> String? {
+        guard let trail = allTrails.first(where: { $0.id == trailID }) else {
+            return nil
+        }
+        return planningAnchorEdgeID(for: trail, reference: reference, allTrails: allTrails)
+    }
+
+    static func planningAnchorEdgeID(
+        for trail: TrailFeature,
+        reference: CLLocationCoordinate2D,
+        allTrails: [TrailFeature]
+    ) -> String? {
+        let trailEdges = planningGraph(in: allTrails)
+            .edgesByTrailID[trail.id, default: []]
+
+        guard !trailEdges.isEmpty else {
+            return nil
+        }
+
+        // Single-edge trail: no segment resolution needed
+        if trailEdges.count == 1 {
+            return trailEdges[0].edgeID
+        }
+
+        // Multi-edge trail: match via resolved segment distances
+        if let segment = resolvedSegment(
+            for: reference,
+            trail: trail,
+            allTrails: allTrails
+        ) {
+            let candidateEdges = trailEdges.filter {
+                abs($0.startDistanceKm - segment.startDistanceKm) < 0.0001 &&
+                abs($0.endDistanceKm - segment.endDistanceKm) < 0.0001
+            }
+
+            if let match = candidateEdges.min(by: { left, right in
+                projectedDistance(reference: reference, coordinates: left.coordinates).distanceKm <
+                    projectedDistance(reference: reference, coordinates: right.coordinates).distanceKm
+            }) {
+                return match.edgeID
+            }
+        }
+
+        // Fallback: pick the edge closest to the tap point
+        return trailEdges.min(by: { left, right in
+            projectedDistance(reference: reference, coordinates: left.coordinates).distanceKm <
+                projectedDistance(reference: reference, coordinates: right.coordinates).distanceKm
+        })?.edgeID
+    }
+
+    static func planningSections(for anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [PlanningSection] {
+        guard !anchorEdgeIDs.isEmpty else {
+            return []
+        }
+
+        let cacheKey = planningSectionsCacheKey(anchorEdgeIDs: anchorEdgeIDs, trails: allTrails)
+        cacheLock.lock()
+        if let cachedSections = planningSectionsCache[cacheKey] {
+            cacheLock.unlock()
+            return cachedSections
+        }
+        cacheLock.unlock()
+
+        let descriptorsByID = planningGraph(in: allTrails).edgesByID
+
+        var sections = anchorEdgeIDs.compactMap { edgeID in
+            descriptorsByID[edgeID]
+        }
+
+        guard sections.count >= 2 else {
+            cacheLock.lock()
+            planningSectionsCache[cacheKey] = sections
+            cacheLock.unlock()
+            return sections
+        }
+
+        // Orient coordinates so adjacent sections flow continuously
+        for i in 1..<sections.count {
+            let prevEnd = sections[i - 1].coordinates.last!
+            let currStart = sections[i].coordinates.first!
+            let currEnd = sections[i].coordinates.last!
+
+            if distanceKilometers(from: prevEnd, to: currEnd) < distanceKilometers(from: prevEnd, to: currStart) {
+                sections[i] = sections[i].reversed()
+            }
+        }
+
+        // Orient the first section based on the second (if available)
+        if sections.count >= 2 {
+            let firstEnd = sections[0].coordinates.last!
+            let secondStart = sections[1].coordinates.first!
+            let firstStart = sections[0].coordinates.first!
+
+            if distanceKilometers(from: firstStart, to: secondStart) < distanceKilometers(from: firstEnd, to: secondStart) {
+                sections[0] = sections[0].reversed()
+            }
+        }
+
+        cacheLock.lock()
+        planningSectionsCache[cacheKey] = sections
+        cacheLock.unlock()
+
+        return sections
+    }
+
+    static func reorderedAnchorEdgeIDs(_ anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
+        guard anchorEdgeIDs.count >= 2 else {
+            return anchorEdgeIDs
+        }
+
+        let graph = planningGraph(in: allTrails)
+
+        let uniqueEdgeIDs = anchorEdgeIDs.reduce(into: [String]()) { result, edgeID in
+            guard graph.edgesByID[edgeID] != nil, !result.contains(edgeID) else {
+                return
+            }
+
+            result.append(edgeID)
+        }
+
+        guard uniqueEdgeIDs.count >= 2 else {
+            return uniqueEdgeIDs.isEmpty ? anchorEdgeIDs : uniqueEdgeIDs
+        }
+
+        let firstEdgeID = uniqueEdgeIDs[0]
+        let originalIndexByEdgeID = Dictionary(uniqueKeysWithValues: uniqueEdgeIDs.enumerated().map { ($1, $0) })
+        var selectedNeighborMap = Dictionary(uniqueKeysWithValues: uniqueEdgeIDs.map { ($0, [String]()) })
+
+        for leftIndex in 0..<uniqueEdgeIDs.count {
+            for rightIndex in (leftIndex + 1)..<uniqueEdgeIDs.count {
+                let leftEdgeID = uniqueEdgeIDs[leftIndex]
+                let rightEdgeID = uniqueEdgeIDs[rightIndex]
+
+                guard graph.areAdjacent(leftEdgeID, rightEdgeID) else {
+                    continue
+                }
+
+                selectedNeighborMap[leftEdgeID, default: []].append(rightEdgeID)
+                selectedNeighborMap[rightEdgeID, default: []].append(leftEdgeID)
+            }
+        }
+
+        for edgeID in uniqueEdgeIDs {
+            selectedNeighborMap[edgeID]?.sort {
+                originalIndexByEdgeID[$0, default: .max] < originalIndexByEdgeID[$1, default: .max]
+            }
+        }
+
+        var path = [firstEdgeID]
+        var visitedEdgeIDs: Set<String> = [firstEdgeID]
+
+        func dfs(currentEdgeID: String) -> Bool {
+            if path.count == uniqueEdgeIDs.count {
+                return true
+            }
+
+            let candidates = (selectedNeighborMap[currentEdgeID] ?? []).filter { !visitedEdgeIDs.contains($0) }
+
+            for nextEdgeID in candidates {
+                visitedEdgeIDs.insert(nextEdgeID)
+                path.append(nextEdgeID)
+
+                if dfs(currentEdgeID: nextEdgeID) {
+                    return true
+                }
+
+                path.removeLast()
+                visitedEdgeIDs.remove(nextEdgeID)
+            }
+
+            return false
+        }
+
+        if dfs(currentEdgeID: firstEdgeID) {
+            return path
+        }
+
+        return path + uniqueEdgeIDs.filter { !visitedEdgeIDs.contains($0) }
     }
 
     static func resolvedSegment(
@@ -599,6 +817,33 @@ enum GeoMath {
         )
     }
 
+    private static func projectedDistance(
+        reference: CLLocationCoordinate2D,
+        coordinates: [CLLocationCoordinate2D]
+    ) -> (distanceKm: Double, progress: Double) {
+        guard coordinates.count > 1 else {
+            return (Double.greatestFiniteMagnitude, 0)
+        }
+
+        var bestDistance = Double.greatestFiniteMagnitude
+        var bestProgress = 0.0
+
+        for index in 1..<coordinates.count {
+            let candidate = projectedDistance(
+                reference: reference,
+                start: coordinates[index - 1],
+                end: coordinates[index]
+            )
+
+            if candidate.distanceKm < bestDistance {
+                bestDistance = candidate.distanceKm
+                bestProgress = candidate.progress
+            }
+        }
+
+        return (bestDistance, bestProgress)
+    }
+
     private static func nearestProjectionOnPolyline(
         reference: CLLocationCoordinate2D,
         coordinates: [CLLocationCoordinate2D],
@@ -642,6 +887,263 @@ enum GeoMath {
             x: coordinate.longitude * longitudeScale,
             y: coordinate.latitude * latitudeScale
         )
+    }
+
+    static func warmPlanningGraph(for trails: [TrailFeature]) {
+        _ = planningGraph(in: trails)
+    }
+
+    private static let cacheLock = NSLock()
+    private static var crossingDistancesCache: [String: [Double]] = [:]
+    private static var trailBoundsCache: [String: TrailBounds] = [:]
+    private static var planningSectionsCache: [String: [PlanningSection]] = [:]
+
+    private static func cachedCrossingDistances(trail: TrailFeature, allTrails: [TrailFeature]) -> [Double] {
+        let cacheKey = trail.id + "|" + allTrails.map(\.id).joined(separator: ",")
+        cacheLock.lock()
+        if let cached = crossingDistancesCache[cacheKey] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let coordinateSets = trail.coordinateSets
+        let trailBounds = cachedTrailBounds(for: trail)
+        var crossingDistances: [Double] = []
+        var traversed = 0.0
+
+        for coordinates in coordinateSets {
+            for index in 1..<coordinates.count {
+                let segStart = coordinates[index - 1]
+                let segEnd = coordinates[index]
+                let segLen = distanceKilometers(from: segStart, to: segEnd)
+
+                for candidate in allTrails where candidate.id != trail.id {
+                    guard trailBounds.intersects(cachedTrailBounds(for: candidate)) else {
+                        continue
+                    }
+
+                    for candidateCoords in candidate.coordinateSets {
+                        for ci in 1..<candidateCoords.count {
+                            if let intersection = segmentIntersection(
+                                start1: segStart, end1: segEnd,
+                                start2: candidateCoords[ci - 1], end2: candidateCoords[ci]
+                            ) {
+                                let distFromStart = traversed + distanceKilometers(from: segStart, to: intersection)
+                                crossingDistances.append(distFromStart)
+                            }
+                        }
+                    }
+                }
+
+                traversed += segLen
+            }
+        }
+
+        cacheLock.lock()
+        crossingDistancesCache[cacheKey] = crossingDistances
+        cacheLock.unlock()
+        return crossingDistances
+    }
+
+    private static func cachedTrailBounds(for trail: TrailFeature) -> TrailBounds {
+        cacheLock.lock()
+        if let cached = trailBoundsCache[trail.id] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+
+        let bounds = TrailBounds(coordinates: trail.coordinateSets.flatMap { $0 })
+
+        cacheLock.lock()
+        trailBoundsCache[trail.id] = bounds
+        cacheLock.unlock()
+        return bounds
+    }
+
+    private static var planningGraphCache: [String: PlanningGraph] = [:]
+
+    private static func planningGraph(in trails: [TrailFeature]) -> PlanningGraph {
+        let signature = planningGraphSignature(for: trails)
+
+        cacheLock.lock()
+        if let cachedGraph = planningGraphCache[signature] {
+            cacheLock.unlock()
+            return cachedGraph
+        }
+        cacheLock.unlock()
+
+        var occurrenceByBaseID: [String: Int] = [:]
+        var nodeToEdgeIDs: [String: [String]] = [:]
+        var edgesByID: [String: PlanningSection] = [:]
+        var edgesByTrailID: [String: [PlanningSection]] = [:]
+
+        for trail in trails {
+            let segments = trailSegments(
+                trail: trail,
+                allTrails: trails,
+                minSegmentKm: 0,
+                includeMidpoints: true
+            )
+
+            for segment in segments {
+                let coordinates = extractCoordinatesSlice(
+                    coordinateSets: trail.coordinateSets,
+                    startKm: segment.startDistanceKm,
+                    endKm: segment.endDistanceKm
+                )
+
+                guard let start = coordinates.first,
+                      let end = coordinates.last,
+                      coordinates.count >= 2 else {
+                    continue
+                }
+
+                let baseID = canonicalEdgeBaseID(start: start, end: end)
+                let occurrence = occurrenceByBaseID[baseID, default: 0] + 1
+                occurrenceByBaseID[baseID] = occurrence
+                let edgeID = canonicalEdgeID(baseID: baseID, occurrence: occurrence)
+
+                let section = PlanningSection(
+                    trailID: trail.id,
+                    edgeID: edgeID,
+                    start: start,
+                    end: end,
+                    distanceKm: segment.distanceKm,
+                    coordinates: coordinates,
+                    midpoint: segment.midpoint,
+                    startDistanceKm: segment.startDistanceKm,
+                    endDistanceKm: segment.endDistanceKm
+                )
+
+                edgesByID[edgeID] = section
+                edgesByTrailID[trail.id, default: []].append(section)
+
+                let startNodeID = canonicalNodeID(for: start)
+                let endNodeID = canonicalNodeID(for: end)
+                nodeToEdgeIDs[startNodeID, default: []].append(edgeID)
+                nodeToEdgeIDs[endNodeID, default: []].append(edgeID)
+            }
+        }
+
+        var adjacencyByEdgeID: [String: Set<String>] = [:]
+        for edgeIDs in nodeToEdgeIDs.values {
+            for leftEdgeID in edgeIDs {
+                for rightEdgeID in edgeIDs where leftEdgeID != rightEdgeID {
+                    adjacencyByEdgeID[leftEdgeID, default: []].insert(rightEdgeID)
+                }
+            }
+        }
+
+        let graph = PlanningGraph(
+            edgesByID: edgesByID,
+            edgesByTrailID: edgesByTrailID,
+            adjacencyByEdgeID: adjacencyByEdgeID
+        )
+        cacheLock.lock()
+        planningGraphCache[signature] = graph
+        cacheLock.unlock()
+        return graph
+    }
+
+    private static func planningSectionsCacheKey(anchorEdgeIDs: [String], trails: [TrailFeature]) -> String {
+        anchorEdgeIDs.joined(separator: ",") + "||" + planningGraphSignature(for: trails)
+    }
+
+    private static func planningGraphSignature(for trails: [TrailFeature]) -> String {
+        trails.map {
+            let pointCount = $0.coordinateSets.reduce(0) { $0 + $1.count }
+            return "\($0.id):\($0.destinationId ?? ""):\(pointCount):\(Int($0.shapeLengthMeters ?? 0))"
+        }.joined(separator: "|")
+    }
+
+    static func extractCoordinatesForSegment(
+        coordinateSets: [[CLLocationCoordinate2D]],
+        startKm: Double,
+        endKm: Double
+    ) -> [CLLocationCoordinate2D] {
+        extractCoordinatesSlice(coordinateSets: coordinateSets, startKm: startKm, endKm: endKm)
+    }
+
+    private static func extractCoordinatesSlice(
+        coordinateSets: [[CLLocationCoordinate2D]],
+        startKm: Double,
+        endKm: Double
+    ) -> [CLLocationCoordinate2D] {
+        guard endKm >= startKm else {
+            return []
+        }
+
+        var result: [CLLocationCoordinate2D] = []
+        var traversedKm = 0.0
+
+        for coordinates in coordinateSets {
+            guard coordinates.count >= 2 else {
+                continue
+            }
+
+            for index in 1..<coordinates.count {
+                let segmentStart = coordinates[index - 1]
+                let segmentEnd = coordinates[index]
+                let segmentLength = distanceKilometers(from: segmentStart, to: segmentEnd)
+                let segmentStartKm = traversedKm
+                let segmentEndKm = segmentStartKm + segmentLength
+                let overlapStart = max(startKm, segmentStartKm)
+                let overlapEnd = min(endKm, segmentEndKm)
+
+                if overlapStart <= overlapEnd + 0.000001 {
+                    let startRatio = segmentLength > 0 ? (overlapStart - segmentStartKm) / segmentLength : 0
+                    let endRatio = segmentLength > 0 ? (overlapEnd - segmentStartKm) / segmentLength : 0
+                    let startCoordinate = CLLocationCoordinate2D(
+                        latitude: segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * startRatio,
+                        longitude: segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * startRatio
+                    )
+                    let endCoordinate = CLLocationCoordinate2D(
+                        latitude: segmentStart.latitude + (segmentEnd.latitude - segmentStart.latitude) * endRatio,
+                        longitude: segmentStart.longitude + (segmentEnd.longitude - segmentStart.longitude) * endRatio
+                    )
+
+                    if let last = result.last {
+                        if distanceKilometers(from: last, to: startCoordinate) > 0.000001 {
+                            result.append(startCoordinate)
+                        }
+                    } else {
+                        result.append(startCoordinate)
+                    }
+
+                    if distanceKilometers(from: startCoordinate, to: endCoordinate) > 0.000001 {
+                        result.append(endCoordinate)
+                    }
+                }
+
+                traversedKm += segmentLength
+            }
+        }
+
+        return result
+    }
+
+    private static func canonicalEdgeBaseID(start: CLLocationCoordinate2D, end: CLLocationCoordinate2D) -> String {
+        let firstNodeID = canonicalNodeID(for: start)
+        let secondNodeID = canonicalNodeID(for: end)
+        let orderedNodeIDs = [firstNodeID, secondNodeID].sorted()
+        return orderedNodeIDs.joined(separator: "~")
+    }
+
+    private static func canonicalEdgeID(baseID: String, occurrence: Int) -> String {
+        occurrence > 1 ? "\(baseID):\(occurrence)" : baseID
+    }
+
+    private static func canonicalNodeID(for coordinate: CLLocationCoordinate2D) -> String {
+        let longitude = roundCoordinateComponent(coordinate.longitude)
+        let latitude = roundCoordinateComponent(coordinate.latitude)
+        return String(format: "%.6f:%.6f", longitude, latitude)
+    }
+
+    private static func roundCoordinateComponent(_ value: Double) -> Double {
+        let factor = 1_000_000.0
+        return (value * factor).rounded() / factor
     }
 
     // MARK: - Crossing-based trail segments
@@ -708,34 +1210,8 @@ enum GeoMath {
         includeMidpoints: Bool = true
     ) -> [TrailSegment] {
         let coordinateSets = trail.coordinateSets
-        var crossingDistances: [Double] = []
-        var traversed = 0.0
-
-        for coordinates in coordinateSets {
-            for index in 1..<coordinates.count {
-                let segStart = coordinates[index - 1]
-                let segEnd = coordinates[index]
-                let segLen = distanceKilometers(from: segStart, to: segEnd)
-
-                for candidate in allTrails where candidate.id != trail.id {
-                    for candidateCoords in candidate.coordinateSets {
-                        for ci in 1..<candidateCoords.count {
-                            if let intersection = segmentIntersection(
-                                start1: segStart, end1: segEnd,
-                                start2: candidateCoords[ci - 1], end2: candidateCoords[ci]
-                            ) {
-                                let distFromStart = traversed + distanceKilometers(from: segStart, to: intersection)
-                                crossingDistances.append(distFromStart)
-                            }
-                        }
-                    }
-                }
-
-                traversed += segLen
-            }
-        }
-
-        let totalLength = traversed
+        let crossingDistances = cachedCrossingDistances(trail: trail, allTrails: allTrails)
+        let totalLength = totalLengthKilometers(for: coordinateSets)
 
         // Sort and dedup crossings that are very close together
         let sortedCrossings = crossingDistances.sorted()
@@ -750,7 +1226,8 @@ enum GeoMath {
         // Build path points: start + crossings + end
         var points: [Double] = [0] + uniqueCrossings + [totalLength]
 
-        // Normalise: remove duplicate or very-close points
+        // Normalise interior crossings without collapsing a valid start/end pair.
+        let rawPoints = points
         points = points.reduce(into: [Double]()) { result, point in
             if let last = result.last, abs(last - point) < dedupThresholdKm {
                 result[result.count - 1] = point
@@ -759,11 +1236,15 @@ enum GeoMath {
             }
         }
 
+        if points.count < 2, totalLength > 0, rawPoints.count >= 2 {
+            points = [0, totalLength]
+        }
+
         guard points.count >= 2 else { return [] }
 
         return zip(points, points.dropFirst()).compactMap { startKm, endKm in
             let distKm = endKm - startKm
-            guard distKm >= minSegmentKm else { return nil }
+            guard distKm > 0, distKm >= minSegmentKm else { return nil }
             let midpoint: CLLocationCoordinate2D?
 
             if includeMidpoints {
@@ -783,6 +1264,63 @@ enum GeoMath {
     }
 }
 
+struct PlanningEdgeDescriptor {
+    let trailID: String
+    let edgeID: String
+    let start: CLLocationCoordinate2D
+    let end: CLLocationCoordinate2D
+}
+
+struct PlanningSection: Equatable {
+    let trailID: String
+    let edgeID: String
+    let start: CLLocationCoordinate2D
+    let end: CLLocationCoordinate2D
+    let distanceKm: Double
+    let coordinates: [CLLocationCoordinate2D]
+    let midpoint: CLLocationCoordinate2D?
+    let startDistanceKm: Double
+    let endDistanceKm: Double
+
+    static func == (lhs: PlanningSection, rhs: PlanningSection) -> Bool {
+        lhs.trailID == rhs.trailID &&
+        lhs.edgeID == rhs.edgeID &&
+        lhs.start.latitude == rhs.start.latitude &&
+        lhs.start.longitude == rhs.start.longitude &&
+        lhs.end.latitude == rhs.end.latitude &&
+        lhs.end.longitude == rhs.end.longitude &&
+        lhs.distanceKm == rhs.distanceKm
+    }
+
+    var formattedDistanceLabel: String {
+        String(format: "%.1f km", distanceKm)
+    }
+
+    func reversed() -> PlanningSection {
+        PlanningSection(
+            trailID: trailID,
+            edgeID: edgeID,
+            start: end,
+            end: start,
+            distanceKm: distanceKm,
+            coordinates: coordinates.reversed(),
+            midpoint: midpoint,
+            startDistanceKm: startDistanceKm,
+            endDistanceKm: endDistanceKm
+        )
+    }
+}
+
+struct PlanningGraph {
+    let edgesByID: [String: PlanningSection]
+    let edgesByTrailID: [String: [PlanningSection]]
+    let adjacencyByEdgeID: [String: Set<String>]
+
+    func areAdjacent(_ leftEdgeID: String, _ rightEdgeID: String) -> Bool {
+        adjacencyByEdgeID[leftEdgeID]?.contains(rightEdgeID) == true
+    }
+}
+
 struct TrailSegment: Equatable {
     let startDistanceKm: Double
     let endDistanceKm: Double
@@ -797,6 +1335,47 @@ struct TrailSegment: Equatable {
 
     var formattedDistanceLabel: String {
         String(format: "%.1f km", distanceKm)
+    }
+}
+
+private struct TrailBounds {
+    let minLatitude: Double
+    let maxLatitude: Double
+    let minLongitude: Double
+    let maxLongitude: Double
+
+    init(coordinates: [CLLocationCoordinate2D]) {
+        guard let first = coordinates.first else {
+            minLatitude = 0
+            maxLatitude = 0
+            minLongitude = 0
+            maxLongitude = 0
+            return
+        }
+
+        var minLat = first.latitude
+        var maxLat = first.latitude
+        var minLng = first.longitude
+        var maxLng = first.longitude
+
+        for coordinate in coordinates.dropFirst() {
+            minLat = min(minLat, coordinate.latitude)
+            maxLat = max(maxLat, coordinate.latitude)
+            minLng = min(minLng, coordinate.longitude)
+            maxLng = max(maxLng, coordinate.longitude)
+        }
+
+        minLatitude = minLat
+        maxLatitude = maxLat
+        minLongitude = minLng
+        maxLongitude = maxLng
+    }
+
+    func intersects(_ other: TrailBounds) -> Bool {
+        !(maxLatitude < other.minLatitude ||
+          other.maxLatitude < minLatitude ||
+          maxLongitude < other.minLongitude ||
+          other.maxLongitude < minLongitude)
     }
 }
 

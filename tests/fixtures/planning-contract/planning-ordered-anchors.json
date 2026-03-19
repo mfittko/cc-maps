@@ -1,0 +1,9 @@
+{
+  "description": "Verifies that a deterministic tap sequence produces the expected ordered anchor list and that reverse/remove produce the same outcomes as the web planner for the same inputs.",
+  "tapSequence": ["trail-A", "trail-B", "trail-C"],
+  "expectedAnchorIDs": ["trail-A", "trail-B", "trail-C"],
+  "reversedAnchorIDs": ["trail-C", "trail-B", "trail-A"],
+  "afterRemovingIndex1": ["trail-A", "trail-C"],
+  "afterToggleRemoveA": ["trail-B", "trail-C"],
+  "afterClear": []
+}

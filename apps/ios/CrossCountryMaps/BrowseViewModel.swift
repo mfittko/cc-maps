@@ -66,6 +66,8 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
     private(set) var handledLocationUpdateCount = 0
+    @Published private(set) var isInPlanningMode = false
+    @Published private(set) var routePlan = RoutePlanState()
 
     @Published var selectedTrailID: String?
     @Published private(set) var selectedTrailSegment: TrailSegment?
@@ -155,6 +157,9 @@ final class BrowseViewModel: ObservableObject {
         primaryLoadToken = UUID()
         previewLoadToken = UUID()
 
+        isInPlanningMode = false
+        routePlan.clear()
+
         selectedDestinationID = id
         selectedTrailID = nil
         selectedTrailSegment = nil
@@ -174,8 +179,48 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func selectTrail(selection: TrailInspectionSelection?) {
-        selectedTrailID = selection?.trailID
-        selectedTrailSegment = selection?.segment
+        guard let trailID = selection?.trailID else {
+            selectedTrailID = nil
+            selectedTrailSegment = nil
+            return
+        }
+
+        if isInPlanningMode {
+            guard let anchorEdgeID = selection?.anchorEdgeID else {
+                return
+            }
+
+            routePlan.toggleAnchorEdge(anchorEdgeID)
+            routePlan.replaceAnchorEdges(with: GeoMath.reorderedAnchorEdgeIDs(
+                routePlan.anchorEdgeIDs,
+                allTrails: primaryTrails + previewTrails
+            ))
+        } else {
+            selectedTrailID = trailID
+            selectedTrailSegment = selection?.segment
+        }
+    }
+
+    func enterPlanningMode() {
+        selectedTrailID = nil
+        selectedTrailSegment = nil
+        isInPlanningMode = true
+    }
+
+    func exitPlanningMode() {
+        isInPlanningMode = false
+    }
+
+    func reverseRoute() {
+        routePlan.reverse()
+    }
+
+    func clearRoute() {
+        routePlan.clear()
+    }
+
+    func removeRouteAnchor(at index: Int) {
+        routePlan.removeAnchor(at: index)
     }
 
     func enableAutoLocation() {
@@ -193,6 +238,11 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func updateVisibleRegionCenter(_ center: CLLocationCoordinate2D) {
+        if let visibleRegionCenter,
+           GeoMath.distanceKilometers(from: visibleRegionCenter, to: center) < AppConfig.previewRegionRecheckDistanceKm {
+            return
+        }
+
         visibleRegionCenter = center
         schedulePreviewEvaluation()
     }
@@ -231,6 +281,11 @@ final class BrowseViewModel: ObservableObject {
                 trailsPhase = .success
                 fitRequestID += 1
                 schedulePreviewEvaluation()
+
+                let trails = response.features
+                Task.detached(priority: .utility) {
+                    GeoMath.warmPlanningGraph(for: trails)
+                }
             } catch {
                 guard token == primaryLoadToken else {
                     return
@@ -249,7 +304,7 @@ final class BrowseViewModel: ObservableObject {
             if let self, self.timingConfig.initialFallbackDelayNanoseconds > 0 {
                 try? await Task.sleep(nanoseconds: self.timingConfig.initialFallbackDelayNanoseconds)
             }
-            await self?.applyFallbackSelectionIfNeeded()
+            self?.applyFallbackSelectionIfNeeded()
         }
     }
 
@@ -341,6 +396,10 @@ final class BrowseViewModel: ObservableObject {
         guard !previewDestinations.isEmpty else {
             previewTrails = []
             previewPhase = .success
+            let trails = primaryTrails
+            Task.detached(priority: .utility) {
+                GeoMath.warmPlanningGraph(for: trails)
+            }
             return
         }
 
@@ -362,6 +421,11 @@ final class BrowseViewModel: ObservableObject {
 
             previewTrails = nextPreviewTrails
             previewPhase = .success
+
+            let trails = primaryTrails + nextPreviewTrails
+            Task.detached(priority: .background) {
+                GeoMath.warmPlanningGraph(for: trails)
+            }
         } catch {
             guard token == previewLoadToken else {
                 return

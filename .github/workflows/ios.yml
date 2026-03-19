@@ -1,0 +1,126 @@
+name: iOS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/**
+      - apps/ios/**
+      - docs/iOS/**
+      - contracts/route-plan/**
+      - tests/fixtures/route-plan/**
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - apps/ios/**
+      - docs/iOS/**
+      - contracts/route-plan/**
+      - tests/fixtures/route-plan/**
+
+jobs:
+  ios-build-and-test:
+    runs-on: macos-14
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Report Xcode and runtimes
+        run: |
+          xcodebuild -version
+          echo
+          xcrun simctl list runtimes available
+
+      - name: Build iPhone target
+        run: >-
+          xcodebuild -project apps/ios/CrossCountryMaps.xcodeproj
+          -scheme CrossCountryMaps
+          -destination 'generic/platform=iOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Build watch target
+        run: >-
+          xcodebuild -project apps/ios/CrossCountryMaps.xcodeproj
+          -scheme CrossCountryMapsWatch
+          -destination 'generic/platform=watchOS Simulator'
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+      - name: Resolve iPhone simulator
+        id: simulator
+        run: |
+          simulator_json=$(mktemp)
+          xcrun simctl list devices available --json > "$simulator_json"
+          cat "$simulator_json"
+
+          simulator=$(
+            /usr/bin/ruby -rjson -e '
+              devices = JSON.parse(File.read(ARGV[0])).fetch("devices", {})
+              ios_runtime, ios_devices = devices
+                .select { |runtime, _| runtime.start_with?("com.apple.CoreSimulator.SimRuntime.iOS-") }
+                .sort_by do |runtime, _|
+                  runtime.sub("com.apple.CoreSimulator.SimRuntime.iOS-", "")
+                    .split("-")
+                    .map(&:to_i)
+                end
+                .last
+
+              selected_device = Array(ios_devices).find { |device| device["isAvailable"] && device["name"].start_with?("iPhone") }
+
+              if ios_runtime.nil? || selected_device.nil?
+                exit 1
+              end
+
+              runtime_version = ios_runtime.sub("com.apple.CoreSimulator.SimRuntime.iOS-", "").tr("-", ".")
+              puts [selected_device.fetch("name"), selected_device.fetch("udid"), runtime_version].join("\t")
+            ' "$simulator_json"
+          ) || true
+
+          IFS=$'\t' read -r device_name device_udid device_os <<< "$simulator"
+
+          if [[ -z "$device_name" || -z "$device_udid" || -z "$device_os" ]]; then
+            echo "No eligible iPhone simulator destination found for CrossCountryMaps" >&2
+            xcrun simctl list devices available
+            exit 1
+          fi
+
+          echo "Using simulator: $device_name ($device_udid) on iOS ${device_os:-unknown}"
+          echo "device_name=$device_name" >> "$GITHUB_OUTPUT"
+          echo "device_udid=$device_udid" >> "$GITHUB_OUTPUT"
+
+      - name: Run iPhone XCTest suite with coverage
+        run: >-
+          xcodebuild test -project apps/ios/CrossCountryMaps.xcodeproj
+          -scheme CrossCountryMaps
+          -destination 'id=${{ steps.simulator.outputs.device_udid }}'
+          -enableCodeCoverage YES
+          -resultBundlePath TestResults/CrossCountryMaps.xcresult
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Publish coverage summary
+        run: |
+          report=$(xcrun xccov view --report TestResults/CrossCountryMaps.xcresult)
+          echo "$report"
+          {
+            echo "## iOS Coverage"
+            echo
+            echo '```text'
+            echo "$report"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "$report" | grep -q 'CrossCountryMaps'
+
+      - name: Upload XCTest result bundle
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-xcresult
+          path: TestResults/CrossCountryMaps.xcresult
+          if-no-files-found: error
