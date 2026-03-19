@@ -2026,13 +2026,12 @@ private final class BrowseAPISpy: BrowseAPIClient {
     init(destinationsResponse: [Destination], trailsByDestination: [String: [TrailFeature]]) {
         self.destinationsFixture = makeDestinationFeatureCollection(destinationsResponse)
         self.trailFixtures = trailsByDestination.mapValues(TrailFeatureCollection.init(features:))
-        trailIDsByEdgeID = trailsByDestination
-            .flatMap(\.value)
-            .reduce(into: [String: String]()) { result, trail in
-                if let edgeID = trail.planningAnchorEdgeIDs(allTrails: [trail]).first {
-                    result[edgeID] = trail.id
-                }
+        let allTrails = trailsByDestination.flatMap(\.value)
+        trailIDsByEdgeID = allTrails.reduce(into: [String: String]()) { result, trail in
+            for edgeID in trail.planningAnchorEdgeIDs(allTrails: allTrails) {
+                result[edgeID] = trail.id
             }
+        }
     }
 
     func fetchDestinations() async throws -> DestinationFeatureCollection {

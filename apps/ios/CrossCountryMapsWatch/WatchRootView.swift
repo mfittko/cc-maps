@@ -69,6 +69,15 @@ private struct WatchStoredRouteRecord: Codable, Equatable {
     var routeLabel: String {
         envelope.derived?.routeLabel ?? "Planned route"
     }
+
+    var sectionCount: Int {
+        if let sectionSummaries = envelope.derived?.sectionSummaries,
+           !sectionSummaries.isEmpty {
+            return sectionSummaries.count
+        }
+
+        return envelope.canonical.anchorEdgeIds.count
+    }
 }
 
 private struct WatchTransferEnvelope: Codable, Equatable {
@@ -84,7 +93,7 @@ private struct WatchTransferEnvelope: Codable, Equatable {
         }
 
         if let sectionSummaries = derived?.sectionSummaries,
-           !sectionSummaries.allSatisfy({ canonical.anchorEdgeIds.contains($0.anchorEdgeId) && $0.destinationId.allSatisfy(\.isNumber) }) {
+           !hasValidSectionSummaries(sectionSummaries) {
             return false
         }
 
@@ -94,6 +103,15 @@ private struct WatchTransferEnvelope: Codable, Equatable {
         }
 
         return true
+    }
+
+    private func hasValidSectionSummaries(_ sectionSummaries: [WatchTransferSectionSummary]) -> Bool {
+        let containsOnlyKnownAnchors = sectionSummaries.allSatisfy { summary in
+            canonical.anchorEdgeIds.contains(summary.anchorEdgeId) &&
+                summary.destinationId.allSatisfy(\.isNumber)
+        }
+        let coversCanonicalAnchors = Set(sectionSummaries.map(\.anchorEdgeId)) == Set(canonical.anchorEdgeIds)
+        return containsOnlyKnownAnchors && coversCanonicalAnchors
     }
 }
 
@@ -168,9 +186,8 @@ private final class WatchRouteStore: NSObject, ObservableObject {
             return nil
         }
 
-        let sectionCount = storedRoute.envelope.derived?.sectionSummaries.count ?? storedRoute.envelope.canonical.anchorEdgeIds.count
         let distanceLabel = storedRoute.envelope.derived?.totalDistanceKm.map { String(format: "%.1f km", $0) }
-        let sectionLabel = "\(sectionCount) section\(sectionCount == 1 ? "" : "s")"
+        let sectionLabel = "\(storedRoute.sectionCount) section\(storedRoute.sectionCount == 1 ? "" : "s")"
 
         if let distanceLabel {
             return "\(distanceLabel) • \(sectionLabel)"

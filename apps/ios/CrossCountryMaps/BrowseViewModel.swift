@@ -842,11 +842,7 @@ final class BrowseViewModel: ObservableObject {
             watchTransferSendState = .pending(transferID: transferID)
         } catch {
             activeWatchTransferID = nil
-            watchTransferSendState = .failure(
-                error.localizedDescription.isEmpty
-                    ? "The route could not be queued for watch delivery."
-                    : error.localizedDescription
-            )
+            watchTransferSendState = .failure(error.localizedDescription)
         }
     }
 
@@ -1323,8 +1319,8 @@ final class BrowseViewModel: ObservableObject {
         sections.reduce(into: [CLLocationCoordinate2D]()) { coordinates, section in
             for coordinate in section.coordinates {
                 if let previous = coordinates.last,
-                   previous.latitude == coordinate.latitude,
-                   previous.longitude == coordinate.longitude {
+                   abs(previous.latitude - coordinate.latitude) < 0.000_001,
+                   abs(previous.longitude - coordinate.longitude) < 0.000_001 {
                     continue
                 }
 

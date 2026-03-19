@@ -255,7 +255,6 @@ struct PlanningPanel: View {
                         isShareExpanded = false
                     }
                 }
-
             }
 
             Spacer(minLength: 0)
