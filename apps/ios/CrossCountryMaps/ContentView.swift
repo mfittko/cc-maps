@@ -91,11 +91,7 @@ struct ContentView: View {
         Group {
             if viewModel.isManualDestinationSelection {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Spacer()
-
-                        autoFollowButton
-                    }
+                    topManualControlRow
 
                     Button {
                         isDestinationPickerPresented = true
@@ -155,11 +151,25 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     manualDestinationMenu
                     Spacer(minLength: 0)
-                    autoFollowButton
+                    if viewModel.canEnableAutoLocation {
+                        autoFollowButton
+                    }
                 }
                 .padding(.horizontal, 4)
             }
         }
+    }
+
+    @ViewBuilder
+    private var topManualControlRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Spacer()
+
+            if viewModel.canEnableAutoLocation {
+                autoFollowButton
+            }
+        }
+        .frame(height: 40)
     }
 
     @ViewBuilder
@@ -206,6 +216,11 @@ struct ContentView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 16)
+
+                if viewModel.routeShareArtifact != nil {
+                    shareRouteButton
+                }
+
                 planRouteButton
             }
             .padding(.horizontal, 14)
@@ -219,10 +234,9 @@ struct ContentView: View {
         Button {
             viewModel.enterPlanningMode()
         } label: {
-            Label("Plan", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                .font(.body.weight(.semibold))
+                .frame(width: 36, height: 36)
                 .background(Color.blue.opacity(0.15), in: Capsule())
                 .foregroundStyle(.blue)
         }
@@ -230,19 +244,29 @@ struct ContentView: View {
         .accessibilityLabel("Enter route planning mode")
     }
 
+    private var shareRouteButton: some View {
+        Button {
+            presentRouteShareSheet()
+        } label: {
+            Image(systemName: "link")
+                .font(.body.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .background(Color.blue.opacity(0.15), in: Capsule())
+                .foregroundStyle(.blue)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Share route link")
+    }
+
     private var autoFollowButton: some View {
         Button {
             viewModel.enableAutoLocation()
         } label: {
-            Label(
-                viewModel.isManualDestinationSelection ? "Manual" : "Auto",
-                systemImage: viewModel.isManualDestinationSelection ? "hand.tap.fill" : "location.fill"
-            )
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.thinMaterial, in: Capsule())
-            .foregroundStyle(viewModel.isManualDestinationSelection ? .orange : .blue)
+            Image(systemName: "location.fill")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .background(.thinMaterial, in: Capsule())
+                .foregroundStyle(.blue)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Enable automatic location follow")
@@ -382,9 +406,6 @@ private struct TrailDetailCard: View {
                     if trail.trailTypeSymbol != 30 {
                         Text(trail.trailTypeLabel)
                             .font(.title3.weight(.bold))
-                    } else if routeContext != nil {
-                        Text(trail.trailTypeLabel)
-                            .font(.headline.weight(.semibold))
                     }
                 }
 
@@ -436,7 +457,6 @@ private struct TrailDetailCard: View {
                     HStack(spacing: 8) {
                         detailChip(label: routeContext.formattedSectionLabel, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
                         detailChip(label: routeContext.formattedTotalDistanceLabel, systemImage: "map")
-                        detailChip(label: routeContext.formattedSelectedSectionDistanceLabel, systemImage: "ruler.fill")
                     }
 
                     if let elevationLabel = routeContext.formattedElevationLabel {

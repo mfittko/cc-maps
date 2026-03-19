@@ -604,6 +604,41 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testEnterPlanningModeRequestsRefitForExistingRoute() {
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.exitPlanningMode()
+        XCTAssertEqual(viewModel.fitRequestID, 1)
+
+        viewModel.enterPlanningMode()
+
+        XCTAssertEqual(viewModel.fitRequestID, 2)
+    }
+
+    @MainActor
+    func testExitPlanningModeRequestsRefitForExistingRoute() {
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "trail-1", anchorEdgeID: Self.edgeA, segment: nil))
+        XCTAssertEqual(viewModel.fitRequestID, 0)
+
+        viewModel.exitPlanningMode()
+
+        XCTAssertEqual(viewModel.fitRequestID, 1)
+    }
+
+    @MainActor
     func testOrderedAnchorSequenceInPlanningMode() {
         let viewModel = BrowseViewModel(
             apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
@@ -879,8 +914,52 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertTrue(apiClient.requestedDestinationIDs.contains("2"))
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1", "2"])
-        XCTAssertTrue(viewModel.isInPlanningMode)
+        XCTAssertFalse(viewModel.isInPlanningMode)
         XCTAssertNil(viewModel.routeHydrationNotice)
+        XCTAssertEqual(viewModel.fitRequestID, 1)
+    }
+
+    @MainActor
+    func testStoredRouteReopensPlanningModeWhenLastBrowseStateWasPlanning() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteReopensPlanningModeWhenLastBrowseStateWasPlanning"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        routePlanStore.writeRoutePlan(
+            CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["1", "2"])
+        )
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                "2": [try makeTrailSegment(id: 303, destinationId: 2, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91)],
+            ]
+        )
+        let browseSettingsStore = InMemoryBrowseSettingsStore(
+            settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: true)
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: browseSettingsStore
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1", "2"])
+        XCTAssertNil(viewModel.routeHydrationNotice)
+        XCTAssertEqual(viewModel.fitRequestID, 1)
     }
 
     @MainActor

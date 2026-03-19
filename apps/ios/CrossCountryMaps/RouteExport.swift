@@ -172,7 +172,6 @@ struct RouteAwareTrailDetailContext: Equatable {
     let totalSections: Int
     let totalDistanceKm: Double
     let totalElevationMeters: Double?
-    let selectedSectionDistanceKm: Double
 
     var formattedSectionLabel: String {
         "Section \(selectedSectionNumber) of \(totalSections)"
@@ -180,10 +179,6 @@ struct RouteAwareTrailDetailContext: Equatable {
 
     var formattedTotalDistanceLabel: String {
         String(format: "%.1f km", totalDistanceKm)
-    }
-
-    var formattedSelectedSectionDistanceLabel: String {
-        String(format: "%.1f km", selectedSectionDistanceKm)
     }
 
     var formattedElevationLabel: String? {
