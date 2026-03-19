@@ -509,6 +509,10 @@ export default function Home() {
       ) || null
     );
   }, [routeTraversalSegments, selectedRouteTraversalFeature]);
+  const selectedElevationFeature = useMemo(
+    () => selectedRouteTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature || null,
+    [selectedRouteTraversalFeature, selectedTrailSectionFeature, selectedTrailFeature]
+  );
   const selectedRouteInsights = useMemo(() => {
     if (isPlanning || !selectedRouteSegment || !routeSummary.totalSections) {
       return null;
@@ -2207,10 +2211,7 @@ export default function Home() {
   }, [availableTrailsGeoJson, selectedTrailFeature, selectedTrailClickCoordinates, destinations]);
 
   useEffect(() => {
-    const selectedFeature =
-      selectedRouteTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature;
-
-    if (!selectedFeature || !selectedDestinationId) {
+    if (!selectedElevationFeature || !selectedDestinationId) {
       setSelectedTrailElevationMetrics(null);
       return undefined;
     }
@@ -2222,7 +2223,7 @@ export default function Home() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         destinationId: selectedDestinationId,
-        routeTraversal: [selectedFeature.geometry],
+        routeTraversal: [selectedElevationFeature.geometry],
       }),
     })
       .then((res) => res.json())
@@ -2245,10 +2246,7 @@ export default function Home() {
     };
   }, [
     selectedDestinationId,
-    selectedRouteTraversalFeature,
-    selectedTrailClickCoordinates,
-    selectedTrailFeature,
-    selectedTrailSectionFeature,
+    selectedElevationFeature,
   ]);
 
   useEffect(() => {
