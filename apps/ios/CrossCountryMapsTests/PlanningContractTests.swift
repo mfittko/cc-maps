@@ -1032,6 +1032,44 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testIncomingEmptySharedLinkDoesNotClearStoredRoute() async throws {
+        let suiteName = "PlanningContractTests.IncomingEmptySharedLinkDoesNotClearStoredRoute"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        routePlanStore.writeRoutePlan(
+            CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeB], destinationIds: ["1"])
+        )
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore
+        )
+
+        viewModel.start()
+        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+
+        let encodedRoute = CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: ["missing-edge"], destinationIds: ["1"]).encodedForURL
+        viewModel.handleIncomingURL(URL(string: "ccmaps://open?route=\(encodedRoute!)")!)
+
+        await waitUntil {
+            viewModel.routeHydrationNotice == .empty(staleAnchorEdgeIDs: ["missing-edge"])
+        }
+
+        XCTAssertEqual(routePlanStore.readRoutePlan(for: "1")?.anchorEdgeIds, [Self.edgeA, Self.edgeB])
+    }
+
+    @MainActor
     func testSelectedPlannedSegmentShowsRouteAwareDetailOutsidePlanningMode() async throws {
         let suiteName = "PlanningContractTests.SelectedPlannedSegmentShowsRouteAwareDetailOutsidePlanningMode"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)

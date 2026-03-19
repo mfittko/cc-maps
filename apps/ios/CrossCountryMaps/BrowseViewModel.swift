@@ -908,6 +908,7 @@ final class BrowseViewModel: ObservableObject {
 
         let allTrails = primaryTrails + previewTrails
         let hydrationResult = GeoMath.hydrateRoutePlan(pendingRestoreContext.routePlan, allTrails: allTrails)
+        let restoreSource = pendingRestoreContext.source
 
         switch hydrationResult.status {
         case .ok:
@@ -923,7 +924,11 @@ final class BrowseViewModel: ObservableObject {
         if hydrationResult.validAnchorEdgeIds.isEmpty {
             routePlan.clear()
             activeRouteDestinationIDs = []
-            routePlanStore.clearRoutePlan(for: pendingRestoreContext.routePlan.destinationId)
+
+            if restoreSource == .storage {
+                routePlanStore.clearRoutePlan(for: pendingRestoreContext.routePlan.destinationId)
+            }
+
             fitRequestID += 1
         } else {
             let reorderedAnchorEdgeIDs = GeoMath.reorderedAnchorEdgeIDs(
@@ -942,7 +947,7 @@ final class BrowseViewModel: ObservableObject {
 
         persistBrowseSettings()
 
-        if pendingRestoreContext.source == .url {
+        if restoreSource == .url {
             pendingIncomingRoutePlan = nil
         }
 
