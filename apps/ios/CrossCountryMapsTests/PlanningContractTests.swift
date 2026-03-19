@@ -508,7 +508,8 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertEqual(summary.sectionCount, 2)
         XCTAssertEqual(summary.totalDistanceKm, 3.75, accuracy: 0.0001)
-        XCTAssertNil(summary.totalElevationMeters)
+        XCTAssertNil(summary.ascentMeters)
+        XCTAssertNil(summary.descentMeters)
     }
 
     // MARK: BrowseViewModel planning-mode transition tests
@@ -1128,8 +1129,539 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertEqual(routeContext.selectedSectionNumber, 2)
         XCTAssertEqual(routeContext.totalSections, 2)
         XCTAssertEqual(routeContext.totalDistanceKm, viewModel.routeSummary.totalDistanceKm, accuracy: 0.0001)
-        XCTAssertNil(routeContext.totalElevationMeters)
+        XCTAssertNil(routeContext.ascentMeters)
+        XCTAssertNil(routeContext.selectedSectionElevation)
         XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeB])
+    }
+
+    // MARK: - Elevation integration tests
+
+    func testRouteSummaryFromSectionsWithElevationResponseShowsAscentAndDescent() throws {
+        let elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 450, descentMeters: 230)),
+            sections: []
+        )
+        let sections = [
+            PlanningSection(
+                trailID: "101",
+                edgeID: Self.edgeA,
+                start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                distanceKm: 1.25,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                ],
+                midpoint: nil,
+                startDistanceKm: 0,
+                endDistanceKm: 1.25
+            ),
+        ]
+
+        let summary = RouteSummary.from(sections: sections, elevationResponse: elevationResponse)
+
+        XCTAssertEqual(try XCTUnwrap(summary.ascentMeters), 450, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(summary.descentMeters), 230, accuracy: 0.01)
+        XCTAssertEqual(summary.formattedElevationLabel, "↑ 450 m  ↓ 230 m")
+    }
+
+    func testRouteSummaryElevationUnavailableWhenResponseIsNil() {
+        let sections = [
+            PlanningSection(
+                trailID: "101",
+                edgeID: Self.edgeA,
+                start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                distanceKm: 1.25,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                ],
+                midpoint: nil,
+                startDistanceKm: 0,
+                endDistanceKm: 1.25
+            ),
+        ]
+
+        let summary = RouteSummary.from(sections: sections, elevationResponse: nil)
+
+        XCTAssertNil(summary.ascentMeters)
+        XCTAssertNil(summary.descentMeters)
+        XCTAssertNil(summary.formattedElevationLabel)
+    }
+
+    func testRouteSummaryElevationUnavailableWhenRouteStatusIsUnavailable() {
+        let elevationResponse = ElevationApiResponse(
+            status: "partial",
+            route: ElevationResult(status: "unavailable", metrics: nil),
+            sections: []
+        )
+        let sections = [
+            PlanningSection(
+                trailID: "101",
+                edgeID: Self.edgeA,
+                start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                distanceKm: 1.25,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                ],
+                midpoint: nil,
+                startDistanceKm: 0,
+                endDistanceKm: 1.25
+            ),
+        ]
+
+        let summary = RouteSummary.from(sections: sections, elevationResponse: elevationResponse)
+
+        XCTAssertNil(summary.ascentMeters)
+        XCTAssertNil(summary.descentMeters)
+        XCTAssertNil(summary.formattedElevationLabel)
+    }
+
+    func testRouteLevelElevationFormattingRequiresBothAscentAndDescent() {
+        let summary = RouteSummary(
+            sectionCount: 2,
+            totalDistanceKm: 3.75,
+            ascentMeters: 450,
+            descentMeters: nil
+        )
+        let routeContext = RouteAwareTrailDetailContext(
+            selectedSectionNumber: 1,
+            totalSections: 2,
+            totalDistanceKm: 3.75,
+            ascentMeters: 450,
+            descentMeters: nil,
+            selectedSectionElevation: nil
+        )
+        let sectionElevation = SectionElevationSummary(status: "ok", ascentMeters: 65, descentMeters: nil)
+
+        XCTAssertNil(summary.formattedElevationLabel)
+        XCTAssertNil(routeContext.formattedElevationLabel)
+        XCTAssertNil(sectionElevation.formattedElevationLabel)
+    }
+
+    func testRouteAwareDetailUsesUnavailableCopyWhenSelectedSectionElevationIsMissing() {
+        let routeContext = RouteAwareTrailDetailContext(
+            selectedSectionNumber: 2,
+            totalSections: 3,
+            totalDistanceKm: 5.2,
+            ascentMeters: 300,
+            descentMeters: 150,
+            selectedSectionElevation: SectionElevationSummary(
+                status: "unavailable",
+                ascentMeters: nil,
+                descentMeters: nil
+            )
+        )
+
+        XCTAssertNil(routeContext.formattedSelectedSectionElevationLabel)
+        XCTAssertEqual(
+            routeContext.selectedSectionElevationDetailLabel,
+            RouteAwareTrailDetailContext.sectionElevationUnavailableNote
+        )
+    }
+
+    func testElevationResponseReturnsSectionElevationSummaryForSectionKey() throws {
+        let elevationResponse = ElevationApiResponse(
+            status: "partial",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 450, descentMeters: 230)),
+            sections: [
+                ElevationSectionResult(
+                    sectionKey: Self.edgeA,
+                    status: "ok",
+                    metrics: ElevationMetrics(ascentMeters: 65, descentMeters: 65)
+                ),
+                ElevationSectionResult(
+                    sectionKey: Self.edgeB,
+                    status: "unavailable",
+                    metrics: nil
+                )
+            ]
+        )
+
+        let sectionElevation = try XCTUnwrap(elevationResponse.sectionElevation(for: Self.edgeA))
+        XCTAssertEqual(try XCTUnwrap(sectionElevation.ascentMeters), 65, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(sectionElevation.descentMeters), 65, accuracy: 0.01)
+        XCTAssertEqual(sectionElevation.formattedElevationLabel, "↑ 65 m  ↓ 65 m")
+
+        let unavailableSection = try XCTUnwrap(elevationResponse.sectionElevation(for: Self.edgeB))
+        XCTAssertNil(unavailableSection.formattedElevationLabel)
+    }
+
+    @MainActor
+    func testViewModelRequestsElevationAfterAnchorUpdate() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: []
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil {
+            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        }
+
+        XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 300, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.descentMeters), 150, accuracy: 0.01)
+    }
+
+    @MainActor
+    func testViewModelElevationClearsOnRouteCleared() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 200, descentMeters: 100)),
+            sections: []
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        await waitUntil { apiClient.elevationCallCount > 0 }
+
+        viewModel.clearRoute()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(viewModel.routeElevation)
+        XCTAssertTrue(viewModel.routePlan.isEmpty)
+        XCTAssertNil(viewModel.routeSummary.ascentMeters)
+    }
+
+    @MainActor
+    func testViewModelElevationUnavailableWhenFetchFails() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationShouldThrow = true
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        await waitUntil { apiClient.elevationCallCount > 0 }
+        // Give the Task a chance to settle after the throw
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertNil(viewModel.routeElevation)
+        XCTAssertNil(viewModel.routeSummary.ascentMeters)
+    }
+
+    @MainActor
+    func testViewModelClearsStaleRouteElevationImmediatelyWhenSchedulingReplacementFetch() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: []
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 1
+        }
+        XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 300, accuracy: 0.01)
+
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 420, descentMeters: 210)),
+            sections: []
+        )
+        apiClient.queuedElevationResponseDelaysNanoseconds = [200_000_000]
+
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        XCTAssertNil(viewModel.routeElevation)
+        XCTAssertNil(viewModel.routeSummary.ascentMeters)
+        XCTAssertNil(viewModel.routeSummary.descentMeters)
+
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 420 &&
+                viewModel.routeSummary.descentMeters == 210
+        }
+
+        XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 420, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.descentMeters), 210, accuracy: 0.01)
+    }
+
+    @MainActor
+    func testSelectedRouteDetailContextIncludesSelectedSectionElevation() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: [
+                ElevationSectionResult(sectionKey: Self.edgeA, status: "ok", metrics: ElevationMetrics(ascentMeters: 40, descentMeters: 15)),
+                ElevationSectionResult(sectionKey: Self.edgeB, status: "ok", metrics: ElevationMetrics(ascentMeters: 65, descentMeters: 65)),
+            ]
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 2
+        }
+
+        let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
+
+        viewModel.exitPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: selectedSection.trailID,
+                anchorEdgeID: nil,
+                segment: TrailSegment(
+                    startDistanceKm: selectedSection.startDistanceKm,
+                    endDistanceKm: selectedSection.endDistanceKm,
+                    distanceKm: selectedSection.distanceKm,
+                    midpoint: selectedSection.midpoint
+                )
+            )
+        )
+
+        let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
+        let expectedSectionElevationLabel = try XCTUnwrap(
+            apiClient.elevationResponse?
+                .sectionElevation(for: selectedSection.edgeID)?
+                .formattedElevationLabel
+        )
+
+        XCTAssertEqual(routeContext.formattedElevationLabel, "↑ 300 m  ↓ 150 m")
+        XCTAssertEqual(routeContext.formattedSelectedSectionElevationLabel, expectedSectionElevationLabel)
+    }
+
+    @MainActor
+    func testSelectedRouteDetailContextUsesAnchorEdgeFallbackForSectionElevation() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "ok",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: [
+                ElevationSectionResult(sectionKey: Self.edgeA, status: "ok", metrics: ElevationMetrics(ascentMeters: 40, descentMeters: 15)),
+                ElevationSectionResult(sectionKey: Self.edgeB, status: "ok", metrics: ElevationMetrics(ascentMeters: 65, descentMeters: 65)),
+            ]
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil(timeoutNanoseconds: 3_000_000_000) {
+            viewModel.routeSummary.ascentMeters == 300 &&
+                viewModel.routeSummary.descentMeters == 150 &&
+                viewModel.plannedSections.count == 2
+        }
+
+        let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
+
+        viewModel.exitPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: selectedSection.trailID,
+                anchorEdgeID: selectedSection.edgeID,
+                segment: nil
+            )
+        )
+
+        let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
+
+        XCTAssertEqual(routeContext.formattedSelectedSectionElevationLabel, "↑ 65 m  ↓ 65 m")
+    }
+
+    @MainActor
+    func testSelectedRouteDetailContextUsesUnavailableSectionElevationCopy() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "partial",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: [
+                ElevationSectionResult(sectionKey: Self.edgeA, status: "ok", metrics: ElevationMetrics(ascentMeters: 40, descentMeters: 15)),
+                ElevationSectionResult(sectionKey: Self.edgeB, status: "unavailable", metrics: nil),
+            ]
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil { viewModel.routeElevation != nil }
+
+        let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
+
+        viewModel.exitPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: selectedSection.trailID,
+                anchorEdgeID: selectedSection.edgeID,
+                segment: nil
+            )
+        )
+
+        let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
+
+        XCTAssertEqual(routeContext.formattedElevationLabel, "↑ 300 m  ↓ 150 m")
+        XCTAssertNil(routeContext.formattedSelectedSectionElevationLabel)
+        XCTAssertEqual(routeContext.selectedSectionElevation?.status, "unavailable")
+        XCTAssertEqual(
+            routeContext.selectedSectionElevationDetailLabel,
+            RouteAwareTrailDetailContext.sectionElevationUnavailableNote
+        )
     }
 }
 
@@ -1286,6 +1818,11 @@ private final class BrowseAPISpy: BrowseAPIClient {
     private let destinationsFixture: DestinationFeatureCollection
     private let trailFixtures: [String: TrailFeatureCollection]
     private(set) var requestedDestinationIDs: [String] = []
+    var elevationResponse: ElevationApiResponse?
+    var queuedElevationResponses: [ElevationApiResponse] = []
+    var queuedElevationResponseDelaysNanoseconds: [UInt64] = []
+    var elevationShouldThrow = false
+    private(set) var elevationCallCount = 0
 
     init(destinationsResponse: [Destination], trailsByDestination: [String: [TrailFeature]]) {
         self.destinationsFixture = makeDestinationFeatureCollection(destinationsResponse)
@@ -1303,6 +1840,30 @@ private final class BrowseAPISpy: BrowseAPIClient {
 
     func fetchNearbyTrails(reference: CLLocationCoordinate2D) async throws -> TrailFeatureCollection {
         TrailFeatureCollection(features: [])
+    }
+
+    func fetchElevation(request: ElevationApiRequest) async throws -> ElevationApiResponse {
+        elevationCallCount += 1
+
+        if !queuedElevationResponseDelaysNanoseconds.isEmpty {
+            let delayNanoseconds = queuedElevationResponseDelaysNanoseconds.removeFirst()
+            if delayNanoseconds > 0 {
+                try await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+        }
+
+        if elevationShouldThrow {
+            throw URLError(.badServerResponse)
+        }
+
+        if !queuedElevationResponses.isEmpty {
+            return queuedElevationResponses.removeFirst()
+        }
+
+        guard let response = elevationResponse else {
+            throw URLError(.badServerResponse)
+        }
+        return response
     }
 }
 

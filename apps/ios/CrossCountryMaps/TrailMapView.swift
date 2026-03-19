@@ -162,7 +162,13 @@ struct TrailMapView: UIViewRepresentable {
 
             if baseSignature != lastBaseOverlaySignature {
                 lastBaseOverlaySignature = baseSignature
-                let existingTrailOverlays = mapView.overlays.filter { $0 is TrailOverlay }
+                let existingTrailOverlays = mapView.overlays.filter {
+                    guard let trailOverlay = $0 as? TrailOverlay else {
+                        return false
+                    }
+
+                    return type(of: trailOverlay) == TrailOverlay.self
+                }
                 mapView.removeOverlays(existingTrailOverlays)
 
                 let trailOverlays = buildTrailOverlays(trails: parent.previewTrails, isPreview: true) +
@@ -201,7 +207,11 @@ struct TrailMapView: UIViewRepresentable {
         }
 
         func syncDirectionAnnotations(on mapView: MKMapView) {
-            let signature = parent.routePlan.anchorEdgeIDs.joined(separator: ",")
+            let signature = [
+                parent.routePlan.anchorEdgeIDs.joined(separator: ","),
+                parent.primaryTrails.map(\.id).joined(separator: ","),
+                parent.previewTrails.map(\.id).joined(separator: ",")
+            ].joined(separator: "|")
 
             guard signature != lastDirectionSignature else {
                 return

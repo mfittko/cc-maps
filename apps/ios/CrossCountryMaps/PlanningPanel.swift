@@ -5,6 +5,7 @@ struct PlanningPanel: View {
 
     let plan: RoutePlanState
     let routeSummary: RouteSummary
+    let elevationResponse: ElevationApiResponse?
     let routeUsesPreviewDestinations: Bool
     let allTrails: [TrailFeature]
     let hydrationNotice: RoutePlanHydrationNotice?
@@ -23,6 +24,18 @@ struct PlanningPanel: View {
 
     private var trailsByID: [String: TrailFeature] {
         Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+    }
+
+    private var sectionElevationsByEdgeID: [String: SectionElevationSummary] {
+        guard let elevationResponse else {
+            return [:]
+        }
+
+        return Dictionary(
+            uniqueKeysWithValues: plannedSections.compactMap { section in
+                elevationResponse.sectionElevation(for: section.edgeID).map { (section.edgeID, $0) }
+            }
+        )
     }
 
     private var anchorListHeight: CGFloat {
@@ -125,6 +138,10 @@ struct PlanningPanel: View {
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
+
+                    if let sectionElevation = sectionElevationsByEdgeID[section.edgeID] {
+                        sectionElevationChip(sectionElevation)
+                    }
 
                     Button {
                         onRemove(section.edgeID)
@@ -262,6 +279,18 @@ struct PlanningPanel: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(Color.white.opacity(0.82), in: Capsule())
+    }
+
+    private func sectionElevationChip(_ elevation: SectionElevationSummary) -> some View {
+        Label(
+            elevation.formattedElevationLabel ?? "No elev.",
+            systemImage: "mountain.2"
+        )
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.82), in: Capsule())
+        .foregroundStyle(elevation.formattedElevationLabel == nil ? .secondary : .primary)
     }
 
     private func trailLabel(for section: PlanningSection) -> String {

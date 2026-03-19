@@ -138,23 +138,53 @@ struct RouteExportFile: Equatable {
     }
 }
 
+private func formatElevationLabel(ascentMeters: Double?, descentMeters: Double?) -> String? {
+    guard let ascent = ascentMeters, let descent = descentMeters else {
+        return nil
+    }
+
+    return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
+}
+
+struct SectionElevationSummary: Equatable {
+    let status: String
+    let ascentMeters: Double?
+    let descentMeters: Double?
+
+    var formattedElevationLabel: String? {
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
+    }
+}
+
+extension ElevationApiResponse {
+    func sectionElevation(for sectionKey: String) -> SectionElevationSummary? {
+        guard let section = sections.first(where: { $0.sectionKey == sectionKey }) else {
+            return nil
+        }
+
+        return SectionElevationSummary(
+            status: section.status,
+            ascentMeters: section.metrics.map { Double($0.ascentMeters) },
+            descentMeters: section.metrics.map { Double($0.descentMeters) }
+        )
+    }
+}
+
 /// Compact route summary suitable for display in the planning surface.
 struct RouteSummary: Equatable {
     let sectionCount: Int
     let totalDistanceKm: Double
     /// `nil` means elevation data is unavailable for this route.
-    let totalElevationMeters: Double?
+    let ascentMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let descentMeters: Double?
 
     var formattedDistanceLabel: String {
         String(format: "%.1f km", totalDistanceKm)
     }
 
     var formattedElevationLabel: String? {
-        guard let meters = totalElevationMeters else {
-            return nil
-        }
-
-        return String(format: "↑ %.0f m", meters)
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
     }
 
     /// Human-readable note shown when elevation data is not available.
@@ -162,8 +192,18 @@ struct RouteSummary: Equatable {
 
     static func from(sections: [PlanningSection]) -> RouteSummary {
         let total = sections.reduce(0) { $0 + $1.distanceKm }
-        // Elevation is not currently available from the Sporet data source.
-        return RouteSummary(sectionCount: sections.count, totalDistanceKm: total, totalElevationMeters: nil)
+        return RouteSummary(sectionCount: sections.count, totalDistanceKm: total, ascentMeters: nil, descentMeters: nil)
+    }
+
+    static func from(sections: [PlanningSection], elevationResponse: ElevationApiResponse?) -> RouteSummary {
+        let total = sections.reduce(0) { $0 + $1.distanceKm }
+        let routeMetrics = elevationResponse?.route.status == "ok" ? elevationResponse?.route.metrics : nil
+        return RouteSummary(
+            sectionCount: sections.count,
+            totalDistanceKm: total,
+            ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
+            descentMeters: routeMetrics.map { Double($0.descentMeters) }
+        )
     }
 }
 
@@ -171,7 +211,11 @@ struct RouteAwareTrailDetailContext: Equatable {
     let selectedSectionNumber: Int
     let totalSections: Int
     let totalDistanceKm: Double
-    let totalElevationMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let ascentMeters: Double?
+    /// `nil` means elevation data is unavailable for this route.
+    let descentMeters: Double?
+    let selectedSectionElevation: SectionElevationSummary?
 
     var formattedSectionLabel: String {
         "Section \(selectedSectionNumber) of \(totalSections)"
@@ -182,10 +226,16 @@ struct RouteAwareTrailDetailContext: Equatable {
     }
 
     var formattedElevationLabel: String? {
-        guard let totalElevationMeters else {
-            return nil
-        }
-
-        return String(format: "↑ %.0f m", totalElevationMeters)
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
     }
+
+    var formattedSelectedSectionElevationLabel: String? {
+        selectedSectionElevation?.formattedElevationLabel
+    }
+
+    var selectedSectionElevationDetailLabel: String {
+        formattedSelectedSectionElevationLabel ?? Self.sectionElevationUnavailableNote
+    }
+
+    static let sectionElevationUnavailableNote = "Section elevation not available"
 }

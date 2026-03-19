@@ -957,6 +957,10 @@ private final class BrowseAPISpy: BrowseAPIClient {
         return nearbyFixture
     }
 
+    func fetchElevation(request: ElevationApiRequest) async throws -> ElevationApiResponse {
+        throw URLError(.badServerResponse)
+    }
+
     func resumeTrails(for destinationID: String) {
         trailContinuations.removeValue(forKey: destinationID)?.resume()
     }
