@@ -329,7 +329,12 @@ struct TrailMapView: UIViewRepresentable {
                 return []
             }
 
-            let hasRoute = !parent.routePlan.isEmpty
+            let plannedSections = plannedSections(for: trails)
+            let selectedTrailOverlapsPlannedRoute = selectedTrailOverlapsPlannedRoute(
+                trailID: selectedTrailID,
+                segment: parent.selectedTrailSegment,
+                plannedSections: plannedSections
+            )
 
             // If a specific segment is selected, highlight only that segment
             if let segment = parent.selectedTrailSegment {
@@ -344,7 +349,7 @@ struct TrailMapView: UIViewRepresentable {
                 let overlay = SelectedTrailOverlay(coordinates: coordinates, count: coordinates.count)
                 overlay.trailID = selectedTrail.id
                 overlay.groomingColor = UIColor(hex: selectedTrail.groomingColorHex)
-                overlay.isOverPlannedRoute = hasRoute
+                overlay.isOverPlannedRoute = selectedTrailOverlapsPlannedRoute
                 return [overlay]
             }
 
@@ -356,9 +361,44 @@ struct TrailMapView: UIViewRepresentable {
                 let overlay = SelectedTrailOverlay(coordinates: coordinates, count: coordinates.count)
                 overlay.trailID = selectedTrail.id
                 overlay.groomingColor = UIColor(hex: selectedTrail.groomingColorHex)
-                overlay.isOverPlannedRoute = hasRoute
+                overlay.isOverPlannedRoute = selectedTrailOverlapsPlannedRoute
                 return overlay
             }
+        }
+
+        private func selectedTrailOverlapsPlannedRoute(
+            trailID: String,
+            segment: TrailSegment?,
+            plannedSections: [PlanningSection]
+        ) -> Bool {
+            let matchingSections = plannedSections.filter { $0.trailID == trailID }
+
+            guard !matchingSections.isEmpty else {
+                return false
+            }
+
+            guard let segment else {
+                return true
+            }
+
+            return matchingSections.contains { section in
+                segmentRangesOverlap(
+                    startA: segment.startDistanceKm,
+                    endA: segment.endDistanceKm,
+                    startB: section.startDistanceKm,
+                    endB: section.endDistanceKm
+                )
+            }
+        }
+
+        private func segmentRangesOverlap(
+            startA: Double,
+            endA: Double,
+            startB: Double,
+            endB: Double,
+            tolerance: Double = 0.0001
+        ) -> Bool {
+            max(startA, startB) <= min(endA, endB) + tolerance
         }
 
         func buildPlannedSectionOverlays(trails: [TrailFeature]) -> [PlannedSectionOverlay] {
