@@ -594,6 +594,13 @@ enum GeoMath {
             descriptorsByID[edgeID]
         }
 
+        guard sections.count >= 2 else {
+            cacheLock.lock()
+            planningSectionsCache[cacheKey] = sections
+            cacheLock.unlock()
+            return sections
+        }
+
         // Orient coordinates so adjacent sections flow continuously
         for i in 1..<sections.count {
             let prevEnd = sections[i - 1].coordinates.last!
@@ -1219,7 +1226,8 @@ enum GeoMath {
         // Build path points: start + crossings + end
         var points: [Double] = [0] + uniqueCrossings + [totalLength]
 
-        // Normalise: remove duplicate or very-close points
+        // Normalise interior crossings without collapsing a valid start/end pair.
+        let rawPoints = points
         points = points.reduce(into: [Double]()) { result, point in
             if let last = result.last, abs(last - point) < dedupThresholdKm {
                 result[result.count - 1] = point
@@ -1228,11 +1236,15 @@ enum GeoMath {
             }
         }
 
+        if points.count < 2, totalLength > 0, rawPoints.count >= 2 {
+            points = [0, totalLength]
+        }
+
         guard points.count >= 2 else { return [] }
 
         return zip(points, points.dropFirst()).compactMap { startKm, endKm in
             let distKm = endKm - startKm
-            guard distKm >= minSegmentKm else { return nil }
+            guard distKm > 0, distKm >= minSegmentKm else { return nil }
             let midpoint: CLLocationCoordinate2D?
 
             if includeMidpoints {
