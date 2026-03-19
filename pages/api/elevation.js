@@ -8,6 +8,7 @@ import {
 
 const MAX_GEOMETRY_COORDINATES = 50000;
 const MAX_SECTION_COUNT = 200;
+const MAX_SAMPLED_COORDINATES = 20000;
 const VALID_GEOMETRY_TYPES = new Set(['LineString', 'MultiLineString']);
 
 const ELEVATION_SOURCE = {
@@ -161,6 +162,12 @@ export default async function handler(req, res) {
     ...sectionSampledCoords.flat(),
   ];
 
+  if (allCoordinates.length > MAX_SAMPLED_COORDINATES) {
+    return res.status(413).json({
+      error: `Sampled route geometry exceeds the maximum of ${MAX_SAMPLED_COORDINATES} coordinates`,
+    });
+  }
+
   let allElevations;
 
   try {
@@ -202,19 +209,12 @@ export default async function handler(req, res) {
   });
 
   const allSectionsOk = sectionResults.every((s) => s.status === 'ok');
-  const someSectionsOk = sectionResults.some((s) => s.status === 'ok');
-
-  let overallStatus;
-
-  if (routeResult.status !== 'ok') {
-    overallStatus = 'unavailable';
-  } else if (routeSections.length === 0 || allSectionsOk) {
-    overallStatus = 'ok';
-  } else if (someSectionsOk) {
-    overallStatus = 'partial';
-  } else {
-    overallStatus = 'partial';
-  }
+  const overallStatus =
+    routeResult.status !== 'ok'
+      ? 'unavailable'
+      : routeSections.length === 0 || allSectionsOk
+        ? 'ok'
+        : 'partial';
 
   return res.status(200).json({
     status: overallStatus,

@@ -23,8 +23,10 @@ vi.mock('../lib/map-domain.js', () => ({
 import { PNG } from 'pngjs';
 import { getSampledCoordinatesAlongFeature } from '../lib/map-domain.js';
 import {
+  MAX_TILE_FETCH_CONCURRENCY,
   TILE_SIZE,
   TILE_ZOOM,
+  WEB_MERCATOR_MAX_LAT,
   decodeTerrainRGBHeight,
   decodePngBuffer,
   fetchTilePixels,
@@ -62,6 +64,16 @@ describe('terrain-rgb helpers', () => {
       expect(yMin).toBeGreaterThanOrEqual(0);
       expect(yMax).toBeLessThanOrEqual(n - 1);
     });
+
+    it('clamps extreme latitudes to the Web Mercator limit', () => {
+      const northPoleTile = lngLatToTileCoords(10.75, 90, 12);
+      const clampedNorthTile = lngLatToTileCoords(10.75, WEB_MERCATOR_MAX_LAT, 12);
+      const southPoleTile = lngLatToTileCoords(10.75, -90, 12);
+      const clampedSouthTile = lngLatToTileCoords(10.75, -WEB_MERCATOR_MAX_LAT, 12);
+
+      expect(northPoleTile).toEqual(clampedNorthTile);
+      expect(southPoleTile).toEqual(clampedSouthTile);
+    });
   });
 
   describe('lngLatToPixelWithinTile', () => {
@@ -73,6 +85,16 @@ describe('terrain-rgb helpers', () => {
       expect(px).toBeLessThan(TILE_SIZE);
       expect(py).toBeGreaterThanOrEqual(0);
       expect(py).toBeLessThan(TILE_SIZE);
+    });
+
+    it('keeps pixel coordinates finite for extreme latitudes', () => {
+      const { x, y, z } = lngLatToTileCoords(10.75, 90, 12);
+      const pixel = lngLatToPixelWithinTile(10.75, 90, x, y, z);
+
+      expect(Number.isFinite(pixel.px)).toBe(true);
+      expect(Number.isFinite(pixel.py)).toBe(true);
+      expect(pixel.px).toBeGreaterThanOrEqual(0);
+      expect(pixel.py).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -234,6 +256,45 @@ describe('terrain-rgb helpers', () => {
 
       expect(result).toHaveLength(2);
       result.forEach((e) => expect(Number.isFinite(e)).toBe(true));
+    });
+
+    it('limits concurrent tile fetches', async () => {
+      const fakePng = { width: 256, height: 256, data: new Uint8Array(256 * 256 * 4).fill(0) };
+      let inFlight = 0;
+      let maxInFlight = 0;
+
+      PNG.sync.read.mockReturnValue(fakePng);
+
+      const mockFetch = vi.fn().mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        inFlight -= 1;
+
+        return {
+          ok: true,
+          arrayBuffer: () => Promise.resolve(Buffer.from([]).buffer),
+        };
+      });
+
+      const coords = Array.from({ length: MAX_TILE_FETCH_CONCURRENCY + 4 }, (_, index) => [
+        -170 + index * 20,
+        0,
+      ]);
+      const uniqueTileCount = new Set(
+        coords.map(([lng, lat]) => {
+          const { x, y, z } = lngLatToTileCoords(lng, lat, 4);
+
+          return `${z}/${x}/${y}`;
+        })
+      ).size;
+
+      await sampleElevationsAlongCoordinates(coords, 'my-token', 4, mockFetch);
+
+      expect(mockFetch).toHaveBeenCalledTimes(uniqueTileCount);
+      expect(maxInFlight).toBeLessThanOrEqual(MAX_TILE_FETCH_CONCURRENCY);
     });
 
     it('propagates tile fetch errors', async () => {

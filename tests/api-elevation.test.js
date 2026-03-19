@@ -330,6 +330,19 @@ describe('/api/elevation', () => {
       expect(res.statusCode).toBe(413);
       expect(res.body.error).toMatch(/maximum.*coordinates/i);
     });
+
+    it('returns 413 when sampled geometry exceeds the post-sampling cap', async () => {
+      sampleCoordinatesFromGeometry.mockReturnValue(
+        Array.from({ length: 20001 }, (_, i) => [10 + i * 0.00001, 60.0])
+      );
+
+      const res = createRes();
+      await handler(createReq(), res);
+
+      expect(res.statusCode).toBe(413);
+      expect(res.body.error).toMatch(/sampled route geometry exceeds the maximum/i);
+      expect(sampleElevationsAlongCoordinates).not.toHaveBeenCalled();
+    });
   });
 
   describe('success responses', () => {
