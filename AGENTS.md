@@ -113,6 +113,7 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - Treat test design as part of implementation, not a follow-up task: add or adjust the relevant tests early enough that they define the intended behavior before the code settles.
 - Prefer focused changes over broad rewrites.
 - Prefer the built-in file edit tool for code changes instead of shell redirection, ad hoc scripting, or Python wrappers that write files indirectly.
+- Never configure a local working branch to track a different branch such as `origin/main`. A feature branch must track its same-named remote branch or have no upstream until that remote branch exists.
 - If you notice undocumented shipped behavior, document it instead of leaving it implicit.
 - If you are refactoring, make the safety net stronger as you go: extract pure logic, then test it.
 - If you are cloning web behavior into Apple code, capture parity with fixtures or contract tests first, then implement against that contract.
