@@ -453,4 +453,49 @@ Required completion evidence:
 | What summary parity is required in Phase 4? | Require total distance and section count, and require elevation summary when available. | Users need reviewable route context before sharing or export, and the web app already exposes route-level context. | Phase 4 must include route-summary validation, not just anchor persistence. |
 | Are route-aware details outside planning mode in scope now? | Yes. Planned segments selected outside planning mode must show route context without exposing editing controls. | This behavior already ships on the web and closes the gap between planning and inspect flows. | The native trail-details surface must gain route context while preserving Phase 3 inspection semantics. |
 | How far can preview-sector participation extend? | Limit it to the primary destination plus only the nearby sectors already bounded by preview logic or explicitly required by hydration. | This preserves destination-first performance boundaries and the bounded route model. | Route hydration and preview loading must stay narrow and dependency-driven. |
+
+## 13. Elevation endpoint follow-up (Phase 4.3 review surfaces)
+
+Route elevation summary (ascent and descent) is required by the Phase 4 planning surface and route-aware detail views (sections 4.5, 5.15, 7.5). The web app derives these metrics through the browser-side Mapbox GL JS terrain API, which is not available on the server or on Apple platforms. This section documents the shared elevation endpoint that unblocks iPhone elevation display without pushing external elevation access into the Apple client.
+
+### Elevation source and endpoint contract
+
+The server-side elevation endpoint is `POST /api/elevation`. It accepts resolved route traversal geometry and ordered route-section geometry, fetches Mapbox Terrain-RGB raster tiles server-side through the Mapbox Raster Tiles API, decodes pixel elevation values, and returns derived ascent and descent metrics. The endpoint uses a server-side `MAPBOX_ACCESS_TOKEN` environment variable and does not depend on the public browser token (`NEXT_PUBLIC_MAPBOX_TOKEN`).
+
+The endpoint reuses `getSampledCoordinatesAlongFeature` and `getElevationChangeMetrics` from `lib/map-domain.js` to stay consistent with web elevation reduction behavior. The tile decoding logic and sampling helpers live in `lib/terrain-rgb.js`.
+
+Endpoint location: `pages/api/elevation.js`
+Supporting library: `lib/terrain-rgb.js`
+
+### Response semantics
+
+- `status: "ok"` when route traversal and all requested sections have usable elevation metrics.
+- `status: "partial"` when route traversal has elevation but at least one section does not.
+- `status: "unavailable"` when the request is valid but the traversal cannot produce usable metrics (e.g., too few samples or upstream unavailable).
+- `400` for malformed geometry, invalid destination id, or unsupported field types.
+- `413` for oversized geometry or too many sections.
+- `405` for non-POST requests.
+- `502` or `503` for upstream Terrain-RGB tile failures.
+
+Elevation is fully derived and non-authoritative. It is not part of canonical route identity. The endpoint does not persist route identity or elevation results.
+
+### Scope constraints preserved
+
+- Canonical route identity remains limited to `version`, `destinationId`, `destinationIds`, and `anchorEdgeIds`.
+- Elevation is derived and disposable; it is never persisted in route storage or transferred as watch payload.
+- All external elevation access stays centralized in the Next.js API layer.
+- The endpoint does not trigger unbounded trail loading or route graph expansion.
+- Watch transfer, watch payload, and watch UI changes are not part of this follow-up.
+
+### Apple client usage
+
+Apple Phase 4 planning and route-aware detail surfaces should request elevation by POSTing resolved route traversal geometry and ordered section geometry to `/api/elevation`. The client must handle `unavailable` status and `partial` status explicitly and must never display fabricated zero values when elevation is genuinely unavailable.
+
+### Completion evidence
+
+- `lib/terrain-rgb.js` implements tile coordinate math, RGB elevation decoding, PNG buffer parsing via `pngjs`, tile fetch deduplication, and coordinate sampling.
+- `pages/api/elevation.js` implements full request validation, geometry bounds enforcement, upstream error handling, and response shape.
+- `tests/terrain-rgb.test.js` covers all `terrain-rgb.js` helpers including tile math, elevation decoding, PNG parsing, fetch deduplication, and sampling.
+- `tests/api-elevation.test.js` covers success (`ok`, `partial`, `unavailable`), all validation error cases (400, 413, 405, 503), upstream failure paths (502, 503), and optional request fields.
+- All tests pass and coverage remains at or above 90% for lines, statements, branches, and functions.
 | Should Phase 4 be split into many issues? | Default to one tightly scoped implementation issue or one pull request. | Planning, persistence, summary, and share behavior are coupled enough that over-splitting adds coordination cost. | Only split later if concrete ownership or sequencing blockers appear. |
