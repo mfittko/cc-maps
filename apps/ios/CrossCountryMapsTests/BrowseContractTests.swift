@@ -1,4 +1,5 @@
 import CoreLocation
+import MapKit
 import XCTest
 @testable import CrossCountryMaps
 
@@ -137,6 +138,146 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
+    func testStoredBrowseSettingsRestoreDestinationAndMapRegionOnStart() async throws {
+        let browseSettingsStore = BrowseSettingsStoreSpy(
+            initialSettings: BrowseSettings(
+                destinationID: "2",
+                mapRegion: PersistedMapRegion(
+                    latitude: 61.1153,
+                    longitude: 10.4662,
+                    latitudeDelta: 0.12,
+                    longitudeDelta: 0.12
+                )
+            )
+        )
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            browseSettingsStore: browseSettingsStore
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.trailsPhase == .success
+        }
+
+        XCTAssertTrue(viewModel.isManualDestinationSelection)
+        XCTAssertEqual(viewModel.visibleMapRegion, browseSettingsStore.initialSettings?.mapRegion)
+        XCTAssertEqual(viewModel.mapRegionRestoreRequestID, 1)
+        XCTAssertEqual(viewModel.fitRequestID, 0)
+        XCTAssertEqual(apiClient.callLog, [.destinations, .trails("2")])
+    }
+
+    @MainActor
+    func testStoredBrowseRestoreIgnoresStartupLocationUpdates() async throws {
+        let browseSettingsStore = BrowseSettingsStoreSpy(
+            initialSettings: BrowseSettings(
+                destinationID: "2",
+                mapRegion: PersistedMapRegion(
+                    latitude: 61.1153,
+                    longitude: 10.4662,
+                    latitudeDelta: 0.12,
+                    longitudeDelta: 0.12
+                )
+            )
+        )
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ],
+            nearbyTrailsResponse: [
+                try makeTrail(id: 301, destinationId: 1, latitude: 59.9139, longitude: 10.7522),
+            ]
+        )
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate,
+            browseSettingsStore: browseSettingsStore
+        )
+
+        viewModel.start()
+        locationService.sendLocation(CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522))
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.trailsPhase == .success
+        }
+
+        XCTAssertTrue(viewModel.isManualDestinationSelection)
+        XCTAssertEqual(viewModel.visibleMapRegion, browseSettingsStore.initialSettings?.mapRegion)
+        XCTAssertEqual(viewModel.fitRequestID, 0)
+        XCTAssertEqual(apiClient.callLog, [.destinations, .trails("2")])
+    }
+
+    @MainActor
+    func testStoredBrowseRestoreIgnoresEarlyMapRegionCallback() async throws {
+        let storedRegion = PersistedMapRegion(
+            latitude: 61.1153,
+            longitude: 10.4662,
+            latitudeDelta: 0.12,
+            longitudeDelta: 0.12
+        )
+        let browseSettingsStore = BrowseSettingsStoreSpy(
+            initialSettings: BrowseSettings(
+                destinationID: "2",
+                mapRegion: storedRegion
+            )
+        )
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            browseSettingsStore: browseSettingsStore
+        )
+
+        viewModel.start()
+        viewModel.updateVisibleRegion(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522),
+                span: MKCoordinateSpan(latitudeDelta: 0.45, longitudeDelta: 0.45)
+            )
+        )
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.trailsPhase == .success
+        }
+
+        XCTAssertEqual(viewModel.visibleMapRegion, storedRegion)
+        XCTAssertEqual(browseSettingsStore.lastWrittenSettings?.mapRegion, BrowseSettings(destinationID: "2", mapRegion: storedRegion).mapRegion)
+    }
+
+    @MainActor
     func testManualDestinationSelectionSuppressesLaterAutomaticSwitching() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
@@ -211,7 +352,12 @@ final class BrowseContractTests: XCTestCase {
             apiClient.callLog == [.destinations, .trails("1")]
         }
 
-        viewModel.updateVisibleRegionCenter(CLLocationCoordinate2D(latitude: 61.1153, longitude: 10.4662))
+        viewModel.updateVisibleRegion(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 61.1153, longitude: 10.4662),
+                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+            )
+        )
         viewModel.selectDestination(id: "2", manual: true)
 
         await waitUntil {
@@ -258,6 +404,52 @@ final class BrowseContractTests: XCTestCase {
 
         XCTAssertEqual(viewModel.fitRequestID, 1)
         XCTAssertEqual(apiClient.callLog, [.destinations, .trails("1"), .trails("2")])
+    }
+
+    @MainActor
+    func testBrowseSettingsPersistDestinationAndMapRegionChanges() async throws {
+        let browseSettingsStore = BrowseSettingsStoreSpy()
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            browseSettingsStore: browseSettingsStore
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
+        }
+
+        viewModel.selectDestination(id: "2", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.primaryTrails.map(\.id) == ["202"]
+        }
+
+        let region = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 61.12, longitude: 10.49),
+            span: MKCoordinateSpan(latitudeDelta: 0.08, longitudeDelta: 0.08)
+        )
+
+        viewModel.updateVisibleRegion(region)
+
+        XCTAssertEqual(
+            browseSettingsStore.lastWrittenSettings,
+            BrowseSettings(destinationID: "2", mapRegion: PersistedMapRegion(region: region))
+        )
     }
 }
 
@@ -605,6 +797,23 @@ private final class BrowseAPISpy: BrowseAPIClient {
 
     func resumeTrails(for destinationID: String) {
         trailContinuations.removeValue(forKey: destinationID)?.resume()
+    }
+}
+
+private final class BrowseSettingsStoreSpy: BrowseSettingsPersisting {
+    let initialSettings: BrowseSettings?
+    private(set) var lastWrittenSettings: BrowseSettings?
+
+    init(initialSettings: BrowseSettings? = nil) {
+        self.initialSettings = initialSettings
+    }
+
+    func readBrowseSettings() -> BrowseSettings? {
+        initialSettings
+    }
+
+    func writeBrowseSettings(_ settings: BrowseSettings) {
+        lastWrittenSettings = settings
     }
 }
 

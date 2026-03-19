@@ -18,6 +18,19 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>cc-maps-route</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ccmaps</string>
+			</array>
+		</dict>
+	</array>
 	<key>CrossCountryMapsAPIBaseURL</key>
 	<string>$(APP_API_BASE_URL)</string>
 	<key>LSRequiresIPhoneOS</key>

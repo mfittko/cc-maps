@@ -11,13 +11,18 @@ struct TrailMapView: UIViewRepresentable {
     let isInPlanningMode: Bool
     let selectedTrailID: String?
     let selectedTrailSegment: TrailSegment?
+    let selectedPlannedSectionEdgeID: String?
     let fitRequestID: Int
+    let restoredMapRegion: PersistedMapRegion?
+    let mapRegionRestoreRequestID: Int
+    let focusedPlannedSectionCoordinates: [CLLocationCoordinate2D]
+    let plannedSectionFocusRequestID: Int
     let currentLocation: CLLocationCoordinate2D?
     let locationFocusRequestID: Int
     let isAutoFollowEnabled: Bool
     let onDestinationTap: (String) -> Void
     let onTrailTap: (TrailInspectionSelection?) -> Void
-    let onRegionDidChange: (CLLocationCoordinate2D) -> Void
+    let onRegionDidChange: (MKCoordinateRegion) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -31,7 +36,7 @@ struct TrailMapView: UIViewRepresentable {
         mapView.showsScale = false
         mapView.showsUserLocation = true
         mapView.setRegion(
-            MKCoordinateRegion(
+            restoredMapRegion?.coordinateRegion ?? MKCoordinateRegion(
                 center: AppConfig.defaultCenter,
                 span: MKCoordinateSpan(latitudeDelta: 0.45, longitudeDelta: 0.45)
             ),
@@ -53,9 +58,27 @@ struct TrailMapView: UIViewRepresentable {
         context.coordinator.syncOverlays(on: mapView)
         context.coordinator.syncDirectionAnnotations(on: mapView)
 
+        if context.coordinator.lastMapRegionRestoreRequestID != mapRegionRestoreRequestID,
+           let restoredMapRegion {
+            context.coordinator.lastMapRegionRestoreRequestID = mapRegionRestoreRequestID
+            context.coordinator.shouldSkipNextFitRequest = true
+            mapView.setRegion(restoredMapRegion.coordinateRegion, animated: false)
+        }
+
+        if context.coordinator.lastPlannedSectionFocusRequestID != plannedSectionFocusRequestID,
+           focusedPlannedSectionCoordinates.count >= 2 {
+            context.coordinator.lastPlannedSectionFocusRequestID = plannedSectionFocusRequestID
+            context.coordinator.focusMap(on: mapView, coordinates: focusedPlannedSectionCoordinates)
+        }
+
         if context.coordinator.lastFitRequestID != fitRequestID {
             context.coordinator.lastFitRequestID = fitRequestID
-            context.coordinator.fitMapToPrimaryTrails(on: mapView)
+
+            if context.coordinator.shouldSkipNextFitRequest {
+                context.coordinator.shouldSkipNextFitRequest = false
+            } else {
+                context.coordinator.fitMapToPrimaryTrails(on: mapView)
+            }
         }
 
         if context.coordinator.lastLocationFocusRequestID != locationFocusRequestID {
@@ -77,8 +100,11 @@ struct TrailMapView: UIViewRepresentable {
         var lastDirectionSignature = ""
         var pendingPlanningWork: DispatchWorkItem?
         var lastFitRequestID = 0
+        var lastMapRegionRestoreRequestID = 0
+        var lastPlannedSectionFocusRequestID = 0
         var lastLocationFocusRequestID = 0
         var lastAutoFollowEnabled = false
+        var shouldSkipNextFitRequest = false
         var cachedSegmentAnnotations: [TrailSegmentAnnotation] = []
         var lastPlannedSectionsSignature = ""
         var cachedPlannedSections: [PlanningSection] = []
@@ -152,6 +178,7 @@ struct TrailMapView: UIViewRepresentable {
                 "planning:\(parent.isInPlanningMode ? "1" : "0")",
                 "selected:\(parent.selectedTrailID ?? "")",
                 "segment:\(segmentSig)",
+                "planned-edge:\(parent.selectedPlannedSectionEdgeID ?? "")",
                 "anchors:\(parent.routePlan.anchorEdgeIDs.joined(separator: ","))",
                 "trails:\((parent.primaryTrails + parent.previewTrails).map(\.id).joined(separator: ","))"
             ].joined(separator: "|")
@@ -206,6 +233,30 @@ struct TrailMapView: UIViewRepresentable {
                 edgePadding: UIEdgeInsets(top: 180, left: 24, bottom: 150, right: 24),
                 animated: true
             )
+        }
+
+        func focusMap(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {
+            guard let mapRect = mapRect(for: coordinates), !mapRect.isNull else {
+                return
+            }
+
+            mapView.setVisibleMapRect(
+                mapRect,
+                edgePadding: UIEdgeInsets(top: 150, left: 28, bottom: 300, right: 28),
+                animated: true
+            )
+        }
+
+        private func mapRect(for coordinates: [CLLocationCoordinate2D]) -> MKMapRect? {
+            guard let firstCoordinate = coordinates.first else {
+                return nil
+            }
+
+            return coordinates.dropFirst().reduce(
+                MKMapRect(origin: MKMapPoint(firstCoordinate), size: MKMapSize(width: 0, height: 0))
+            ) { rect, coordinate in
+                rect.union(MKMapRect(origin: MKMapPoint(coordinate), size: MKMapSize(width: 0, height: 0)))
+            }
         }
 
         func updateTrackingMode(on mapView: MKMapView) {
@@ -417,6 +468,7 @@ struct TrailMapView: UIViewRepresentable {
                 overlay.trailID = section.trailID
                 overlay.edgeID = section.edgeID
                 overlay.sequenceIndex = index + 1
+                overlay.isSelectedPlannedSection = section.edgeID == parent.selectedPlannedSectionEdgeID
                 return overlay
             }
         }
@@ -571,9 +623,9 @@ struct TrailMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             syncAnnotations(on: mapView)
-            let center = mapView.region.center
+            let region = mapView.region
             DispatchQueue.main.async {
-                self.parent.onRegionDidChange(center)
+                self.parent.onRegionDidChange(region)
             }
         }
 
@@ -646,8 +698,11 @@ struct TrailMapView: UIViewRepresentable {
             let baseColor = trailOverlay.groomingColor ?? UIColor.systemGreen
 
             if overlay is PlannedSectionOverlay {
-                renderer.strokeColor = UIColor.systemBlue.withAlphaComponent(0.96)
-                renderer.lineWidth = 9
+                let plannedOverlay = overlay as? PlannedSectionOverlay
+                renderer.strokeColor = plannedOverlay?.isSelectedPlannedSection == true
+                    ? UIColor(red: 0.0, green: 0.17, blue: 0.58, alpha: 1.0)
+                    : UIColor.systemBlue.withAlphaComponent(0.96)
+                renderer.lineWidth = plannedOverlay?.isSelectedPlannedSection == true ? 12 : 9
             } else if let selectedOverlay = overlay as? SelectedTrailOverlay, selectedOverlay.isOverPlannedRoute {
                 renderer.strokeColor = UIColor(red: 0.0, green: 0.1, blue: 0.35, alpha: 1.0)
                 renderer.lineWidth = 13
@@ -683,6 +738,7 @@ class SelectedTrailOverlay: TrailOverlay {
 class PlannedSectionOverlay: TrailOverlay {
     var edgeID = ""
     var sequenceIndex = 0
+    var isSelectedPlannedSection = false
 }
 
 final class RouteDirectionAnnotation: NSObject, MKAnnotation {

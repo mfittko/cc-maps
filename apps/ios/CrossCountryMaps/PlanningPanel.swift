@@ -3,10 +3,13 @@ import SwiftUI
 struct PlanningPanel: View {
     let plan: RoutePlanState
     let allTrails: [TrailFeature]
+    let hydrationNotice: RoutePlanHydrationNotice?
+    let selectedSectionEdgeID: String?
     let onExitPlanning: () -> Void
     let onReverse: () -> Void
     let onClear: () -> Void
-    let onRemove: (Int) -> Void
+    let onRemove: (String) -> Void
+    let onSelectSection: (String) -> Void
 
     private var plannedSections: [PlanningSection] {
         GeoMath.planningSections(for: plan.anchorEdgeIDs, allTrails: allTrails)
@@ -18,7 +21,7 @@ struct PlanningPanel: View {
 
     private var anchorListHeight: CGFloat {
         let rowHeight: CGFloat = 35
-        return CGFloat(plan.anchorEdgeIDs.count) * rowHeight
+        return CGFloat(plannedSections.count) * rowHeight
     }
 
     private var scrollAreaMaxHeight: CGFloat {
@@ -28,6 +31,10 @@ struct PlanningPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+
+            if let hydrationNotice {
+                hydrationBanner(hydrationNotice)
+            }
 
             if plan.isEmpty {
                 emptyState
@@ -66,6 +73,21 @@ struct PlanningPanel: View {
         .padding(.bottom, 8)
     }
 
+    private func hydrationBanner(_ hydrationNotice: RoutePlanHydrationNotice) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .font(.footnote)
+
+            Text(hydrationNotice.message)
+                .font(.footnote)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
+    }
+
     private var emptyState: some View {
         HStack(spacing: 8) {
             Image(systemName: "hand.tap")
@@ -81,21 +103,21 @@ struct PlanningPanel: View {
 
     private var anchorList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(plan.anchorEdgeIDs.enumerated()), id: \.element) { index, edgeID in
+            ForEach(Array(plannedSections.enumerated()), id: \.element.edgeID) { index, section in
                 HStack(spacing: 10) {
                     Text("\(index + 1)")
                         .font(.caption.monospacedDigit().weight(.bold))
                         .foregroundStyle(.primary)
                         .frame(width: 22, alignment: .trailing)
 
-                    Text(trailLabel(for: edgeID, index: index))
+                    Text(trailLabel(for: section))
                         .font(.footnote)
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
 
                     Button {
-                        onRemove(index)
+                        onRemove(section.edgeID)
                     } label: {
                         Image(systemName: "minus.circle.fill")
                             .foregroundStyle(.red)
@@ -106,8 +128,17 @@ struct PlanningPanel: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
+                .background(
+                    (selectedSectionEdgeID == section.edgeID ? Color.blue.opacity(0.14) : Color.clear),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onSelectSection(section.edgeID)
+                }
+                .accessibilityAddTraits(selectedSectionEdgeID == section.edgeID ? [.isSelected] : [])
 
-                if index < plan.anchorEdgeIDs.count - 1 {
+                if index < plannedSections.count - 1 {
                     Divider()
                         .padding(.leading, 46)
                 }
@@ -145,15 +176,9 @@ struct PlanningPanel: View {
         .padding(.vertical, 10)
     }
 
-    private func trailLabel(for edgeID: String, index: Int) -> String {
-        guard plannedSections.indices.contains(index) else {
-            return "Section \(edgeID)"
-        }
-
-        let section = plannedSections[index]
-
+    private func trailLabel(for section: PlanningSection) -> String {
         guard let trail = trailsByID[section.trailID] else {
-            return "Section \(edgeID)"
+            return section.formattedDistanceLabel
         }
 
         let distanceLabel = section.formattedDistanceLabel

@@ -24,7 +24,12 @@ struct ContentView: View {
                         isInPlanningMode: viewModel.isInPlanningMode,
                         selectedTrailID: viewModel.selectedTrailID,
                         selectedTrailSegment: viewModel.selectedTrailSegment,
+                        selectedPlannedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                         fitRequestID: viewModel.fitRequestID,
+                        restoredMapRegion: viewModel.visibleMapRegion,
+                        mapRegionRestoreRequestID: viewModel.mapRegionRestoreRequestID,
+                        focusedPlannedSectionCoordinates: viewModel.focusedPlannedSectionCoordinates,
+                        plannedSectionFocusRequestID: viewModel.plannedSectionFocusRequestID,
                         currentLocation: viewModel.currentLocation,
                         locationFocusRequestID: viewModel.locationFocusRequestID,
                         isAutoFollowEnabled: !viewModel.isManualDestinationSelection,
@@ -34,8 +39,8 @@ struct ContentView: View {
                         onTrailTap: { selection in
                             viewModel.selectTrail(selection: selection)
                         },
-                        onRegionDidChange: { center in
-                            viewModel.updateVisibleRegionCenter(center)
+                        onRegionDidChange: { region in
+                            viewModel.updateVisibleRegion(region)
                         }
                     )
                     .frame(width: geometry.size.width, height: geometry.size.height)
@@ -70,6 +75,9 @@ struct ContentView: View {
                 if !AppConfig.isRunningTests {
                     viewModel.start()
                 }
+            }
+            .onOpenURL { url in
+                viewModel.handleIncomingURL(url)
             }
         }
     }
@@ -155,10 +163,13 @@ struct ContentView: View {
             PlanningPanel(
                 plan: viewModel.routePlan,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                hydrationNotice: viewModel.routeHydrationNotice,
+                selectedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                 onExitPlanning: { viewModel.exitPlanningMode() },
                 onReverse: { viewModel.reverseRoute() },
                 onClear: { viewModel.clearRoute() },
-                onRemove: { index in viewModel.removeRouteAnchor(at: index) }
+                onRemove: { edgeID in viewModel.removeRouteAnchor(edgeID: edgeID) },
+                onSelectSection: { edgeID in viewModel.selectPlannedSection(edgeID: edgeID) }
             )
             .transition(.move(edge: .bottom).combined(with: .opacity))
         } else if let trail = viewModel.selectedTrail {

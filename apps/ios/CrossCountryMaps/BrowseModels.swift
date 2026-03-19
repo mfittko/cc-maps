@@ -630,6 +630,49 @@ enum GeoMath {
         return sections
     }
 
+    static func hydrateRoutePlan(_ routePlan: CanonicalRoutePlan?, allTrails: [TrailFeature]) -> RoutePlanHydrationResult {
+        guard let routePlan else {
+            return RoutePlanHydrationResult(status: .empty, validAnchorEdgeIds: [], staleAnchorEdgeIds: [])
+        }
+
+        let edgesByID = planningGraph(in: allTrails).edgesByID
+        let candidateEdgeIDsByBaseID = Dictionary(grouping: edgesByID.keys, by: { canonicalEdgeComponents(for: $0).baseID })
+            .mapValues { edgeIDs in
+                edgeIDs.sorted { leftEdgeID, rightEdgeID in
+                    canonicalEdgeComponents(for: leftEdgeID).occurrence < canonicalEdgeComponents(for: rightEdgeID).occurrence
+                }
+            }
+        var validAnchorEdgeIDs: [String] = []
+        var staleAnchorEdgeIDs: [String] = []
+
+        for anchorEdgeID in routePlan.anchorEdgeIds {
+            if let resolvedEdgeID = resolveHydratedAnchorEdgeID(
+                anchorEdgeID,
+                edgesByID: edgesByID,
+                candidateEdgeIDsByBaseID: candidateEdgeIDsByBaseID
+            ) {
+                validAnchorEdgeIDs.append(resolvedEdgeID)
+            } else {
+                staleAnchorEdgeIDs.append(anchorEdgeID)
+            }
+        }
+
+        let status: RoutePlanHydrationStatus
+        if validAnchorEdgeIDs.isEmpty {
+            status = .empty
+        } else if staleAnchorEdgeIDs.isEmpty {
+            status = .ok
+        } else {
+            status = .partial
+        }
+
+        return RoutePlanHydrationResult(
+            status: status,
+            validAnchorEdgeIds: validAnchorEdgeIDs,
+            staleAnchorEdgeIds: staleAnchorEdgeIDs
+        )
+    }
+
     static func reorderedAnchorEdgeIDs(_ anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
         guard anchorEdgeIDs.count >= 2 else {
             return anchorEdgeIDs
@@ -974,7 +1017,7 @@ enum GeoMath {
         }
         cacheLock.unlock()
 
-        var occurrenceByBaseID: [String: Int] = [:]
+        var edgeCandidates: [PlanningEdgeCandidate] = []
         var nodeToEdgeIDs: [String: [String]] = [:]
         var edgesByID: [String: PlanningSection] = [:]
         var edgesByTrailID: [String: [PlanningSection]] = [:]
@@ -1001,29 +1044,63 @@ enum GeoMath {
                 }
 
                 let baseID = canonicalEdgeBaseID(start: start, end: end)
-                let occurrence = occurrenceByBaseID[baseID, default: 0] + 1
-                occurrenceByBaseID[baseID] = occurrence
-                let edgeID = canonicalEdgeID(baseID: baseID, occurrence: occurrence)
+                edgeCandidates.append(
+                    PlanningEdgeCandidate(
+                        trailID: trail.id,
+                        baseID: baseID,
+                        start: start,
+                        end: end,
+                        distanceKm: segment.distanceKm,
+                        coordinates: coordinates,
+                        midpoint: segment.midpoint,
+                        startDistanceKm: segment.startDistanceKm,
+                        endDistanceKm: segment.endDistanceKm
+                    )
+                )
+            }
+        }
+
+        let groupedCandidates = Dictionary(grouping: edgeCandidates, by: \.baseID)
+
+        for baseID in groupedCandidates.keys.sorted() {
+            let candidates = (groupedCandidates[baseID] ?? []).sorted(by: comparePlanningEdgeCandidates)
+
+            for (index, candidate) in candidates.enumerated() {
+                let edgeID = canonicalEdgeID(baseID: candidate.baseID, occurrence: index + 1)
 
                 let section = PlanningSection(
-                    trailID: trail.id,
+                    trailID: candidate.trailID,
                     edgeID: edgeID,
-                    start: start,
-                    end: end,
-                    distanceKm: segment.distanceKm,
-                    coordinates: coordinates,
-                    midpoint: segment.midpoint,
-                    startDistanceKm: segment.startDistanceKm,
-                    endDistanceKm: segment.endDistanceKm
+                    start: candidate.start,
+                    end: candidate.end,
+                    distanceKm: candidate.distanceKm,
+                    coordinates: candidate.coordinates,
+                    midpoint: candidate.midpoint,
+                    startDistanceKm: candidate.startDistanceKm,
+                    endDistanceKm: candidate.endDistanceKm
                 )
 
                 edgesByID[edgeID] = section
-                edgesByTrailID[trail.id, default: []].append(section)
+                edgesByTrailID[candidate.trailID, default: []].append(section)
 
-                let startNodeID = canonicalNodeID(for: start)
-                let endNodeID = canonicalNodeID(for: end)
+                let startNodeID = canonicalNodeID(for: candidate.start)
+                let endNodeID = canonicalNodeID(for: candidate.end)
                 nodeToEdgeIDs[startNodeID, default: []].append(edgeID)
                 nodeToEdgeIDs[endNodeID, default: []].append(edgeID)
+            }
+        }
+
+        for trailID in edgesByTrailID.keys {
+            edgesByTrailID[trailID]?.sort { left, right in
+                if abs(left.startDistanceKm - right.startDistanceKm) > 0.000001 {
+                    return left.startDistanceKm < right.startDistanceKm
+                }
+
+                if abs(left.endDistanceKm - right.endDistanceKm) > 0.000001 {
+                    return left.endDistanceKm < right.endDistanceKm
+                }
+
+                return left.edgeID < right.edgeID
             }
         }
 
@@ -1054,7 +1131,10 @@ enum GeoMath {
     private static func planningGraphSignature(for trails: [TrailFeature]) -> String {
         trails.map {
             let pointCount = $0.coordinateSets.reduce(0) { $0 + $1.count }
-            return "\($0.id):\($0.destinationId ?? ""):\(pointCount):\(Int($0.shapeLengthMeters ?? 0))"
+            let geometrySignature = $0.coordinateSets
+                .map(coordinateSignature(for:))
+                .joined(separator: "||")
+            return "\($0.id):\($0.destinationId ?? ""):\(pointCount):\(Int($0.shapeLengthMeters ?? 0)):\(geometrySignature)"
         }.joined(separator: "|")
     }
 
@@ -1133,6 +1213,68 @@ enum GeoMath {
 
     private static func canonicalEdgeID(baseID: String, occurrence: Int) -> String {
         occurrence > 1 ? "\(baseID):\(occurrence)" : baseID
+    }
+
+    private static func canonicalEdgeComponents(for edgeID: String) -> (baseID: String, occurrence: Int) {
+        guard let suffixSeparator = edgeID.lastIndex(of: ":") else {
+            return (edgeID, 1)
+        }
+
+        let suffixStart = edgeID.index(after: suffixSeparator)
+        let suffixValue = String(edgeID[suffixStart...])
+
+        guard let occurrence = Int(suffixValue) else {
+            return (edgeID, 1)
+        }
+
+        return (String(edgeID[..<suffixSeparator]), occurrence)
+    }
+
+    private static func resolveHydratedAnchorEdgeID(
+        _ anchorEdgeID: String,
+        edgesByID: [String: PlanningSection],
+        candidateEdgeIDsByBaseID: [String: [String]]
+    ) -> String? {
+        if edgesByID[anchorEdgeID] != nil {
+            return anchorEdgeID
+        }
+
+        let components = canonicalEdgeComponents(for: anchorEdgeID)
+        guard let candidates = candidateEdgeIDsByBaseID[components.baseID],
+              components.occurrence <= candidates.count else {
+            return nil
+        }
+
+        return candidates[components.occurrence - 1]
+    }
+
+    private static func comparePlanningEdgeCandidates(_ left: PlanningEdgeCandidate, _ right: PlanningEdgeCandidate) -> Bool {
+        if left.trailID != right.trailID {
+            return left.trailID < right.trailID
+        }
+
+        if abs(left.startDistanceKm - right.startDistanceKm) > 0.000001 {
+            return left.startDistanceKm < right.startDistanceKm
+        }
+
+        if abs(left.endDistanceKm - right.endDistanceKm) > 0.000001 {
+            return left.endDistanceKm < right.endDistanceKm
+        }
+
+        let leftSignature = coordinateSignature(for: left.coordinates)
+        let rightSignature = coordinateSignature(for: right.coordinates)
+
+        if leftSignature != rightSignature {
+            return leftSignature < rightSignature
+        }
+
+        return left.baseID < right.baseID
+    }
+
+    private static func coordinateSignature(for coordinates: [CLLocationCoordinate2D]) -> String {
+        coordinates
+            .map(canonicalNodeID(for:))
+            .joined(separator: "|")
     }
 
     private static func canonicalNodeID(for coordinate: CLLocationCoordinate2D) -> String {
@@ -1269,6 +1411,18 @@ struct PlanningEdgeDescriptor {
     let edgeID: String
     let start: CLLocationCoordinate2D
     let end: CLLocationCoordinate2D
+}
+
+private struct PlanningEdgeCandidate {
+    let trailID: String
+    let baseID: String
+    let start: CLLocationCoordinate2D
+    let end: CLLocationCoordinate2D
+    let distanceKm: Double
+    let coordinates: [CLLocationCoordinate2D]
+    let midpoint: CLLocationCoordinate2D?
+    let startDistanceKm: Double
+    let endDistanceKm: Double
 }
 
 struct PlanningSection: Equatable {
