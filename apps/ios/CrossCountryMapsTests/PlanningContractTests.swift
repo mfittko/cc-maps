@@ -424,6 +424,56 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertLessThan(gpx.range(of: secondSectionPoint)?.lowerBound.utf16Offset(in: gpx) ?? .max, gpx.range(of: firstSectionPoint)?.lowerBound.utf16Offset(in: gpx) ?? .max)
     }
 
+    func testGpxExportDefaultsNameToWebParityValue() {
+        let section = PlanningSection(
+            trailID: "101",
+            edgeID: Self.edgeA,
+            start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+            end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+            distanceKm: 0.6,
+            coordinates: [
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+            ],
+            midpoint: nil,
+            startDistanceKm: 0,
+            endDistanceKm: 0.6
+        )
+
+        let gpx = RouteExport.gpx(from: [section], routeName: nil)
+
+        XCTAssertTrue(gpx.contains("<name>CC Maps route</name>"))
+    }
+
+    func testGpxExportPreservesCoordinatePrecisionForParity() {
+        let section = PlanningSection(
+            trailID: "101",
+            edgeID: Self.edgeA,
+            start: CLLocationCoordinate2D(latitude: 59.1234567, longitude: 120.1234567),
+            end: CLLocationCoordinate2D(latitude: 59.7654321, longitude: 120.7654321),
+            distanceKm: 0.6,
+            coordinates: [
+                CLLocationCoordinate2D(latitude: 59.1234567, longitude: 120.1234567),
+                CLLocationCoordinate2D(latitude: 59.7654321, longitude: 120.7654321),
+            ],
+            midpoint: nil,
+            startDistanceKm: 0,
+            endDistanceKm: 0.6
+        )
+
+        let gpx = RouteExport.gpx(from: [section], routeName: "Precision")
+
+        XCTAssertTrue(gpx.contains("<trkpt lat=\"59.1234567\" lon=\"120.1234567\"></trkpt>"))
+        XCTAssertTrue(gpx.contains("<trkpt lat=\"59.7654321\" lon=\"120.7654321\"></trkpt>"))
+    }
+
+    func testGpxFileNameMatchesWebNormalizationParity() {
+        XCTAssertEqual(RouteExport.fileName(for: "Nordmarka Route 7"), "nordmarka-route-7.gpx")
+        XCTAssertEqual(RouteExport.fileName(for: "  "), "cc-maps-route.gpx")
+        XCTAssertEqual(RouteExport.fileName(for: "A&B"), "a-b.gpx")
+        XCTAssertEqual(RouteExport.fileName(for: "__Oslo---Loop__"), "oslo-loop.gpx")
+    }
+
     func testRouteSummaryReflectsDistanceSectionCountAndUnavailableElevation() {
         let summary = RouteSummary.from(sections: [
             PlanningSection(

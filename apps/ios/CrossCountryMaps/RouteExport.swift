@@ -4,22 +4,22 @@ import Foundation
 /// Generates GPX 1.1 XML from ordered planning sections.
 /// Mirrors the web-side `createGpxFromRouteFeatures` in lib/route-export.js.
 enum RouteExport {
+    private static let defaultRouteName = "CC Maps route"
+    private static let defaultFileName = "cc-maps-route.gpx"
+
     /// Returns a GPX 1.1 string for the given ordered sections, or an empty string when there are
     /// fewer than two coordinates across all sections.
     static func gpx(from sections: [PlanningSection], routeName: String? = nil) -> String {
-        let validSegments = sections.map(\.coordinates).filter { $0.count >= 2 }
+        let validSegments = sections
+            .map(\.coordinates)
+            .map(deduplicatedCoordinates)
+            .filter { $0.count >= 2 }
 
-        guard !validSegments.isEmpty, validSegments.contains(where: { $0.count >= 2 }) else {
+        guard !validSegments.isEmpty else {
             return ""
         }
 
-        let totalCoordinates = validSegments.reduce(0) { $0 + $1.count }
-        guard totalCoordinates >= 2 else {
-            return ""
-        }
-
-        let escapedName = (routeName ?? "").isEmpty ? "" : xmlEscape(routeName!)
-        let nameElement = escapedName.isEmpty ? "" : "\n    <name>\(escapedName)</name>"
+        let escapedName = xmlEscape(normalizedRouteName(routeName))
 
         let trackSegments = validSegments.map { coordinates -> String in
             let points = coordinates.map { coord in
@@ -31,7 +31,8 @@ enum RouteExport {
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <gpx version="1.1" creator="cc-maps" xmlns="http://www.topografix.com/GPX/1/1">
-          <trk>\(nameElement)
+          <trk>
+            <name>\(escapedName)</name>
         \(trackSegments)
           </trk>
         </gpx>
@@ -40,18 +41,19 @@ enum RouteExport {
 
     /// Returns a stable GPX file name from the route name, falling back to "cc-maps-route.gpx".
     static func fileName(for routeName: String?) -> String {
-        guard let routeName, !routeName.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return "cc-maps-route.gpx"
-        }
-
-        let normalized = routeName
+        let baseName = String(routeName ?? "cc-maps-route")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
-            .components(separatedBy: .init(charactersIn: " _/\\"))
-            .filter { !$0.isEmpty }
-            .joined(separator: "-")
-            .filter { $0.isLetter || $0.isNumber || $0 == "-" }
 
-        return normalized.isEmpty ? "cc-maps-route.gpx" : "\(normalized).gpx"
+        let normalized = baseName
+            .replacingOccurrences(
+                of: "[^a-z0-9]+",
+                with: "-",
+                options: .regularExpression
+            )
+            .replacingOccurrences(of: "^-+|-+$", with: "", options: .regularExpression)
+
+        return normalized.isEmpty ? defaultFileName : "\(normalized).gpx"
     }
 
     // MARK: - Private helpers
@@ -65,8 +67,28 @@ enum RouteExport {
             .replacingOccurrences(of: "'", with: "&apos;")
     }
 
+    private static func normalizedRouteName(_ routeName: String?) -> String {
+        guard let routeName, !routeName.isEmpty else {
+            return defaultRouteName
+        }
+
+        return routeName
+    }
+
     private static func formatCoordinate(_ value: Double) -> String {
-        String(format: "%.6g", value)
+        String(value)
+    }
+
+    private static func deduplicatedCoordinates(_ coordinates: [CLLocationCoordinate2D]) -> [CLLocationCoordinate2D] {
+        coordinates.reduce(into: []) { result, coordinate in
+            if let previous = result.last,
+               previous.latitude == coordinate.latitude,
+               previous.longitude == coordinate.longitude {
+                return
+            }
+
+            result.append(coordinate)
+        }
     }
 }
 
