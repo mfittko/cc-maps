@@ -1084,6 +1084,8 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        routeElevation = nil
+
         let anchorEdgeIDs = routePlan.anchorEdgeIDs
         let traversal = sections.map { section in
             lineStringGeometry(from: section.coordinates)

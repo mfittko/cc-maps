@@ -139,15 +139,11 @@ struct RouteExportFile: Equatable {
 }
 
 private func formatElevationLabel(ascentMeters: Double?, descentMeters: Double?) -> String? {
-    guard let ascent = ascentMeters else {
+    guard let ascent = ascentMeters, let descent = descentMeters else {
         return nil
     }
 
-    if let descent = descentMeters {
-        return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
-    }
-
-    return String(format: "↑ %.0f m", ascent)
+    return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
 }
 
 struct SectionElevationSummary: Equatable {
