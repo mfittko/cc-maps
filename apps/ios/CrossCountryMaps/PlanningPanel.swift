@@ -13,6 +13,14 @@ struct PlanningPanel: View {
     let onExitPlanning: () -> Void
     let onShareRoute: () -> Void
     let onExportGpx: () -> Void
+    let watchTransferAvailability: WatchRouteTransferAvailability
+    let watchTransferSendState: WatchRouteTransferSendState
+    let watchTransferStatusTitle: String
+    let watchTransferStatusMessage: String
+    let watchTransferShouldShowSendButton: Bool
+    let watchTransferButtonLabel: String
+    let canSendToWatch: Bool
+    let onSendToWatch: () -> Void
     let onReverse: () -> Void
     let onClear: () -> Void
     let onRemove: (String) -> Void
@@ -57,8 +65,15 @@ struct PlanningPanel: View {
 
             if plan.isEmpty {
                 emptyState
+                watchTransferCard
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
             } else {
                 routeSummaryView
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+
+                watchTransferCard
                     .padding(.horizontal, 16)
                     .padding(.bottom, 12)
 
@@ -121,7 +136,7 @@ struct PlanningPanel: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 14)
+        .padding(.bottom, 10)
     }
 
     private var anchorList: some View {
@@ -240,6 +255,7 @@ struct PlanningPanel: View {
                         isShareExpanded = false
                     }
                 }
+
             }
 
             Spacer(minLength: 0)
@@ -305,5 +321,63 @@ struct PlanningPanel: View {
         }
 
         return "\(trail.trailTypeLabel) · \(distanceLabel)"
+    }
+
+    private var watchTransferCard: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: watchTransferIconName)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(watchTransferTint)
+                .frame(width: 24, height: 24)
+                .background(watchTransferTint.opacity(0.14), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(watchTransferStatusTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(watchTransferStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            if watchTransferShouldShowSendButton {
+                Button(watchTransferButtonLabel, action: onSendToWatch)
+                    .font(.caption.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSendToWatch)
+            }
+        }
+        .padding(12)
+        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var watchTransferTint: Color {
+        switch watchTransferSendState {
+        case .success:
+            return .green
+        case .failure:
+            return .red
+        case .pending:
+            return .orange
+        case .idle:
+            return watchTransferAvailability == .ready ? .blue : .secondary
+        }
+    }
+
+    private var watchTransferIconName: String {
+        switch watchTransferSendState {
+        case .success:
+            return "checkmark.applewatch"
+        case .failure:
+            return "exclamationmark.applewatch"
+        case .pending:
+            return "applewatch.radiowaves.left.and.right"
+        case .idle:
+            return "applewatch"
+        }
     }
 }

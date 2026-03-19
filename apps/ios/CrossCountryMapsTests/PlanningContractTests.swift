@@ -1663,6 +1663,198 @@ final class PlanningContractTests: XCTestCase {
             RouteAwareTrailDetailContext.sectionElevationUnavailableNote
         )
     }
+
+    @MainActor
+    func testWatchTransferAvailabilityTracksPrerequisiteStates() async throws {
+        let watchTransferService = WatchRouteTransferServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(
+                destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+                trailsByDestination: [
+                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                ]
+            ),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            watchTransferService: watchTransferService
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+
+        XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableNoPairedWatch)
+
+        watchTransferService.pushSessionState(.init(isSupported: true, isPaired: true, isWatchAppInstalled: false, isSessionReady: false))
+        await waitUntil { viewModel.watchTransferAvailability == .unavailableWatchAppMissing }
+        XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableWatchAppMissing)
+
+        watchTransferService.pushSessionState(.init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: false))
+        await waitUntil { viewModel.watchTransferAvailability == .unavailableNoActiveRoute }
+        XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableNoActiveRoute)
+
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        XCTAssertEqual(viewModel.watchTransferAvailability, .temporarilyUnavailableSessionNotReady)
+
+        watchTransferService.pushSessionState(.init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true))
+        await waitUntil { viewModel.watchTransferAvailability == .ready }
+        XCTAssertEqual(viewModel.watchTransferAvailability, .ready)
+    }
+
+    @MainActor
+    func testWatchTransferEnvelopeMatchesSharedFixture() async throws {
+        let fixture: WatchTransferEnvelopeFixture = try FixtureLoader.decode("route-plan/transfer-derived-watch.v2.json")
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary plus preview sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let watchTransferService = WatchRouteTransferServiceSpy(
+            sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            watchTransferService: watchTransferService
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 2 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        viewModel.enterPlanningMode()
+        fixture.canonical.anchorEdgeIds.forEach { anchorEdgeID in
+            let trailID = apiClient.trailID(for: anchorEdgeID)
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: anchorEdgeID, segment: nil))
+        }
+
+        viewModel.sendRouteToWatch()
+
+        let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
+        XCTAssertEqual(queuedEnvelope.canonical, fixture.canonical)
+        XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
+        XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
+        XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry.coordinates)
+    }
+
+    @MainActor
+    func testWatchTransferSendTransitionsPendingThenSuccessAfterAcknowledgement() async throws {
+        let watchTransferService = WatchRouteTransferServiceSpy(
+            sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(
+                destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+                trailsByDestination: [
+                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                ]
+            ),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            watchTransferService: watchTransferService
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        viewModel.sendRouteToWatch()
+
+        guard case .pending(let transferID) = viewModel.watchTransferSendState else {
+            return XCTFail("Expected pending watch transfer state after queueing")
+        }
+
+        watchTransferService.sendAcknowledgement(
+            WatchRouteTransferAcknowledgement(transferID: transferID, result: .success)
+        )
+        await waitUntil {
+            if case .success(let acknowledgedTransferID) = viewModel.watchTransferSendState {
+                return acknowledgedTransferID == transferID
+            }
+
+            return false
+        }
+
+        guard case .success(let acknowledgedTransferID) = viewModel.watchTransferSendState else {
+            return XCTFail("Expected successful watch transfer acknowledgement")
+        }
+
+        XCTAssertEqual(acknowledgedTransferID, transferID)
+    }
+
+    @MainActor
+    func testWatchTransferIgnoresStaleAcknowledgementsAfterResend() async throws {
+        let watchTransferService = WatchRouteTransferServiceSpy(
+            sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(
+                destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+                trailsByDestination: [
+                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                ]
+            ),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            watchTransferService: watchTransferService
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+
+        viewModel.sendRouteToWatch()
+        guard case .pending(let firstTransferID) = viewModel.watchTransferSendState else {
+            return XCTFail("Expected first transfer to be pending")
+        }
+
+        watchTransferService.sendError = WatchRouteTransferSendError.serializationFailed
+        viewModel.sendRouteToWatch()
+        XCTAssertEqual(viewModel.watchTransferSendState, .failure("The route could not be prepared for watch transfer."))
+
+        watchTransferService.sendError = nil
+        viewModel.sendRouteToWatch()
+
+        guard case .pending(let secondTransferID) = viewModel.watchTransferSendState else {
+            return XCTFail("Expected second transfer to be pending")
+        }
+
+        XCTAssertNotEqual(firstTransferID, secondTransferID)
+
+        watchTransferService.sendAcknowledgement(
+            WatchRouteTransferAcknowledgement(transferID: firstTransferID, result: .success)
+        )
+        await waitUntil {
+            if case .pending(let pendingTransferID) = viewModel.watchTransferSendState {
+                return pendingTransferID == secondTransferID
+            }
+
+            return false
+        }
+        XCTAssertEqual(viewModel.watchTransferSendState, .pending(transferID: secondTransferID))
+    }
 }
 
 // MARK: - Fixture types
@@ -1697,6 +1889,12 @@ private struct LegacyMigrationFixture: Decodable {
 private struct NormalizationFixture: Decodable {
     let inputPayload: CanonicalRoutePlanFixture
     let expectedCanonical: CanonicalRoutePlanFixture
+}
+
+private struct WatchTransferEnvelopeFixture: Decodable {
+    let version: Int
+    let canonical: CanonicalRoutePlan
+    let derived: WatchRouteTransferDerivedPayload
 }
 
 // MARK: - Test helpers (mirror BrowseContractTests helpers)
@@ -1817,6 +2015,7 @@ private func waitUntil(
 private final class BrowseAPISpy: BrowseAPIClient {
     private let destinationsFixture: DestinationFeatureCollection
     private let trailFixtures: [String: TrailFeatureCollection]
+    private let trailIDsByEdgeID: [String: String]
     private(set) var requestedDestinationIDs: [String] = []
     var elevationResponse: ElevationApiResponse?
     var queuedElevationResponses: [ElevationApiResponse] = []
@@ -1827,6 +2026,13 @@ private final class BrowseAPISpy: BrowseAPIClient {
     init(destinationsResponse: [Destination], trailsByDestination: [String: [TrailFeature]]) {
         self.destinationsFixture = makeDestinationFeatureCollection(destinationsResponse)
         self.trailFixtures = trailsByDestination.mapValues(TrailFeatureCollection.init(features:))
+        trailIDsByEdgeID = trailsByDestination
+            .flatMap(\.value)
+            .reduce(into: [String: String]()) { result, trail in
+                if let edgeID = trail.planningAnchorEdgeIDs(allTrails: [trail]).first {
+                    result[edgeID] = trail.id
+                }
+            }
     }
 
     func fetchDestinations() async throws -> DestinationFeatureCollection {
@@ -1865,6 +2071,10 @@ private final class BrowseAPISpy: BrowseAPIClient {
         }
         return response
     }
+
+    func trailID(for edgeID: String) -> String {
+        trailIDsByEdgeID[edgeID] ?? ""
+    }
 }
 
 private final class LocationServiceSpy: BrowseLocationServing {
@@ -1872,6 +2082,47 @@ private final class LocationServiceSpy: BrowseLocationServing {
     var onAuthorizationUnavailable: (() -> Void)?
     func start() {}
     func requestCurrentLocation() {}
+}
+
+private final class WatchRouteTransferServiceSpy: WatchRouteTransferServing {
+    var onSessionStateChange: ((WatchRouteTransferSessionState) -> Void)?
+    var onAcknowledgement: ((WatchRouteTransferAcknowledgement) -> Void)?
+
+    private(set) var activationCallCount = 0
+    private(set) var lastQueuedTransferID: String?
+    private(set) var lastQueuedEnvelope: WatchRouteTransferEnvelope?
+    private var sessionState: WatchRouteTransferSessionState
+    var sendError: Error?
+
+    init(sessionState: WatchRouteTransferSessionState = .unsupported) {
+        self.sessionState = sessionState
+    }
+
+    func activate() {
+        activationCallCount += 1
+    }
+
+    func currentSessionState() -> WatchRouteTransferSessionState {
+        sessionState
+    }
+
+    func queueTransfer(id: String, envelope: WatchRouteTransferEnvelope) throws {
+        if let sendError {
+            throw sendError
+        }
+
+        lastQueuedTransferID = id
+        lastQueuedEnvelope = envelope
+    }
+
+    func pushSessionState(_ sessionState: WatchRouteTransferSessionState) {
+        self.sessionState = sessionState
+        onSessionStateChange?(sessionState)
+    }
+
+    func sendAcknowledgement(_ acknowledgement: WatchRouteTransferAcknowledgement) {
+        onAcknowledgement?(acknowledgement)
+    }
 }
 
 private func makeCleanUserDefaultsSuite(named suiteName: String) throws -> UserDefaults {
