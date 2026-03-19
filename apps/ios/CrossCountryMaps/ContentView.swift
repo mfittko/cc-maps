@@ -1,9 +1,11 @@
 import MapKit
 import SwiftUI
+import UIKit
 
 struct ContentView: View {
     @StateObject private var viewModel = BrowseViewModel()
     @State private var isDestinationPickerPresented = false
+    @State private var activeShareSheet: ShareSheetPayload?
 
     var body: some View {
         NavigationStack {
@@ -79,6 +81,9 @@ struct ContentView: View {
             .onOpenURL { url in
                 viewModel.handleIncomingURL(url)
             }
+            .sheet(item: $activeShareSheet) { payload in
+                ActivityView(items: payload.items, onComplete: payload.onComplete)
+            }
         }
     }
 
@@ -86,11 +91,7 @@ struct ContentView: View {
         Group {
             if viewModel.isManualDestinationSelection {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Spacer()
-
-                        autoFollowButton
-                    }
+                    topManualControlRow
 
                     Button {
                         isDestinationPickerPresented = true
@@ -150,7 +151,9 @@ struct ContentView: View {
                 HStack(spacing: 8) {
                     manualDestinationMenu
                     Spacer(minLength: 0)
-                    autoFollowButton
+                    if viewModel.canEnableAutoLocation {
+                        autoFollowButton
+                    }
                 }
                 .padding(.horizontal, 4)
             }
@@ -158,14 +161,30 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var topManualControlRow: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Spacer()
+
+            if viewModel.canEnableAutoLocation {
+                autoFollowButton
+            }
+        }
+        .frame(height: 40)
+    }
+
+    @ViewBuilder
     private var bottomOverlay: some View {
         if viewModel.isInPlanningMode {
             PlanningPanel(
                 plan: viewModel.routePlan,
+                routeSummary: viewModel.routeSummary,
+                routeUsesPreviewDestinations: viewModel.routeUsesPreviewDestinations,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
                 hydrationNotice: viewModel.routeHydrationNotice,
                 selectedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                 onExitPlanning: { viewModel.exitPlanningMode() },
+                onShareRoute: { presentRouteShareSheet() },
+                onExportGpx: { presentGpxExportSheet() },
                 onReverse: { viewModel.reverseRoute() },
                 onClear: { viewModel.clearRoute() },
                 onRemove: { edgeID in viewModel.removeRouteAnchor(edgeID: edgeID) },
@@ -176,7 +195,8 @@ struct ContentView: View {
             TrailDetailCard(
                 trail: trail,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
-                selectedSegment: viewModel.selectedTrailSegment
+                selectedSegment: viewModel.selectedTrailSegment,
+                routeContext: viewModel.selectedRouteDetailContext
             ) {
                 viewModel.selectTrail(id: nil)
             }
@@ -196,6 +216,11 @@ struct ContentView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 16)
+
+                if viewModel.routeShareArtifact != nil {
+                    shareRouteButton
+                }
+
                 planRouteButton
             }
             .padding(.horizontal, 14)
@@ -209,10 +234,9 @@ struct ContentView: View {
         Button {
             viewModel.enterPlanningMode()
         } label: {
-            Label("Plan", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
-                .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+            Image(systemName: "point.topleft.down.to.point.bottomright.curvepath")
+                .font(.body.weight(.semibold))
+                .frame(width: 36, height: 36)
                 .background(Color.blue.opacity(0.15), in: Capsule())
                 .foregroundStyle(.blue)
         }
@@ -220,19 +244,29 @@ struct ContentView: View {
         .accessibilityLabel("Enter route planning mode")
     }
 
+    private var shareRouteButton: some View {
+        Button {
+            presentRouteShareSheet()
+        } label: {
+            Image(systemName: "link")
+                .font(.body.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .background(Color.blue.opacity(0.15), in: Capsule())
+                .foregroundStyle(.blue)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Share route link")
+    }
+
     private var autoFollowButton: some View {
         Button {
             viewModel.enableAutoLocation()
         } label: {
-            Label(
-                viewModel.isManualDestinationSelection ? "Manual" : "Auto",
-                systemImage: viewModel.isManualDestinationSelection ? "hand.tap.fill" : "location.fill"
-            )
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(.thinMaterial, in: Capsule())
-            .foregroundStyle(viewModel.isManualDestinationSelection ? .orange : .blue)
+            Image(systemName: "location.fill")
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .background(.thinMaterial, in: Capsule())
+                .foregroundStyle(.blue)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Enable automatic location follow")
@@ -251,6 +285,28 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Choose destination manually")
+    }
+
+    private func presentRouteShareSheet() {
+        guard let shareArtifact = viewModel.routeShareArtifact else {
+            return
+        }
+
+        activeShareSheet = ShareSheetPayload(items: [shareArtifact.url])
+    }
+
+    private func presentGpxExportSheet() {
+        guard let exportFile = viewModel.makeRouteExportFile(),
+              let fileURL = try? exportFile.writeTemporaryFile() else {
+            return
+        }
+
+        activeShareSheet = ShareSheetPayload(
+            items: [fileURL],
+            onComplete: {
+                try? FileManager.default.removeItem(at: fileURL)
+            }
+        )
     }
 
 }
@@ -315,6 +371,7 @@ private struct TrailDetailCard: View {
     let trail: TrailFeature
     let allTrails: [TrailFeature]
     let selectedSegment: TrailSegment?
+    let routeContext: RouteAwareTrailDetailContext?
     let onClose: () -> Void
 
     private var trailSegments: [TrailSegment] {
@@ -390,6 +447,28 @@ private struct TrailDetailCard: View {
                 }
             }
 
+            if let routeContext {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("PLANNED ROUTE")
+                        .font(.caption.weight(.black))
+                        .tracking(1.4)
+                        .foregroundStyle(.secondary)
+
+                    HStack(spacing: 8) {
+                        detailChip(label: routeContext.formattedSectionLabel, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        detailChip(label: routeContext.formattedTotalDistanceLabel, systemImage: "map")
+                    }
+
+                    if let elevationLabel = routeContext.formattedElevationLabel {
+                        detailChip(label: elevationLabel, systemImage: "mountain.2")
+                    } else {
+                        Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             if let warningText = trail.warningText {
                 Label(warningText, systemImage: "exclamationmark.triangle.fill")
                     .font(.footnote.weight(.medium))
@@ -409,6 +488,33 @@ private struct TrailDetailCard: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(Color.white.opacity(0.82), in: Capsule())
+    }
+}
+
+private struct ShareSheetPayload: Identifiable {
+    let id = UUID()
+    let items: [Any]
+    let onComplete: (() -> Void)?
+
+    init(items: [Any], onComplete: (() -> Void)? = nil) {
+        self.items = items
+        self.onComplete = onComplete
+    }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    let onComplete: (() -> Void)?
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        controller.completionWithItemsHandler = { _, _, _, _ in
+            onComplete?()
+        }
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
     }
 }
 

@@ -77,7 +77,7 @@ struct TrailMapView: UIViewRepresentable {
             if context.coordinator.shouldSkipNextFitRequest {
                 context.coordinator.shouldSkipNextFitRequest = false
             } else {
-                context.coordinator.fitMapToPrimaryTrails(on: mapView)
+                context.coordinator.fitMapToVisibleContent(on: mapView)
             }
         }
 
@@ -216,7 +216,20 @@ struct TrailMapView: UIViewRepresentable {
             mapView.addAnnotations(directionAnnotations)
         }
 
-        func fitMapToPrimaryTrails(on mapView: MKMapView) {
+        func fitMapToVisibleContent(on mapView: MKMapView) {
+            let trails = parent.primaryTrails + parent.previewTrails
+            let plannedSections = plannedSections(for: trails)
+            let edgePadding = fitEdgePadding
+
+            if let routeMapRect = mapRect(for: plannedSections.flatMap(\.coordinates)), !routeMapRect.isNull {
+                mapView.setVisibleMapRect(
+                    routeMapRect,
+                    edgePadding: edgePadding,
+                    animated: true
+                )
+                return
+            }
+
             guard let mapRect = GeoMath.mapRect(for: parent.primaryTrails), !mapRect.isNull else {
                 mapView.setRegion(
                     MKCoordinateRegion(
@@ -230,9 +243,15 @@ struct TrailMapView: UIViewRepresentable {
 
             mapView.setVisibleMapRect(
                 mapRect,
-                edgePadding: UIEdgeInsets(top: 180, left: 24, bottom: 150, right: 24),
+                edgePadding: edgePadding,
                 animated: true
             )
+        }
+
+        private var fitEdgePadding: UIEdgeInsets {
+            parent.isInPlanningMode
+                ? UIEdgeInsets(top: 180, left: 24, bottom: 320, right: 24)
+                : UIEdgeInsets(top: 180, left: 24, bottom: 150, right: 24)
         }
 
         func focusMap(on mapView: MKMapView, coordinates: [CLLocationCoordinate2D]) {

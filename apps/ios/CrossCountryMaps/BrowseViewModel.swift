@@ -105,10 +105,36 @@ struct PersistedMapRegion: Codable, Equatable {
 struct BrowseSettings: Codable, Equatable {
     let destinationID: String
     let mapRegion: PersistedMapRegion?
+    let isPlanningModeActive: Bool
 
     enum CodingKeys: String, CodingKey {
         case destinationID = "destination"
         case mapRegion
+        case isPlanningModeActive = "planningModeActive"
+    }
+
+    init(
+        destinationID: String,
+        mapRegion: PersistedMapRegion?,
+        isPlanningModeActive: Bool = false
+    ) {
+        self.destinationID = destinationID
+        self.mapRegion = mapRegion
+        self.isPlanningModeActive = isPlanningModeActive
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        destinationID = try container.decode(String.self, forKey: .destinationID)
+        mapRegion = try container.decodeIfPresent(PersistedMapRegion.self, forKey: .mapRegion)
+        isPlanningModeActive = try container.decodeIfPresent(Bool.self, forKey: .isPlanningModeActive) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(destinationID, forKey: .destinationID)
+        try container.encodeIfPresent(mapRegion, forKey: .mapRegion)
+        try container.encode(isPlanningModeActive, forKey: .isPlanningModeActive)
     }
 }
 
@@ -226,6 +252,7 @@ final class BrowseViewModel: ObservableObject {
     private var pendingIncomingRoutePlan: CanonicalRoutePlan?
     private var pendingRestoreContext: PendingRouteRestoreContext?
     private var pendingStoredDestinationID = ""
+    private var pendingStoredPlanningModeActive = false
     private var pendingMapRegionPreservationDestinationID: String?
     private var isIgnoringMapRegionUpdatesDuringStartupRestore = false
 
@@ -259,9 +286,91 @@ final class BrowseViewModel: ObservableObject {
         destinations.first { $0.id == selectedDestinationID }
     }
 
+    var canEnableAutoLocation: Bool {
+        autoEligibleDestination != nil
+    }
+
     var selectedTrail: TrailFeature? {
         let displayedTrails = primaryTrails + previewTrails
         return displayedTrails.first { $0.id == selectedTrailID }
+    }
+
+    var allTrails: [TrailFeature] {
+        primaryTrails + previewTrails
+    }
+
+    var plannedSections: [PlanningSection] {
+        GeoMath.planningSections(for: routePlan.anchorEdgeIDs, allTrails: allTrails)
+    }
+
+    var routeSummary: RouteSummary {
+        RouteSummary.from(sections: plannedSections)
+    }
+
+    var routeUsesPreviewDestinations: Bool {
+        activeRouteDestinationIDs.count > 1
+    }
+
+    var canonicalRoutePlan: CanonicalRoutePlan? {
+        guard !selectedDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
+            return nil
+        }
+
+        return CanonicalRoutePlan(
+            destinationId: selectedDestinationID,
+            anchorEdgeIds: routePlan.anchorEdgeIDs,
+            destinationIds: activeRouteDestinationIDs
+        )
+    }
+
+    var routeShareArtifact: RouteShareArtifact? {
+        guard let canonicalRoutePlan,
+              let destinationName = selectedDestination?.name else {
+            return nil
+        }
+
+        return RouteShareArtifact(routePlan: canonicalRoutePlan, destinationName: destinationName)
+    }
+
+    var selectedRouteDetailContext: RouteAwareTrailDetailContext? {
+        guard !isInPlanningMode,
+              !routePlan.anchorEdgeIDs.isEmpty,
+              let selectedTrailID,
+              let matchingIndex = matchingPlannedSectionIndex(
+                forSelectedTrailID: selectedTrailID,
+                selectedSegment: selectedTrailSegment
+              ) else {
+            return nil
+        }
+
+        let summary = routeSummary
+        let selectedSection = plannedSections[matchingIndex]
+
+        return RouteAwareTrailDetailContext(
+            selectedSectionNumber: matchingIndex + 1,
+            totalSections: summary.sectionCount,
+            totalDistanceKm: summary.totalDistanceKm,
+            totalElevationMeters: summary.totalElevationMeters
+        )
+    }
+
+    func makeRouteExportFile() -> RouteExportFile? {
+        guard !plannedSections.isEmpty,
+              let destinationName = selectedDestination?.name else {
+            return nil
+        }
+
+        let routeName = "\(destinationName) route"
+        let gpxContent = RouteExport.gpx(from: plannedSections, routeName: routeName)
+
+        guard !gpxContent.isEmpty else {
+            return nil
+        }
+
+        return RouteExportFile(
+            fileName: RouteExport.fileName(for: routeName),
+            content: gpxContent
+        )
     }
 
     var statusSummary: String {
@@ -286,6 +395,7 @@ final class BrowseViewModel: ObservableObject {
         visibleMapRegion = storedBrowseSettings?.mapRegion
         visibleRegionCenter = storedBrowseSettings?.mapRegion?.center ?? AppConfig.defaultCenter
         pendingStoredDestinationID = storedBrowseSettings?.destinationID ?? ""
+        pendingStoredPlanningModeActive = storedBrowseSettings?.isPlanningModeActive ?? false
         isManualDestinationSelection = !pendingStoredDestinationID.isEmpty
         isIgnoringMapRegionUpdatesDuringStartupRestore = visibleMapRegion != nil && !pendingStoredDestinationID.isEmpty
         pendingMapRegionPreservationDestinationID = visibleMapRegion == nil || pendingStoredDestinationID.isEmpty
@@ -391,11 +501,23 @@ final class BrowseViewModel: ObservableObject {
         selectedTrailSegment = nil
         clearSelectedPlannedSection()
         isInPlanningMode = true
+
+        if !routePlan.isEmpty {
+            fitRequestID += 1
+        }
+
+        persistBrowseSettings()
     }
 
     func exitPlanningMode() {
         clearSelectedPlannedSection()
         isInPlanningMode = false
+
+        if !routePlan.isEmpty {
+            fitRequestID += 1
+        }
+
+        persistBrowseSettings()
     }
 
     func selectPlannedSection(edgeID: String) {
@@ -469,6 +591,10 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func enableAutoLocation() {
+        guard autoEligibleDestination != nil else {
+            return
+        }
+
         isManualDestinationSelection = false
         locationFocusRequestID += 1
         locationService.requestCurrentLocation()
@@ -552,7 +678,7 @@ final class BrowseViewModel: ObservableObject {
                 if pendingMapRegionPreservationDestinationID == destinationID {
                     isIgnoringMapRegionUpdatesDuringStartupRestore = false
                     pendingMapRegionPreservationDestinationID = nil
-                } else {
+                } else if pendingRestoreContext == nil {
                     fitRequestID += 1
                 }
 
@@ -629,7 +755,10 @@ final class BrowseViewModel: ObservableObject {
             // Nearby trail matching is an optimization. Fallback still preserves destination-first behavior.
         }
 
-        guard let fallbackDestination = GeoMath.closestDestination(destinations: destinations, reference: coordinate) else {
+        guard let fallbackDestination = autoEligibleDestination(for: coordinate) else {
+            if selectedDestinationID.isEmpty {
+                applyFallbackSelectionIfNeeded()
+            }
             return
         }
 
@@ -733,7 +862,7 @@ final class BrowseViewModel: ObservableObject {
             return PendingRouteRestoreContext(
                 routePlan: storedRoutePlan,
                 source: .storage,
-                shouldEnterPlanningMode: !storedRoutePlan.anchorEdgeIds.isEmpty
+                shouldEnterPlanningMode: pendingStoredPlanningModeActive && !storedRoutePlan.anchorEdgeIds.isEmpty
             )
         }
 
@@ -779,6 +908,7 @@ final class BrowseViewModel: ObservableObject {
 
         let allTrails = primaryTrails + previewTrails
         let hydrationResult = GeoMath.hydrateRoutePlan(pendingRestoreContext.routePlan, allTrails: allTrails)
+        let restoreSource = pendingRestoreContext.source
 
         switch hydrationResult.status {
         case .ok:
@@ -794,7 +924,12 @@ final class BrowseViewModel: ObservableObject {
         if hydrationResult.validAnchorEdgeIds.isEmpty {
             routePlan.clear()
             activeRouteDestinationIDs = []
-            routePlanStore.clearRoutePlan(for: pendingRestoreContext.routePlan.destinationId)
+
+            if restoreSource == .storage {
+                routePlanStore.clearRoutePlan(for: pendingRestoreContext.routePlan.destinationId)
+            }
+
+            fitRequestID += 1
         } else {
             let reorderedAnchorEdgeIDs = GeoMath.reorderedAnchorEdgeIDs(
                 hydrationResult.validAnchorEdgeIds,
@@ -803,13 +938,16 @@ final class BrowseViewModel: ObservableObject {
             routePlan.replaceAnchorEdges(with: reorderedAnchorEdgeIDs)
             activeRouteDestinationIDs = routeDestinationIDs(for: reorderedAnchorEdgeIDs, allTrails: allTrails)
             persistCurrentRoutePlan()
+            fitRequestID += 1
         }
 
         if pendingRestoreContext.shouldEnterPlanningMode {
             isInPlanningMode = true
         }
 
-        if pendingRestoreContext.source == .url {
+        persistBrowseSettings()
+
+        if restoreSource == .url {
             pendingIncomingRoutePlan = nil
         }
 
@@ -871,13 +1009,55 @@ final class BrowseViewModel: ObservableObject {
 
     private func persistBrowseSettings() {
         browseSettingsStore.writeBrowseSettings(
-            BrowseSettings(destinationID: selectedDestinationID, mapRegion: visibleMapRegion)
+            BrowseSettings(
+                destinationID: selectedDestinationID,
+                mapRegion: visibleMapRegion,
+                isPlanningModeActive: isInPlanningMode
+            )
         )
+    }
+
+    private func matchingPlannedSectionIndex(
+        forSelectedTrailID selectedTrailID: String,
+        selectedSegment: TrailSegment?
+    ) -> Int? {
+        let candidateIndices = plannedSections.indices.filter { plannedSections[$0].trailID == selectedTrailID }
+
+        guard !candidateIndices.isEmpty else {
+            return nil
+        }
+
+        guard let selectedSegment else {
+            return candidateIndices.count == 1 ? candidateIndices[0] : nil
+        }
+
+        return candidateIndices.first { index in
+            let section = plannedSections[index]
+            return abs(section.startDistanceKm - selectedSegment.startDistanceKm) < 0.0001 &&
+                abs(section.endDistanceKm - selectedSegment.endDistanceKm) < 0.0001
+        }
     }
 
     private func clearSelectedPlannedSection() {
         selectedPlannedSectionEdgeID = nil
         focusedPlannedSectionCoordinates = []
+    }
+
+    private var autoEligibleDestination: Destination? {
+        guard let currentLocation else {
+            return nil
+        }
+
+        return autoEligibleDestination(for: currentLocation)
+    }
+
+    private func autoEligibleDestination(for coordinate: CLLocationCoordinate2D) -> Destination? {
+        guard let destination = GeoMath.closestDestination(destinations: destinations, reference: coordinate) else {
+            return nil
+        }
+
+        let distanceKm = GeoMath.distanceKilometers(from: coordinate, to: destination.coordinate)
+        return distanceKm <= AppConfig.autoLocationDestinationRadiusKm ? destination : nil
     }
 }
 
