@@ -40,7 +40,7 @@ This document turns the iOS specification into an execution-oriented phase plan 
 2. Phase 1 should start early rather than being deferred until the MVP is feature-complete, because Apple target setup, simulator behavior, MapKit constraints, and WatchConnectivity lifecycle issues need early validation.
 3. Phase 2 should begin as soon as Phase 0 establishes the route-contract work area.
 4. Phase 3 delivers the first native product value by cloning the core destination-first browse and inspect flow.
-5. Phase 4 is the parity gate for route planning and sharing and should be treated as a prerequisite for serious watch work.
+5. Phase 4 is the parity gate for route planning and sharing and should be treated as a prerequisite for serious watch work. Phase 4 elevation summary depends on the shared `POST /api/elevation` endpoint (see `docs/iOS/plan/phase-4.md` section 13); that server-side endpoint is now implemented and tested.
 6. Any future Apple work that expands segment-distance labels from selected-trail inspection to broader on-screen route-network labeling should be treated as planning-mode follow-up inside Phase 4 scope, not as browse-mode drift.
 7. Phase 5 should focus on reliable delivery of planned routes from phone to watch rather than live-only messaging tricks.
 8. Phase 6 should keep the watch deliberately small and legible, then close the loop with release validation and documentation alignment.

@@ -12,7 +12,6 @@ import {
   findClosestDestinationByTrailProximity,
   findClosestDestination,
   formatDistance,
-  getElevationChangeMetrics,
   getClickedTrailSection,
   getAllTrailSegmentLabelsGeoJson,
   getCrossingMetrics,
@@ -20,7 +19,6 @@ import {
   getDestinationsWithinRadius,
   getDistanceInKilometers,
   getRouteProgressMetrics,
-  getSampledCoordinatesAlongFeature,
   getSuggestedDestinationGeoJson,
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
@@ -97,9 +95,6 @@ const CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM = 0.05;
 const CURRENT_LOCATION_RECHECK_DISTANCE_KM = 0.02;
 const ROUTE_DIRECTION_CHANGE_THRESHOLD_KM = CURRENT_LOCATION_RECHECK_DISTANCE_KM;
 const GEOLOCATE_MAX_ZOOM = 13.5;
-const TERRAIN_SAMPLE_SPACING_METERS = 25;
-const ELEVATION_RETRY_DELAY_MS = 180;
-const MAX_ELEVATION_RETRIES = 6;
 // NEXT_PUBLIC_* values are compiled into the client bundle, so choosing the
 // real or mock Mapbox implementation at module load is intentional.
 const isMapboxMockEnabled = process.env.NEXT_PUBLIC_ENABLE_MAPBOX_MOCK === '1';
@@ -232,59 +227,6 @@ function getPreviewDestinationIds(destinationIds, selectedDestinationId) {
   return [...new Set(destinationIds)].filter(
     (destinationId) => destinationId && destinationId !== selectedDestinationId
   );
-}
-
-function sampleTerrainElevations(map, sampledCoordinates) {
-  return sampledCoordinates.map((coordinates) =>
-    map.queryTerrainElevation(coordinates, { exaggerated: false })
-  );
-}
-
-function scheduleElevationRead({
-  map,
-  sampledCoordinates,
-  getResult,
-  onSuccess,
-  onFailure,
-  shouldRetry,
-  maxRetries = MAX_ELEVATION_RETRIES,
-  retryDelayMs = ELEVATION_RETRY_DELAY_MS,
-}) {
-  let isCancelled = false;
-  let retryTimeoutId = null;
-  let attempts = 0;
-
-  const run = () => {
-    if (isCancelled) {
-      return;
-    }
-
-    try {
-      const elevations = sampleTerrainElevations(map, sampledCoordinates);
-      const result = getResult(elevations);
-
-      if (result || !shouldRetry(elevations) || attempts >= maxRetries) {
-        onSuccess(result);
-        return;
-      }
-    } catch (error) {
-      onFailure(error);
-      return;
-    }
-
-    attempts += 1;
-    retryTimeoutId = window.setTimeout(run, retryDelayMs);
-  };
-
-  run();
-
-  return () => {
-    isCancelled = true;
-
-    if (retryTimeoutId !== null) {
-      window.clearTimeout(retryTimeoutId);
-    }
-  };
 }
 
 function setLayerPaintIfPresent(map, layerId, property, value) {
@@ -2142,123 +2084,57 @@ export default function Home() {
   }, [mapReady, routeGraph, routePlan, selectedDestination, selectedDestinationId]);
 
   useEffect(() => {
-    const map = mapRef.current;
     const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
     const routeFeatures = routePlanGeoJson.traversal.features;
     const routeAnchorFeatures = routeFeatures.filter(
       (feature) => feature.properties?.role === 'traversal-anchor'
     );
 
-    if (!mapReady || !map || !routeFeatures.length) {
-      setRouteElevationMetrics(null);
-      setRouteAnchorElevationMetrics([]);
-      return undefined;
-    }
-
-    if (typeof map.queryTerrainElevation !== 'function') {
-      setRouteElevationMetrics(null);
-      setRouteAnchorElevationMetrics([]);
-      return undefined;
-    }
-
-    const sampledCoordinates = routeFeatures.flatMap((feature) =>
-      getSampledCoordinatesAlongFeature(feature, TERRAIN_SAMPLE_SPACING_METERS)
-    );
-
-    if (sampledCoordinates.length < 2) {
+    if (!routeFeatures.length || !selectedDestinationId) {
       setRouteElevationMetrics(null);
       setRouteAnchorElevationMetrics([]);
       return undefined;
     }
 
     let isCancelled = false;
-    let shouldRestoreTerrain = false;
-    let cleanupElevationRead = null;
 
-    const readElevationMetrics = () => {
-      if (isCancelled) {
-        return;
-      }
+    fetch('/api/elevation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destinationId: selectedDestinationId,
+        routeTraversal: routeFeatures.map((feature) => feature.geometry),
+        routeSections: routeAnchorFeatures.map((feature) => ({
+          sectionKey: String(feature.properties?.index ?? 0),
+          geometry: feature.geometry,
+        })),
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (isCancelled) {
+          return;
+        }
 
-      cleanupElevationRead = scheduleElevationRead({
-        map,
-        sampledCoordinates,
-        getResult: (elevations) => {
-          const totalMetrics = getElevationChangeMetrics(elevations);
-
-          if (!totalMetrics) {
-            return null;
-          }
-
-          const nextRouteAnchorElevationMetrics = routeAnchorFeatures.map((feature) => {
-            const anchorCoordinates = getSampledCoordinatesAlongFeature(
-              feature,
-              TERRAIN_SAMPLE_SPACING_METERS
-            );
-
-            if (anchorCoordinates.length < 2) {
-              return null;
-            }
-
-            return getElevationChangeMetrics(sampleTerrainElevations(map, anchorCoordinates));
-          });
-
-          return {
-            totalMetrics,
-            nextRouteAnchorElevationMetrics,
-          };
-        },
-        shouldRetry: (elevations) => elevations.filter(Number.isFinite).length < 2,
-        onSuccess: (result) => {
-          if (!isCancelled) {
-            setRouteElevationMetrics(result?.totalMetrics || null);
-            setRouteAnchorElevationMetrics(result?.nextRouteAnchorElevationMetrics || []);
-          }
-
-          if (shouldRestoreTerrain) {
-            map.setTerrain(null);
-            shouldRestoreTerrain = false;
-          }
-        },
-        onFailure: (error) => {
-          if (!isCancelled) {
-            console.warn('Skipped route ascent/descent calculation', error);
-            setRouteElevationMetrics(null);
-            setRouteAnchorElevationMetrics([]);
-          }
-
-          if (shouldRestoreTerrain) {
-            map.setTerrain(null);
-            shouldRestoreTerrain = false;
-          }
-        },
+        setRouteElevationMetrics(data.route?.status === 'ok' ? data.route.metrics : null);
+        setRouteAnchorElevationMetrics(
+          (data.sections || []).map((section) =>
+            section.status === 'ok' ? section.metrics : null
+          )
+        );
+      })
+      .catch((error) => {
+        if (!isCancelled) {
+          console.warn('Skipped route ascent/descent calculation', error);
+          setRouteElevationMetrics(null);
+          setRouteAnchorElevationMetrics([]);
+        }
       });
-    };
-
-    if (map.getTerrain()) {
-      readElevationMetrics();
-    } else {
-      shouldRestoreTerrain = true;
-      map.once('idle', readElevationMetrics);
-      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1 });
-    }
 
     return () => {
       isCancelled = true;
-
-      if (cleanupElevationRead) {
-        cleanupElevationRead();
-        cleanupElevationRead = null;
-      }
-
-      if (shouldRestoreTerrain) {
-        map.setTerrain(null);
-        shouldRestoreTerrain = false;
-      }
-
-      map.off('idle', readElevationMetrics);
     };
-  }, [mapReady, routeGraph, routePlan]);
+  }, [routeGraph, routePlan, selectedDestinationId]);
 
   useEffect(() => {
     if (!selectedDestinationId || !destinations.length || !selectedDestination) {
@@ -2331,79 +2207,44 @@ export default function Home() {
   }, [availableTrailsGeoJson, selectedTrailFeature, selectedTrailClickCoordinates, destinations]);
 
   useEffect(() => {
-    const map = mapRef.current;
     const selectedFeature =
       selectedRouteTraversalFeature || selectedTrailSectionFeature || selectedTrailFeature;
 
-    if (!mapReady || !map || !selectedFeature) {
-      setSelectedTrailElevationMetrics(null);
-      return undefined;
-    }
-
-    if (typeof map.queryTerrainElevation !== 'function') {
-      setSelectedTrailElevationMetrics(null);
-      return undefined;
-    }
-
-    const sampledCoordinates = getSampledCoordinatesAlongFeature(
-      selectedFeature,
-      TERRAIN_SAMPLE_SPACING_METERS
-    );
-
-    if (sampledCoordinates.length < 2) {
+    if (!selectedFeature || !selectedDestinationId) {
       setSelectedTrailElevationMetrics(null);
       return undefined;
     }
 
     let isCancelled = false;
-    let shouldRestoreTerrain = false;
 
-    const readElevationMetrics = () => {
-      if (isCancelled) {
-        return;
-      }
-
-      try {
-        const elevations = sampledCoordinates.map((coordinates) =>
-          map.queryTerrainElevation(coordinates, { exaggerated: false })
-        );
-
+    fetch('/api/elevation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destinationId: selectedDestinationId,
+        routeTraversal: [selectedFeature.geometry],
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
         if (!isCancelled) {
-          setSelectedTrailElevationMetrics(getElevationChangeMetrics(elevations));
+          setSelectedTrailElevationMetrics(
+            data.route?.status === 'ok' ? data.route.metrics : null
+          );
         }
-      } catch (error) {
+      })
+      .catch((error) => {
         if (!isCancelled) {
           console.warn('Skipped trail ascent/descent calculation', error);
           setSelectedTrailElevationMetrics(null);
         }
-      } finally {
-        if (shouldRestoreTerrain) {
-          map.setTerrain(null);
-          shouldRestoreTerrain = false;
-        }
-      }
-    };
-
-    if (map.getTerrain()) {
-      readElevationMetrics();
-    } else {
-      shouldRestoreTerrain = true;
-      map.once('idle', readElevationMetrics);
-      map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1 });
-    }
+      });
 
     return () => {
       isCancelled = true;
-
-      if (shouldRestoreTerrain) {
-        map.setTerrain(null);
-        shouldRestoreTerrain = false;
-      }
-
-      map.off('idle', readElevationMetrics);
     };
   }, [
-    mapReady,
+    selectedDestinationId,
     selectedRouteTraversalFeature,
     selectedTrailClickCoordinates,
     selectedTrailFeature,
