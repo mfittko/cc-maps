@@ -51,7 +51,7 @@ function isValidLineGeometry(geometry) {
     geometry.type === 'LineString' ? [geometry.coordinates] : geometry.coordinates;
 
   for (const line of lines) {
-    if (!Array.isArray(line)) {
+    if (!Array.isArray(line) || line.length < 2) {
       return false;
     }
 

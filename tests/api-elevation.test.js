@@ -211,6 +211,38 @@ describe('/api/elevation', () => {
       expect(res.body.error).toMatch(/invalid or unsupported geometry/i);
     });
 
+    it('rejects routeTraversal with an empty LineString', async () => {
+      const res = createRes();
+      await handler(
+        createReq({
+          body: {
+            destinationId: '42',
+            routeTraversal: [{ type: 'LineString', coordinates: [] }],
+          },
+        }),
+        res
+      );
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toMatch(/invalid or unsupported geometry/i);
+    });
+
+    it('rejects routeTraversal with a single-point LineString', async () => {
+      const res = createRes();
+      await handler(
+        createReq({
+          body: {
+            destinationId: '42',
+            routeTraversal: [{ type: 'LineString', coordinates: [[10.0, 60.0]] }],
+          },
+        }),
+        res
+      );
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toMatch(/invalid or unsupported geometry/i);
+    });
+
     it('rejects routeSections that is not an array', async () => {
       const res = createRes();
       await handler(
@@ -305,6 +337,22 @@ describe('/api/elevation', () => {
                 coordinates: ['not-an-array'],
               },
             ],
+          },
+        }),
+        res
+      );
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body.error).toMatch(/invalid or unsupported geometry/i);
+    });
+
+    it('rejects MultiLineString with an empty inner line', async () => {
+      const res = createRes();
+      await handler(
+        createReq({
+          body: {
+            destinationId: '42',
+            routeTraversal: [{ type: 'MultiLineString', coordinates: [[[10.0, 60.0], [10.01, 60.01]], []] }],
           },
         }),
         res
@@ -414,7 +462,9 @@ describe('/api/elevation', () => {
     });
 
     it('returns partial status when some sections lack usable elevation', async () => {
-      sampleCoordinatesFromGeometry.mockImplementation((geometry) => geometry.coordinates.slice());
+      sampleCoordinatesFromGeometry.mockImplementation(
+        (geometry) => geometry.sampledCoordinates ?? geometry.coordinates.slice()
+      );
       sampleElevationsAlongCoordinates.mockResolvedValue([100, 120, 110, 115]);
 
       const res = createRes();
@@ -432,7 +482,11 @@ describe('/api/elevation', () => {
               },
               {
                 sectionKey: 'short-section',
-                geometry: { type: 'LineString', coordinates: [[10.04, 60.0]] },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [[10.04, 60.0], [10.05, 60.01]],
+                  sampledCoordinates: [[10.04, 60.0]],
+                },
               },
             ],
           },
@@ -451,7 +505,9 @@ describe('/api/elevation', () => {
     });
 
     it('returns partial status when all sections have unavailable elevation', async () => {
-      sampleCoordinatesFromGeometry.mockImplementation((geometry) => geometry.coordinates.slice());
+      sampleCoordinatesFromGeometry.mockImplementation(
+        (geometry) => geometry.sampledCoordinates ?? geometry.coordinates.slice()
+      );
       sampleElevationsAlongCoordinates.mockResolvedValue([100, 120]);
 
       const res = createRes();
@@ -465,7 +521,11 @@ describe('/api/elevation', () => {
             routeSections: [
               {
                 sectionKey: 'short-only',
-                geometry: { type: 'LineString', coordinates: [[10.02, 60.0]] },
+                geometry: {
+                  type: 'LineString',
+                  coordinates: [[10.02, 60.0], [10.03, 60.01]],
+                  sampledCoordinates: [[10.02, 60.0]],
+                },
               },
             ],
           },
