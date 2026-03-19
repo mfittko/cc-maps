@@ -594,7 +594,7 @@ final class BrowseViewModel: ObservableObject {
                     return WatchRouteTransferSectionSummary(
                         anchorEdgeId: section.edgeID,
                         destinationId: destinationID,
-                        distanceKm: section.distanceKm,
+                        distanceKm: roundedWatchTransferDistance(section.distanceKm),
                         label: "Section \(index + 1)"
                     )
                 }
@@ -1313,6 +1313,11 @@ final class BrowseViewModel: ObservableObject {
     private func resetWatchTransferLifecycle() {
         activeWatchTransferID = nil
         watchTransferSendState = .idle
+    }
+
+    private func roundedWatchTransferDistance(_ value: Double) -> Double {
+        let factor = 100.0
+        return (value * factor).rounded() / factor
     }
 
     private func mergedWatchTransferCoordinates(sections: [PlanningSection]) -> [CLLocationCoordinate2D] {

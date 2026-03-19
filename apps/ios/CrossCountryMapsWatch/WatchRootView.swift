@@ -11,7 +11,7 @@ struct WatchRootView: View {
         VStack(spacing: 10) {
             Image(systemName: routeStore.isRouteAvailable ? "checkmark.applewatch" : "applewatch.radiowaves.left.and.right")
                 .font(.system(size: 28))
-                .foregroundStyle(routeStore.isRouteAvailable ? .green : .tint)
+                .foregroundStyle(routeStore.isRouteAvailable ? Color.green : Color.accentColor)
 
             Text("Cross-Country maps")
                 .font(.headline)
@@ -81,13 +81,14 @@ private struct WatchStoredRouteRecord: Codable, Equatable {
 }
 
 private struct WatchTransferEnvelope: Codable, Equatable {
+    static let currentVersion = 2
+
     let version: Int
     let canonical: WatchCanonicalRoutePlan
     let derived: WatchTransferDerivedPayload?
 
     var isValid: Bool {
-        guard version == 2,
-              canonical.version == 2,
+        guard version == Self.currentVersion,
               canonical.isValid else {
             return false
         }
@@ -108,6 +109,7 @@ private struct WatchTransferEnvelope: Codable, Equatable {
     private func hasValidSectionSummaries(_ sectionSummaries: [WatchTransferSectionSummary]) -> Bool {
         let containsOnlyKnownAnchors = sectionSummaries.allSatisfy { summary in
             canonical.anchorEdgeIds.contains(summary.anchorEdgeId) &&
+                canonical.destinationIds.contains(summary.destinationId) &&
                 summary.destinationId.allSatisfy(\.isNumber)
         }
         let coversCanonicalAnchors = Set(sectionSummaries.map(\.anchorEdgeId)) == Set(canonical.anchorEdgeIds)

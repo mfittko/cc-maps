@@ -1666,16 +1666,22 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testWatchTransferAvailabilityTracksPrerequisiteStates() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let watchTransferService = WatchRouteTransferServiceSpy()
         let viewModel = BrowseViewModel(
             apiClient: BrowseAPISpy(
                 destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
                 trailsByDestination: [
-                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                    "1": [
+                        try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                        try makeTrailSegment(id: 102, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                    ],
                 ]
             ),
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(),
             watchTransferService: watchTransferService
         )
 
@@ -1696,6 +1702,9 @@ final class PlanningContractTests: XCTestCase {
         await waitUntil { !viewModel.primaryTrails.isEmpty }
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil { viewModel.watchTransferAvailability == .temporarilyUnavailableSessionNotReady }
 
         XCTAssertEqual(viewModel.watchTransferAvailability, .temporarilyUnavailableSessionNotReady)
 
@@ -1707,6 +1716,7 @@ final class PlanningContractTests: XCTestCase {
     @MainActor
     func testWatchTransferEnvelopeMatchesSharedFixture() async throws {
         let fixture: WatchTransferEnvelopeFixture = try FixtureLoader.decode("route-plan/transfer-derived-watch.v2.json")
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "100", name: "Primary plus preview sector", latitude: 59.91, longitude: 10.75),
@@ -1729,6 +1739,8 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(),
             watchTransferService: watchTransferService
         )
 
@@ -1747,14 +1759,19 @@ final class PlanningContractTests: XCTestCase {
         viewModel.sendRouteToWatch()
 
         let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
+        XCTAssertEqual(queuedEnvelope.version, fixture.version)
         XCTAssertEqual(queuedEnvelope.canonical, fixture.canonical)
         XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
         XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
-        XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry.coordinates)
+        XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry?.coordinates)
+        XCTAssertTrue(
+            Set(queuedEnvelope.derived?.sectionSummaries.map(\.destinationId) ?? []).isSubset(of: Set(queuedEnvelope.canonical.destinationIds))
+        )
     }
 
     @MainActor
     func testWatchTransferSendTransitionsPendingThenSuccessAfterAcknowledgement() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let watchTransferService = WatchRouteTransferServiceSpy(
             sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
         )
@@ -1762,11 +1779,16 @@ final class PlanningContractTests: XCTestCase {
             apiClient: BrowseAPISpy(
                 destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
                 trailsByDestination: [
-                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                    "1": [
+                        try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                        try makeTrailSegment(id: 102, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                    ],
                 ]
             ),
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(),
             watchTransferService: watchTransferService
         )
 
@@ -1776,6 +1798,9 @@ final class PlanningContractTests: XCTestCase {
         await waitUntil { !viewModel.primaryTrails.isEmpty }
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil { viewModel.watchTransferAvailability == .ready }
 
         viewModel.sendRouteToWatch()
 
@@ -1803,6 +1828,7 @@ final class PlanningContractTests: XCTestCase {
 
     @MainActor
     func testWatchTransferIgnoresStaleAcknowledgementsAfterResend() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let watchTransferService = WatchRouteTransferServiceSpy(
             sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
         )
@@ -1810,11 +1836,16 @@ final class PlanningContractTests: XCTestCase {
             apiClient: BrowseAPISpy(
                 destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
                 trailsByDestination: [
-                    "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                    "1": [
+                        try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                        try makeTrailSegment(id: 102, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                    ],
                 ]
             ),
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(),
             watchTransferService: watchTransferService
         )
 
@@ -1824,6 +1855,9 @@ final class PlanningContractTests: XCTestCase {
         await waitUntil { !viewModel.primaryTrails.isEmpty }
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil { viewModel.watchTransferAvailability == .ready }
 
         viewModel.sendRouteToWatch()
         guard case .pending(let firstTransferID) = viewModel.watchTransferSendState else {

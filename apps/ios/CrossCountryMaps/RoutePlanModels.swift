@@ -279,12 +279,14 @@ struct CanonicalRoutePlan: Codable, Equatable {
 }
 
 struct WatchRouteTransferEnvelope: Codable, Equatable {
+    static let currentVersion = 2
+
     let version: Int
     let canonical: CanonicalRoutePlan
     let derived: WatchRouteTransferDerivedPayload?
 
     init(canonical: CanonicalRoutePlan, derived: WatchRouteTransferDerivedPayload?) {
-        version = CanonicalRoutePlan.currentVersion
+        version = Self.currentVersion
         self.canonical = canonical
         self.derived = derived
     }
