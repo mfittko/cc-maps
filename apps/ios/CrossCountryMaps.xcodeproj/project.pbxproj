@@ -19,6 +19,7 @@
 		7699B67569E39A738236EC2D /* trail-crossing-segments.json in Resources */ = {isa = PBXBuildFile; fileRef = C5175CEDF36819537F540ABE /* trail-crossing-segments.json */; };
 		97FB9CDE5C4B8DAC2E3CDB0F /* trail-proximity-auto-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */; };
 		9CBC3486F6AF4557C36269A9 /* RoutePlanModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA4047056C56412595C77135 /* RoutePlanModels.swift */; };
+		9D9105A491AB74684F9121A1 /* RouteExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D9105A391AB74684F9121A1 /* RouteExport.swift */; };
 		A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */; };
 		BE414A6A350828C6BA0CF04B /* nearby-preview-selection.json in Resources */ = {isa = PBXBuildFile; fileRef = 52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */; };
 		BE81F6A0E726E532971168AA /* CrossCountryMapsWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */; };
@@ -85,6 +86,7 @@
 		B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMapsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		BA4047056C56412595C77135 /* RoutePlanModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoutePlanModels.swift; sourceTree = "<group>"; };
+		9D9105A391AB74684F9121A1 /* RouteExport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RouteExport.swift; sourceTree = "<group>"; };
 		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
 		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
 		C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
@@ -172,6 +174,7 @@
 				1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */,
 				3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */,
 				BA4047056C56412595C77135 /* RoutePlanModels.swift */,
+				9D9105A391AB74684F9121A1 /* RouteExport.swift */,
 				16688666BC97DFBF7FDA4CFB /* LocationService.swift */,
 				67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */,
 				2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */,
@@ -402,6 +405,7 @@
 				639BC3D1840A8CFD84D80F74 /* AppConfig.swift in Sources */,
 				41F282BD90E66A9AD9A5861F /* BrowseModels.swift in Sources */,
 				9CBC3486F6AF4557C36269A9 /* RoutePlanModels.swift in Sources */,
+				9D9105A491AB74684F9121A1 /* RouteExport.swift in Sources */,
 				73AB46DA495D4BCBF29F4C81 /* LocationService.swift in Sources */,
 				A797810601422B5CB207C8C6 /* BrowseViewModel.swift in Sources */,
 				FBCD282ABF6C11E5C782AF10 /* TrailMapView.swift in Sources */,

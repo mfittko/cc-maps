@@ -29,4 +29,16 @@ enum AppConfig {
 
         return URL(string: "http://localhost:3000")!
     }
+
+    static var shareBaseURL: URL {
+        if
+            let value = Bundle.main.object(forInfoDictionaryKey: "CrossCountryMapsShareBaseURL") as? String,
+            let url = URL(string: value),
+            !value.isEmpty
+        {
+            return url
+        }
+
+        return URL(string: "https://cc-maps.vercel.app")!
+    }
 }

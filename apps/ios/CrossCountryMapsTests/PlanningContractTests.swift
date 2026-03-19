@@ -367,6 +367,100 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertEqual(hydrationResult.staleAnchorEdgeIds, fixture.expectedHydration.staleAnchorEdgeIds)
     }
 
+    func testRouteShareArtifactEmbedsCanonicalEncodedPayload() throws {
+        let fixture: CanonicalRoutePlanFixture = try FixtureLoader.decode("route-plan/canonical-primary-plus-preview-sector.v2.json")
+        let routePlan = CanonicalRoutePlan(
+            destinationId: fixture.destinationId,
+            anchorEdgeIds: fixture.anchorEdgeIds,
+            destinationIds: fixture.destinationIds
+        )
+        let shareArtifact = try XCTUnwrap(
+            RouteShareArtifact(
+                routePlan: routePlan,
+                destinationName: "Oslo",
+                baseURL: URL(string: "https://example.com/map")!
+            )
+        )
+        let components = URLComponents(url: shareArtifact.url, resolvingAgainstBaseURL: false)
+
+        XCTAssertEqual(shareArtifact.encodedRoute, routePlan.encodedForURL)
+        XCTAssertEqual(components?.queryItems?.first(where: { $0.name == "route" })?.value, routePlan.encodedForURL)
+    }
+
+    func testGpxExportPreservesPlanningSectionOrder() {
+        let firstSection = PlanningSection(
+            trailID: "101",
+            edgeID: Self.edgeA,
+            start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+            end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+            distanceKm: 0.6,
+            coordinates: [
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+            ],
+            midpoint: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.755),
+            startDistanceKm: 0,
+            endDistanceKm: 0.6
+        )
+        let secondSection = PlanningSection(
+            trailID: "202",
+            edgeID: Self.edgeB,
+            start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+            end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.77),
+            distanceKm: 0.6,
+            coordinates: [
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                CLLocationCoordinate2D(latitude: 59.91, longitude: 10.77),
+            ],
+            midpoint: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.765),
+            startDistanceKm: 0.6,
+            endDistanceKm: 1.2
+        )
+
+        let gpx = RouteExport.gpx(from: [secondSection, firstSection], routeName: "Oslo route")
+        let secondSectionPoint = "<trkpt lat=\"59.91\" lon=\"10.76\"></trkpt>\n      <trkpt lat=\"59.91\" lon=\"10.77\"></trkpt>"
+        let firstSectionPoint = "<trkpt lat=\"59.91\" lon=\"10.75\"></trkpt>\n      <trkpt lat=\"59.91\" lon=\"10.76\"></trkpt>"
+
+        XCTAssertLessThan(gpx.range(of: secondSectionPoint)?.lowerBound.utf16Offset(in: gpx) ?? .max, gpx.range(of: firstSectionPoint)?.lowerBound.utf16Offset(in: gpx) ?? .max)
+    }
+
+    func testRouteSummaryReflectsDistanceSectionCountAndUnavailableElevation() {
+        let summary = RouteSummary.from(sections: [
+            PlanningSection(
+                trailID: "101",
+                edgeID: Self.edgeA,
+                start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                distanceKm: 1.25,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.75),
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                ],
+                midpoint: nil,
+                startDistanceKm: 0,
+                endDistanceKm: 1.25
+            ),
+            PlanningSection(
+                trailID: "202",
+                edgeID: Self.edgeB,
+                start: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                end: CLLocationCoordinate2D(latitude: 59.91, longitude: 10.77),
+                distanceKm: 2.5,
+                coordinates: [
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.76),
+                    CLLocationCoordinate2D(latitude: 59.91, longitude: 10.77),
+                ],
+                midpoint: nil,
+                startDistanceKm: 1.25,
+                endDistanceKm: 3.75
+            ),
+        ])
+
+        XCTAssertEqual(summary.sectionCount, 2)
+        XCTAssertEqual(summary.totalDistanceKm, 3.75, accuracy: 0.0001)
+        XCTAssertNil(summary.totalElevationMeters)
+    }
+
     // MARK: BrowseViewModel planning-mode transition tests
 
     @MainActor
@@ -806,6 +900,69 @@ final class PlanningContractTests: XCTestCase {
         }
 
         XCTAssertEqual(routePlanStore.readRoutePlan(for: "1")?.anchorEdgeIds, [Self.edgeA, Self.edgeB])
+    }
+
+    @MainActor
+    func testSelectedPlannedSegmentShowsRouteAwareDetailOutsidePlanningMode() async throws {
+        let suiteName = "PlanningContractTests.SelectedPlannedSegmentShowsRouteAwareDetailOutsidePlanningMode"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        routePlanStore.writeRoutePlan(
+            CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeB], destinationIds: ["1"])
+        )
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore
+        )
+
+        viewModel.start()
+        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+
+        let allTrails = viewModel.primaryTrails + viewModel.previewTrails
+
+        let plannedSections = GeoMath.planningSections(
+            for: viewModel.routePlan.anchorEdgeIDs,
+            allTrails: allTrails
+        )
+
+        XCTAssertEqual(plannedSections.count, 2)
+
+        let selectedSection = try XCTUnwrap(plannedSections.last)
+
+        viewModel.exitPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: selectedSection.trailID,
+                anchorEdgeID: nil,
+                segment: TrailSegment(
+                    startDistanceKm: selectedSection.startDistanceKm,
+                    endDistanceKm: selectedSection.endDistanceKm,
+                    distanceKm: selectedSection.distanceKm,
+                    midpoint: selectedSection.midpoint
+                )
+            )
+        )
+
+        let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
+
+        XCTAssertFalse(viewModel.isInPlanningMode)
+        XCTAssertEqual(routeContext.selectedSectionNumber, 2)
+        XCTAssertEqual(routeContext.totalSections, 2)
+        XCTAssertEqual(routeContext.totalDistanceKm, viewModel.routeSummary.totalDistanceKm, accuracy: 0.0001)
+        XCTAssertNil(routeContext.totalElevationMeters)
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeB])
     }
 }
 

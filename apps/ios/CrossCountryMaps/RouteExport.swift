@@ -70,6 +70,52 @@ enum RouteExport {
     }
 }
 
+struct RouteShareArtifact: Equatable {
+    let encodedRoute: String
+    let url: URL
+    let title: String
+    let message: String
+
+    init?(routePlan: CanonicalRoutePlan, destinationName: String, baseURL: URL = AppConfig.shareBaseURL) {
+        guard let encodedRoute = routePlan.encodedForURL,
+              var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name == "route" }
+        queryItems.append(URLQueryItem(name: "route", value: encodedRoute))
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            return nil
+        }
+
+        self.encodedRoute = encodedRoute
+        self.url = url
+        title = "\(destinationName) route"
+        message = "Planned route for \(destinationName)"
+    }
+}
+
+struct RouteExportFile: Equatable {
+    let fileName: String
+    let content: String
+
+    func writeTemporaryFile(fileManager: FileManager = .default) throws -> URL {
+        let temporaryDirectoryURL = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let temporaryURL = temporaryDirectoryURL.appendingPathComponent(fileName)
+
+        try fileManager.createDirectory(
+            at: temporaryDirectoryURL,
+            withIntermediateDirectories: true
+        )
+        try content.write(to: temporaryURL, atomically: true, encoding: .utf8)
+        return temporaryURL
+    }
+}
+
 /// Compact route summary suitable for display in the planning surface.
 struct RouteSummary: Equatable {
     let sectionCount: Int
@@ -96,5 +142,33 @@ struct RouteSummary: Equatable {
         let total = sections.reduce(0) { $0 + $1.distanceKm }
         // Elevation is not currently available from the Sporet data source.
         return RouteSummary(sectionCount: sections.count, totalDistanceKm: total, totalElevationMeters: nil)
+    }
+}
+
+struct RouteAwareTrailDetailContext: Equatable {
+    let selectedSectionNumber: Int
+    let totalSections: Int
+    let totalDistanceKm: Double
+    let totalElevationMeters: Double?
+    let selectedSectionDistanceKm: Double
+
+    var formattedSectionLabel: String {
+        "Section \(selectedSectionNumber) of \(totalSections)"
+    }
+
+    var formattedTotalDistanceLabel: String {
+        String(format: "%.1f km", totalDistanceKm)
+    }
+
+    var formattedSelectedSectionDistanceLabel: String {
+        String(format: "%.1f km", selectedSectionDistanceKm)
+    }
+
+    var formattedElevationLabel: String? {
+        guard let totalElevationMeters else {
+            return nil
+        }
+
+        return String(format: "↑ %.0f m", totalElevationMeters)
     }
 }

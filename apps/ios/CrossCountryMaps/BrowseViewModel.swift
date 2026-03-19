@@ -264,6 +264,85 @@ final class BrowseViewModel: ObservableObject {
         return displayedTrails.first { $0.id == selectedTrailID }
     }
 
+    var allTrails: [TrailFeature] {
+        primaryTrails + previewTrails
+    }
+
+    var plannedSections: [PlanningSection] {
+        GeoMath.planningSections(for: routePlan.anchorEdgeIDs, allTrails: allTrails)
+    }
+
+    var routeSummary: RouteSummary {
+        RouteSummary.from(sections: plannedSections)
+    }
+
+    var routeUsesPreviewDestinations: Bool {
+        activeRouteDestinationIDs.count > 1
+    }
+
+    var canonicalRoutePlan: CanonicalRoutePlan? {
+        guard !selectedDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
+            return nil
+        }
+
+        return CanonicalRoutePlan(
+            destinationId: selectedDestinationID,
+            anchorEdgeIds: routePlan.anchorEdgeIDs,
+            destinationIds: activeRouteDestinationIDs
+        )
+    }
+
+    var routeShareArtifact: RouteShareArtifact? {
+        guard let canonicalRoutePlan,
+              let destinationName = selectedDestination?.name else {
+            return nil
+        }
+
+        return RouteShareArtifact(routePlan: canonicalRoutePlan, destinationName: destinationName)
+    }
+
+    var selectedRouteDetailContext: RouteAwareTrailDetailContext? {
+        guard !isInPlanningMode,
+              !routePlan.anchorEdgeIDs.isEmpty,
+              let selectedTrailID,
+              let matchingIndex = matchingPlannedSectionIndex(
+                forSelectedTrailID: selectedTrailID,
+                selectedSegment: selectedTrailSegment
+              ) else {
+            return nil
+        }
+
+        let summary = routeSummary
+        let selectedSection = plannedSections[matchingIndex]
+
+        return RouteAwareTrailDetailContext(
+            selectedSectionNumber: matchingIndex + 1,
+            totalSections: summary.sectionCount,
+            totalDistanceKm: summary.totalDistanceKm,
+            totalElevationMeters: summary.totalElevationMeters,
+            selectedSectionDistanceKm: selectedSection.distanceKm
+        )
+    }
+
+    func makeRouteExportFile() -> RouteExportFile? {
+        guard !plannedSections.isEmpty,
+              let destinationName = selectedDestination?.name else {
+            return nil
+        }
+
+        let routeName = "\(destinationName) route"
+        let gpxContent = RouteExport.gpx(from: plannedSections, routeName: routeName)
+
+        guard !gpxContent.isEmpty else {
+            return nil
+        }
+
+        return RouteExportFile(
+            fileName: RouteExport.fileName(for: routeName),
+            content: gpxContent
+        )
+    }
+
     var statusSummary: String {
         if let destination = selectedDestination {
             return isManualDestinationSelection ? "Manual destination locked: \(destination.name)" : "Auto-selected destination: \(destination.name)"
@@ -873,6 +952,27 @@ final class BrowseViewModel: ObservableObject {
         browseSettingsStore.writeBrowseSettings(
             BrowseSettings(destinationID: selectedDestinationID, mapRegion: visibleMapRegion)
         )
+    }
+
+    private func matchingPlannedSectionIndex(
+        forSelectedTrailID selectedTrailID: String,
+        selectedSegment: TrailSegment?
+    ) -> Int? {
+        let candidateIndices = plannedSections.indices.filter { plannedSections[$0].trailID == selectedTrailID }
+
+        guard !candidateIndices.isEmpty else {
+            return nil
+        }
+
+        guard let selectedSegment else {
+            return candidateIndices.count == 1 ? candidateIndices[0] : nil
+        }
+
+        return candidateIndices.first { index in
+            let section = plannedSections[index]
+            return abs(section.startDistanceKm - selectedSegment.startDistanceKm) < 0.0001 &&
+                abs(section.endDistanceKm - selectedSegment.endDistanceKm) < 0.0001
+        }
     }
 
     private func clearSelectedPlannedSection() {

@@ -1,11 +1,17 @@
 import SwiftUI
 
 struct PlanningPanel: View {
+    @State private var isShareExpanded = false
+
     let plan: RoutePlanState
+    let routeSummary: RouteSummary
+    let routeUsesPreviewDestinations: Bool
     let allTrails: [TrailFeature]
     let hydrationNotice: RoutePlanHydrationNotice?
     let selectedSectionEdgeID: String?
     let onExitPlanning: () -> Void
+    let onShareRoute: () -> Void
+    let onExportGpx: () -> Void
     let onReverse: () -> Void
     let onClear: () -> Void
     let onRemove: (String) -> Void
@@ -39,6 +45,10 @@ struct PlanningPanel: View {
             if plan.isEmpty {
                 emptyState
             } else {
+                routeSummaryView
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+
                 ScrollView {
                     anchorList
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -146,34 +156,112 @@ struct PlanningPanel: View {
         }
     }
 
+    private var routeSummaryView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                summaryChip(label: routeSummary.formattedDistanceLabel, systemImage: "ruler")
+                summaryChip(
+                    label: "\(routeSummary.sectionCount) section\(routeSummary.sectionCount == 1 ? "" : "s")",
+                    systemImage: "point.topleft.down.to.point.bottomright.curvepath"
+                )
+            }
+
+            if let elevationLabel = routeSummary.formattedElevationLabel {
+                summaryChip(label: elevationLabel, systemImage: "mountain.2")
+            } else {
+                Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if routeUsesPreviewDestinations {
+                Label("Includes nearby preview sectors", systemImage: "location.viewfinder")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var actionRow: some View {
         HStack(spacing: 10) {
-            Text("\(plan.sectionCount) section\(plan.sectionCount == 1 ? "" : "s")")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            actionIconButton(
+                systemImage: "arrow.left.arrow.right",
+                tint: .primary,
+                accessibilityLabel: "Reverse route order",
+                action: onReverse
+            )
+
+            actionIconButton(
+                systemImage: isShareExpanded ? "xmark" : "square.and.arrow.up",
+                tint: .blue,
+                accessibilityLabel: isShareExpanded ? "Collapse share options" : "Show share options"
+            ) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isShareExpanded.toggle()
+                }
+            }
+
+            if isShareExpanded {
+                actionIconButton(
+                    systemImage: "link",
+                    tint: .blue,
+                    accessibilityLabel: "Share route link"
+                ) {
+                    onShareRoute()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShareExpanded = false
+                    }
+                }
+
+                actionIconButton(
+                    systemImage: "square.and.arrow.up.on.square",
+                    tint: .blue,
+                    accessibilityLabel: "Export route as GPX"
+                ) {
+                    onExportGpx()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isShareExpanded = false
+                    }
+                }
+            }
 
             Spacer(minLength: 0)
 
-            Button(action: onReverse) {
-                Label("Reverse", systemImage: "arrow.left.arrow.right")
-                    .font(.caption.weight(.semibold))
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .tint(.primary)
-            .accessibilityLabel("Reverse route order")
-
-            Button(action: onClear) {
-                Label("Clear", systemImage: "trash")
-                    .font(.caption.weight(.semibold))
-            }
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .tint(.red)
-            .accessibilityLabel("Clear all route sections")
+            actionIconButton(
+                systemImage: "trash",
+                tint: .red,
+                accessibilityLabel: "Clear all route sections",
+                action: onClear
+            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+        .animation(.easeInOut(duration: 0.2), value: isShareExpanded)
+    }
+
+    private func actionIconButton(
+        systemImage: String,
+        tint: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.body.weight(.semibold))
+                .frame(width: 40, height: 40)
+                .background(tint.opacity(0.14), in: Capsule())
+                .foregroundStyle(tint)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func summaryChip(label: String, systemImage: String) -> some View {
+        Label(label, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.82), in: Capsule())
     }
 
     private func trailLabel(for section: PlanningSection) -> String {
