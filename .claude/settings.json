@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh issue:*)",
+      "Bash(xcodebuild test:*)",
+      "Bash(xcrun simctl:*)",
+      "Bash(xcodebuild -project apps/ios/CrossCountryMaps.xcodeproj -scheme CrossCountryMaps -destination 'platform=iOS Simulator,name=iPhone 16' -configuration Debug build)"
+    ]
+  }
+}

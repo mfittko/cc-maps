@@ -22,6 +22,7 @@ yarn-error.log*
 coverage/
 playwright-report/
 test-results/
+TestResults/
 
 # xcode
 apps/ios/build/
@@ -31,3 +32,4 @@ apps/ios/**/*.xcuserstate
 # system
 .DS_Store
 
+.build/

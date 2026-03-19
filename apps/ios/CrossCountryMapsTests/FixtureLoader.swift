@@ -16,6 +16,26 @@ enum FixtureLoader {
             return bundledURL
         }
 
+        let repoRootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+
+        let fixturesRootURL = repoRootURL
+            .appendingPathComponent("tests")
+            .appendingPathComponent("fixtures")
+
+        let repoFixtureURL = fileName
+            .split(separator: "/")
+            .reduce(fixturesRootURL) { partialURL, pathComponent in
+                partialURL.appendingPathComponent(String(pathComponent))
+            }
+
+        if FileManager.default.fileExists(atPath: repoFixtureURL.path) {
+            return repoFixtureURL
+        }
+
         throw CocoaError(.fileNoSuchFile)
     }
 }

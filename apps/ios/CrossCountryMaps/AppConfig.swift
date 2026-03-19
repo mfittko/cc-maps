@@ -5,6 +5,7 @@ enum AppConfig {
     static let defaultCenter = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
     static let currentLocationTrackMatchThresholdKm = 0.05
     static let currentLocationRecheckDistanceKm = 0.02
+    static let previewRegionRecheckDistanceKm = 0.35
     static let suggestedDestinationRadiusKm = 20.0
     static let maxNearbyDestinationPreviews = 3
     static let destinationSuggestionDebounceNanoseconds: UInt64 = 700_000_000
