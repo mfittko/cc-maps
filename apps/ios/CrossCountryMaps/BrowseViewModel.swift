@@ -236,6 +236,7 @@ final class BrowseViewModel: ObservableObject {
 
     @Published var selectedTrailID: String?
     @Published private(set) var selectedTrailSegment: TrailSegment?
+    @Published private(set) var selectedRouteDetailSectionEdgeID: String?
     @Published var visibleRegionCenter: CLLocationCoordinate2D?
 
     let locationService: BrowseLocationServing
@@ -338,9 +339,9 @@ final class BrowseViewModel: ObservableObject {
     var selectedRouteDetailContext: RouteAwareTrailDetailContext? {
         guard !isInPlanningMode,
               !routePlan.anchorEdgeIDs.isEmpty,
-              let selectedTrailID,
               let matchingIndex = matchingPlannedSectionIndex(
                 forSelectedTrailID: selectedTrailID,
+                selectedAnchorEdgeID: selectedRouteDetailSectionEdgeID,
                 selectedSegment: selectedTrailSegment
               ) else {
             return nil
@@ -348,13 +349,16 @@ final class BrowseViewModel: ObservableObject {
 
         let summary = routeSummary
         let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
+        let selectedSection = plannedSections[matchingIndex]
+        let selectedSectionElevation = routeElevation?.sectionElevation(for: selectedSection.edgeID)
 
         return RouteAwareTrailDetailContext(
             selectedSectionNumber: matchingIndex + 1,
             totalSections: summary.sectionCount,
             totalDistanceKm: summary.totalDistanceKm,
             ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
-            descentMeters: routeMetrics.map { Double($0.descentMeters) }
+            descentMeters: routeMetrics.map { Double($0.descentMeters) },
+            selectedSectionElevation: selectedSectionElevation
         )
     }
 
@@ -449,6 +453,7 @@ final class BrowseViewModel: ObservableObject {
         selectedDestinationID = id
         selectedTrailID = nil
         selectedTrailSegment = nil
+        selectedRouteDetailSectionEdgeID = nil
         primaryTrails = []
         previewTrails = []
         nearbyPreviewDestinations = []
@@ -465,6 +470,7 @@ final class BrowseViewModel: ObservableObject {
         clearSelectedPlannedSection()
         selectedTrailID = id
         selectedTrailSegment = id == nil ? nil : segment
+        selectedRouteDetailSectionEdgeID = nil
     }
 
     func selectTrail(selection: TrailInspectionSelection?) {
@@ -472,6 +478,7 @@ final class BrowseViewModel: ObservableObject {
             clearSelectedPlannedSection()
             selectedTrailID = nil
             selectedTrailSegment = nil
+            selectedRouteDetailSectionEdgeID = nil
             return
         }
 
@@ -500,12 +507,14 @@ final class BrowseViewModel: ObservableObject {
         } else {
             selectedTrailID = trailID
             selectedTrailSegment = selection?.segment
+            selectedRouteDetailSectionEdgeID = selection?.anchorEdgeID
         }
     }
 
     func enterPlanningMode() {
         selectedTrailID = nil
         selectedTrailSegment = nil
+        selectedRouteDetailSectionEdgeID = nil
         clearSelectedPlannedSection()
         isInPlanningMode = true
 
@@ -1032,9 +1041,19 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func matchingPlannedSectionIndex(
-        forSelectedTrailID selectedTrailID: String,
+        forSelectedTrailID selectedTrailID: String?,
+        selectedAnchorEdgeID: String?,
         selectedSegment: TrailSegment?
     ) -> Int? {
+        if let selectedAnchorEdgeID,
+           let selectedIndex = plannedSections.firstIndex(where: { $0.edgeID == selectedAnchorEdgeID }) {
+            return selectedIndex
+        }
+
+        guard let selectedTrailID else {
+            return nil
+        }
+
         let candidateIndices = plannedSections.indices.filter { plannedSections[$0].trailID == selectedTrailID }
 
         guard !candidateIndices.isEmpty else {

@@ -178,6 +178,7 @@ struct ContentView: View {
             PlanningPanel(
                 plan: viewModel.routePlan,
                 routeSummary: viewModel.routeSummary,
+                elevationResponse: viewModel.routeElevation,
                 routeUsesPreviewDestinations: viewModel.routeUsesPreviewDestinations,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
                 hydrationNotice: viewModel.routeHydrationNotice,
@@ -386,14 +387,6 @@ private struct TrailDetailCard: View {
         max(sectionCount - 1, 0)
     }
 
-    private var selectedSectionIndex: Int? {
-        guard let selectedSegment else {
-            return nil
-        }
-
-        return trailSegments.firstIndex(of: selectedSegment).map { $0 + 1 }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
@@ -431,9 +424,14 @@ private struct TrailDetailCard: View {
                 detailChip(label: trail.compactGroomingLabel, systemImage: "hourglass")
                 detailChip(label: trail.formattedLengthLabel, systemImage: "ruler")
 
-                if let selectedSegment, let selectedSectionIndex {
-                    detailChip(label: "Section \(selectedSectionIndex)/\(sectionCount)", systemImage: "arrow.triangle.branch")
-                    detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
+                if let routeContext {
+                    if let selectedSegment {
+                        detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
+                    }
+
+                    if let sectionElevationLabel = routeContext.formattedSelectedSectionElevationLabel {
+                        detailChip(label: sectionElevationLabel, systemImage: "mountain.2.fill")
+                    }
                 } else if sectionCount > 1 {
                     detailChip(label: "\(sectionCount) sections", systemImage: "arrow.triangle.branch")
                 }
@@ -455,17 +453,20 @@ private struct TrailDetailCard: View {
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 8) {
-                        detailChip(label: routeContext.formattedSectionLabel, systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                        detailChip(label: "\(routeContext.selectedSectionNumber)/\(routeContext.totalSections)", systemImage: "arrow.triangle.branch", compact: true)
                         detailChip(label: routeContext.formattedTotalDistanceLabel, systemImage: "map")
+
+                        if let elevationLabel = routeContext.formattedElevationLabel {
+                            detailChip(label: elevationLabel, systemImage: "mountain.2", compact: true)
+                        } else {
+                            Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
+                                .font(.caption2.weight(.semibold))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
-                    if let elevationLabel = routeContext.formattedElevationLabel {
-                        detailChip(label: elevationLabel, systemImage: "mountain.2")
-                    } else {
-                        Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
                 }
             }
 
@@ -482,11 +483,13 @@ private struct TrailDetailCard: View {
         .shadow(color: Color.black.opacity(0.14), radius: 24, y: 10)
     }
 
-    private func detailChip(label: String, systemImage: String) -> some View {
+    private func detailChip(label: String, systemImage: String, compact: Bool = false) -> some View {
         Label(label, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
+            .font((compact ? Font.caption2 : Font.caption).weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .padding(.horizontal, compact ? 8 : 10)
+            .padding(.vertical, compact ? 7 : 8)
             .background(Color.white.opacity(0.82), in: Capsule())
     }
 }

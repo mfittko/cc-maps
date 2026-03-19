@@ -138,6 +138,42 @@ struct RouteExportFile: Equatable {
     }
 }
 
+private func formatElevationLabel(ascentMeters: Double?, descentMeters: Double?) -> String? {
+    guard let ascent = ascentMeters else {
+        return nil
+    }
+
+    if let descent = descentMeters {
+        return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
+    }
+
+    return String(format: "↑ %.0f m", ascent)
+}
+
+struct SectionElevationSummary: Equatable {
+    let status: String
+    let ascentMeters: Double?
+    let descentMeters: Double?
+
+    var formattedElevationLabel: String? {
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
+    }
+}
+
+extension ElevationApiResponse {
+    func sectionElevation(for sectionKey: String) -> SectionElevationSummary? {
+        guard let section = sections.first(where: { $0.sectionKey == sectionKey }) else {
+            return nil
+        }
+
+        return SectionElevationSummary(
+            status: section.status,
+            ascentMeters: section.metrics.map { Double($0.ascentMeters) },
+            descentMeters: section.metrics.map { Double($0.descentMeters) }
+        )
+    }
+}
+
 /// Compact route summary suitable for display in the planning surface.
 struct RouteSummary: Equatable {
     let sectionCount: Int
@@ -152,15 +188,7 @@ struct RouteSummary: Equatable {
     }
 
     var formattedElevationLabel: String? {
-        guard let ascent = ascentMeters else {
-            return nil
-        }
-
-        if let descent = descentMeters {
-            return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
-        }
-
-        return String(format: "↑ %.0f m", ascent)
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
     }
 
     /// Human-readable note shown when elevation data is not available.
@@ -191,6 +219,7 @@ struct RouteAwareTrailDetailContext: Equatable {
     let ascentMeters: Double?
     /// `nil` means elevation data is unavailable for this route.
     let descentMeters: Double?
+    let selectedSectionElevation: SectionElevationSummary?
 
     var formattedSectionLabel: String {
         "Section \(selectedSectionNumber) of \(totalSections)"
@@ -201,14 +230,12 @@ struct RouteAwareTrailDetailContext: Equatable {
     }
 
     var formattedElevationLabel: String? {
-        guard let ascent = ascentMeters else {
-            return nil
-        }
-
-        if let descent = descentMeters {
-            return String(format: "↑ %.0f m  ↓ %.0f m", ascent, descent)
-        }
-
-        return String(format: "↑ %.0f m", ascent)
+        formatElevationLabel(ascentMeters: ascentMeters, descentMeters: descentMeters)
     }
+
+    var formattedSelectedSectionElevationLabel: String? {
+        selectedSectionElevation?.formattedElevationLabel
+    }
+
+    static let sectionElevationUnavailableNote = "Section elevation not available"
 }
