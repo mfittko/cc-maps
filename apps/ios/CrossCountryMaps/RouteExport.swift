@@ -233,5 +233,9 @@ struct RouteAwareTrailDetailContext: Equatable {
         selectedSectionElevation?.formattedElevationLabel
     }
 
+    var selectedSectionElevationDetailLabel: String {
+        formattedSelectedSectionElevationLabel ?? Self.sectionElevationUnavailableNote
+    }
+
     static let sectionElevationUnavailableNote = "Section elevation not available"
 }

@@ -1243,6 +1243,27 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertNil(sectionElevation.formattedElevationLabel)
     }
 
+    func testRouteAwareDetailUsesUnavailableCopyWhenSelectedSectionElevationIsMissing() {
+        let routeContext = RouteAwareTrailDetailContext(
+            selectedSectionNumber: 2,
+            totalSections: 3,
+            totalDistanceKm: 5.2,
+            ascentMeters: 300,
+            descentMeters: 150,
+            selectedSectionElevation: SectionElevationSummary(
+                status: "unavailable",
+                ascentMeters: nil,
+                descentMeters: nil
+            )
+        )
+
+        XCTAssertNil(routeContext.formattedSelectedSectionElevationLabel)
+        XCTAssertEqual(
+            routeContext.selectedSectionElevationDetailLabel,
+            RouteAwareTrailDetailContext.sectionElevationUnavailableNote
+        )
+    }
+
     func testElevationResponseReturnsSectionElevationSummaryForSectionKey() throws {
         let elevationResponse = ElevationApiResponse(
             status: "partial",
@@ -1302,7 +1323,9 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
 
-        await waitUntil { viewModel.routeElevation != nil }
+        await waitUntil {
+            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        }
 
         XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 300, accuracy: 0.01)
         XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.descentMeters), 150, accuracy: 0.01)
@@ -1416,7 +1439,9 @@ final class PlanningContractTests: XCTestCase {
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
 
-        await waitUntil { viewModel.routeElevation != nil }
+        await waitUntil {
+            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        }
         XCTAssertEqual(try XCTUnwrap(viewModel.routeSummary.ascentMeters), 300, accuracy: 0.01)
 
         apiClient.elevationResponse = ElevationApiResponse(
@@ -1476,7 +1501,9 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
 
-        await waitUntil { viewModel.routeElevation != nil }
+        await waitUntil {
+            viewModel.routeElevation != nil && viewModel.plannedSections.count == 2
+        }
 
         let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
 
@@ -1556,6 +1583,70 @@ final class PlanningContractTests: XCTestCase {
         let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
 
         XCTAssertEqual(routeContext.formattedSelectedSectionElevationLabel, "↑ 65 m  ↓ 65 m")
+    }
+
+    @MainActor
+    func testSelectedRouteDetailContextUsesUnavailableSectionElevationCopy() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        apiClient.elevationResponse = ElevationApiResponse(
+            status: "partial",
+            route: ElevationResult(status: "ok", metrics: ElevationMetrics(ascentMeters: 300, descentMeters: 150)),
+            sections: [
+                ElevationSectionResult(sectionKey: Self.edgeA, status: "ok", metrics: ElevationMetrics(ascentMeters: 40, descentMeters: 15)),
+                ElevationSectionResult(sectionKey: Self.edgeB, status: "unavailable", metrics: nil),
+            ]
+        )
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "202", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil { viewModel.routeElevation != nil }
+
+        let selectedSection = try XCTUnwrap(viewModel.plannedSections.last)
+
+        viewModel.exitPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: selectedSection.trailID,
+                anchorEdgeID: nil,
+                segment: TrailSegment(
+                    startDistanceKm: selectedSection.startDistanceKm,
+                    endDistanceKm: selectedSection.endDistanceKm,
+                    distanceKm: selectedSection.distanceKm,
+                    midpoint: selectedSection.midpoint
+                )
+            )
+        )
+
+        let routeContext = try XCTUnwrap(viewModel.selectedRouteDetailContext)
+
+        XCTAssertEqual(routeContext.formattedElevationLabel, "↑ 300 m  ↓ 150 m")
+        XCTAssertNil(routeContext.formattedSelectedSectionElevationLabel)
+        XCTAssertEqual(routeContext.selectedSectionElevation?.status, "unavailable")
+        XCTAssertEqual(
+            routeContext.selectedSectionElevationDetailLabel,
+            RouteAwareTrailDetailContext.sectionElevationUnavailableNote
+        )
     }
 }
 

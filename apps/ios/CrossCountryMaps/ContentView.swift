@@ -429,9 +429,7 @@ private struct TrailDetailCard: View {
                         detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
                     }
 
-                    if let sectionElevationLabel = routeContext.formattedSelectedSectionElevationLabel {
-                        detailChip(label: sectionElevationLabel, systemImage: "mountain.2.fill")
-                    }
+                    detailChip(label: routeContext.selectedSectionElevationDetailLabel, systemImage: "mountain.2.fill")
                 } else if sectionCount > 1 {
                     detailChip(label: "\(sectionCount) sections", systemImage: "arrow.triangle.branch")
                 }
