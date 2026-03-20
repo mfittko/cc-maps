@@ -128,4 +128,18 @@ describe('map-persistence', () => {
     expect(persistedSources.routeFromStorage).toEqual(routePlan);
     expect(persistedSources.persistedRoutePlan).toEqual(routePlan);
   });
+
+  it('restores the active stored route when browse focus differs from the canonical owner', () => {
+    const browseFocusPlan = createRoutePlan('8', ['edge-b'], ['8']);
+    const canonicalRoutePlan = createRoutePlan('7', ['edge-a'], ['7', '8']);
+
+    writeStoredRoutePlan(browseFocusPlan, storageKey);
+    writeStoredRoutePlan(canonicalRoutePlan, storageKey);
+
+    const persistedSources = getPersistedRoutePlanSources('', '8', storageKey);
+
+    expect(persistedSources.routeFromUrl).toBeNull();
+    expect(persistedSources.routeFromStorage).toEqual(canonicalRoutePlan);
+    expect(persistedSources.persistedRoutePlan).toEqual(canonicalRoutePlan);
+  });
 });

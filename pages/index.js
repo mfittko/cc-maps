@@ -30,6 +30,7 @@ import {
 } from '../lib/map-persistence';
 import {
   appendRoutePlanAnchor,
+  areRequiredPreviewDestinationIdsLoaded,
   createRoutePlanGeoJson,
   findNearestRouteGraphEdgeId,
   findNearestRouteTraversalFeature,
@@ -691,6 +692,10 @@ export default function Home() {
 
   function updateSelectedDestination(destinationId, options = {}) {
     const { manual = false, prefetchedTrailsGeoJson = null } = options;
+    const nextRequiredPreviewDestinationIds = getPreviewDestinationIds(
+      plannedDestinationIds,
+      destinationId
+    );
 
     if (manual) {
       hasManualDestinationSelectionRef.current = true;
@@ -703,7 +708,16 @@ export default function Home() {
     setSelectedDestinationId(destinationId);
     clearSelectedTrail();
     setNearbyDestinationIds([]);
-    setSuggestedTrailsGeoJson(null);
+
+    if (
+      !areRequiredPreviewDestinationIdsLoaded(
+        nextRequiredPreviewDestinationIds,
+        loadedPreviewDestinationIds
+      )
+    ) {
+      setSuggestedTrailsGeoJson(null);
+    }
+
     // routePlan, isPlanning, plannedDestinationIds, and loadedPreviewDestinationIds are
     // intentionally preserved so that browse-focus changes do not clear an active route.
     // Effects keyed to routePlan and selectedDestinationId will reconcile those states.
@@ -1004,8 +1018,9 @@ export default function Home() {
     );
 
     if (
-      requiredPreviewDestinationIds.some(
-        (destinationId) => !loadedPreviewDestinationIds.includes(destinationId)
+      !areRequiredPreviewDestinationIdsLoaded(
+        requiredPreviewDestinationIds,
+        loadedPreviewDestinationIds
       )
     ) {
       return;

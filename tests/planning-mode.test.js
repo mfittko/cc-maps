@@ -3,6 +3,7 @@ import { buildRouteGraph } from '../lib/route-graph.js';
 import { createRoutePlan } from '../lib/route-plan.js';
 import {
   appendRoutePlanAnchor,
+  areRequiredPreviewDestinationIdsLoaded,
   createRoutePlanGeoJson,
   findNearestRouteTraversalFeature,
   findNearestRouteGraphEdgeId,
@@ -168,6 +169,13 @@ describe('planning-mode helpers', () => {
 
     it('keeps browse mode bounded when no route is active or pending hydration', () => {
       expect(shouldMergePreviewTrailsIntoRouteGraph(false, [])).toBe(false);
+    });
+
+    it('treats route-required previews as loaded when every required destination is already present', () => {
+      expect(areRequiredPreviewDestinationIdsLoaded(['8'], ['8', '9'])).toBe(true);
+      expect(areRequiredPreviewDestinationIdsLoaded([], ['8', '9'])).toBe(true);
+      expect(areRequiredPreviewDestinationIdsLoaded(['8', '10'], ['8', '9'])).toBe(false);
+      expect(areRequiredPreviewDestinationIdsLoaded(['8'], [])).toBe(false);
     });
   });
 
