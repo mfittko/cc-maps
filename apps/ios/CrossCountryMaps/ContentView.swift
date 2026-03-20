@@ -223,17 +223,19 @@ struct ContentView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         } else if viewModel.trailsPhase == .success {
             HStack(spacing: 10) {
-                Button {
-                    viewModel.focusPlannedRouteIfAvailable()
-                } label: {
-                    Image(systemName: "figure.skiing.crosscountry")
-                        .font(.body.weight(.semibold))
-                        .frame(width: 34, height: 34)
-                        .background(Color(red: 0.08, green: 0.34, blue: 0.44), in: Circle())
-                        .foregroundStyle(.white)
+                if !viewModel.routePlan.isEmpty {
+                    Button {
+                        viewModel.focusPlannedRouteIfAvailable()
+                    } label: {
+                        Image(systemName: "figure.skiing.crosscountry")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 34, height: 34)
+                            .background(Color(red: 0.08, green: 0.34, blue: 0.44), in: Circle())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Center planned route")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Center planned route")
                 Text("Tap trail")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)

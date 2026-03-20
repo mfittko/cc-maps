@@ -1321,6 +1321,7 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        resetWatchTransferLifecycle()
         let previousDestinationID = selectedDestinationID
         let existingAnchorEdgeIDs = routePlan.anchorEdgeIDs
         let existingRouteDestinationIDs = activeRouteDestinationIDs
