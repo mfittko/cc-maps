@@ -162,6 +162,37 @@ async function emitMapLayerClick(page, layerId, feature, lngLat, originalEvent) 
   );
 }
 
+async function emitDestinationCenterClick(page, destinationId) {
+  const destinationFeature = destinationsFixture.features.find(
+    (feature) => String(feature.properties?.id) === String(destinationId)
+  );
+
+  if (!destinationFeature) {
+    throw new Error(`Destination ${destinationId} not found in fixture`);
+  }
+
+  await emitMapLayerClick(
+    page,
+    'destinations-layer',
+    destinationFeature,
+    {
+      lng: destinationFeature.geometry.coordinates[0],
+      lat: destinationFeature.geometry.coordinates[1],
+    },
+    {}
+  );
+}
+
+async function selectDesktopDestination(page, destinationId) {
+  const select = page.locator('.control-panel-desktop .select-input');
+
+  await expect(select).toBeVisible();
+  await page.waitForFunction(() => {
+    const element = document.querySelector('.control-panel-desktop .select-input');
+    return Boolean(element) && !element.disabled;
+  });
+  await select.selectOption(destinationId);
+}
 async function waitForSuggestedTrailPreview(page, destinationId) {
   await expect.poll(async () =>
     page.evaluate((expectedDestinationId) => {
@@ -205,6 +236,60 @@ async function waitForPersistedRoutePlan(page, destinationId, anchorCount) {
       { expectedDestinationId: destinationId, expectedAnchorCount: anchorCount }
     )
   ).toBe(true);
+}
+
+async function expectDestinationInPrimaryTrails(page, destinationId) {
+  await expect.poll(async () =>
+    page.evaluate((expectedDestinationId) => {
+      const mockMap = window.__ccMapsMockMap;
+      const source = mockMap?.getSource('trails');
+      const features = source?.data?.features || [];
+
+      return features.some(
+        (feature) => String(feature?.properties?.destinationid) === String(expectedDestinationId)
+      );
+    }, destinationId)
+  ).toBe(true);
+}
+
+async function expectDestinationNotInSuggestedTrails(page, destinationId) {
+  await expect.poll(async () =>
+    page.evaluate((excludedDestinationId) => {
+      const mockMap = window.__ccMapsMockMap;
+      const source = mockMap?.getSource('suggested-trails');
+      const features = source?.data?.features || [];
+
+      return features.every(
+        (feature) => String(feature?.properties?.destinationid) !== String(excludedDestinationId)
+      );
+    }, destinationId)
+  ).toBe(true);
+}
+
+async function waitForRouteUrl(page, anchorCount) {
+  await expect.poll(async () =>
+    page.evaluate((expectedAnchorCount) => {
+      const routeParam = new URLSearchParams(window.location.search).get('route') || '';
+      const routeParts = routeParam.split('|');
+      const routeAnchorCount =
+        routeParts.length >= 4 && routeParts[3]
+          ? routeParts[3].split(',').filter(Boolean).length
+          : 0;
+
+      return routeAnchorCount === expectedAnchorCount;
+    }, anchorCount)
+  ).toBe(true);
+}
+
+async function getMockMapView(page) {
+  return page.evaluate(() => {
+    const mockMap = window.__ccMapsMockMap;
+
+    return {
+      center: mockMap?.center || null,
+      zoom: mockMap?.zoom || null,
+    };
+  });
 }
 
 test.describe('planning mode interactions', () => {
@@ -324,6 +409,136 @@ test.describe('planning mode interactions', () => {
         return features.some((feature) => String(feature?.properties?.destinationid) === '2');
       })
     ).toBe(true);
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+  test('route destinations stay in the primary trail source when focus flips between them', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await selectDesktopDestination(page, '2');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '1');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '1');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+
+  test('clicking a destination center keeps an active multi-destination route intact', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await waitForRouteUrl(page, 2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await emitDestinationCenterClick(page, '2');
+
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await waitForRouteUrl(page, 2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+  });
+
+  test('adding and removing a secondary destination keeps the current map view', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    const viewBeforeSecondaryAdd = await getMockMapView(page);
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expect(await getMockMapView(page)).toEqual(viewBeforeSecondaryAdd);
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(1);
+    await expect(await getMockMapView(page)).toEqual(viewBeforeSecondaryAdd);
   });
 
   test.describe('mobile viewport', () => {
