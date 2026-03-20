@@ -1359,6 +1359,72 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testStoredRouteRestoresAllParticipatingDestinationsWhenSectionTrailIDsOverlap() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresAllParticipatingDestinationsWhenSectionTrailIDsOverlap"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let storedRoutePlan = CanonicalRoutePlan(
+            destinationId: "100",
+            anchorEdgeIds: [Self.edgeA, Self.edgeB, Self.edgeC],
+            destinationIds: ["100", "200", "300"]
+        )
+        routePlanStore.writeRoutePlan(storedRoutePlan)
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Owner sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Middle sector", latitude: 59.91, longitude: 10.77),
+                makeDestination(id: "300", name: "Focused sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 500, destinationId: 200, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "300": [
+                    try makeTrailSegment(id: 500, destinationId: 300, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(
+                    destinationID: "300",
+                    mapRegion: nil,
+                    isPlanningModeActive: true,
+                    activeRouteOwnerDestinationID: "100"
+                )
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "300" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200", "300"] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.canonicalRoutePlan, storedRoutePlan)
+        XCTAssertTrue(apiClient.requestedDestinationIDs.contains("100"))
+        XCTAssertTrue(apiClient.requestedDestinationIDs.contains("200"))
+        XCTAssertEqual(
+            Set(viewModel.primaryTrails.compactMap(\.destinationId)),
+            Set(["100", "200", "300"]),
+            "Primary sectors must be reconstructed from restored planned sections, not first-match trail IDs"
+        )
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertNil(viewModel.routeHydrationNotice)
+    }
+
+    @MainActor
     func testIncomingUrlHydratesRouteForSharedLink() async throws {
         let suiteName = "PlanningContractTests.IncomingUrlHydratesRouteForSharedLink"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
@@ -2181,7 +2247,6 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectDestination(id: "1", manual: true)
         await waitUntil { !viewModel.primaryTrails.isEmpty }
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
 
         XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableNoActiveRoute)

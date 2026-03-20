@@ -597,12 +597,11 @@ final class BrowseViewModel: ObservableObject {
             return nil
         }
 
-        let trailsByID = allTrails.keyedByIDPreservingFirst()
         var sectionSummaries: [WatchRouteTransferSectionSummary] = []
         sectionSummaries.reserveCapacity(sections.count)
 
         for (index, section) in sections.enumerated() {
-            guard let destinationID = trailsByID[section.trailID]?.destinationId else {
+            guard let destinationID = section.destinationID else {
                 return nil
             }
 
@@ -1450,9 +1449,8 @@ final class BrowseViewModel: ObservableObject {
             return []
         }
 
-        let trailsByID = allTrails.keyedByIDPreservingFirst()
         let sectionDestinationIDs = GeoMath.planningSections(for: anchorEdgeIDs, allTrails: allTrails).compactMap { section in
-            trailsByID[section.trailID]?.destinationId
+            section.destinationID
         }
 
         return ([routeOwnerDestinationID] + sectionDestinationIDs).reduce(into: [String]()) { result, destinationID in
