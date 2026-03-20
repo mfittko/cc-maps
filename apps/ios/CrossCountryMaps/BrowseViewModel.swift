@@ -779,10 +779,6 @@ final class BrowseViewModel: ObservableObject {
             clearSelectedPlannedSection()
 
             let displayedTrails = primaryTrails + previewTrails
-            let selectedTrailDestinationID = GeoMath
-                .planningSections(for: [anchorEdgeID], allTrails: displayedTrails)
-                .first?
-                .destinationID
 
             var nextAnchorEdgeIDs = routePlan.anchorEdgeIDs
 
@@ -801,20 +797,6 @@ final class BrowseViewModel: ObservableObject {
                 reorderedAnchorEdgeIDs,
                 allTrails: displayedTrails
             )
-
-            if let selectedTrailDestinationID,
-               !selectedTrailDestinationID.isEmpty,
-               selectedTrailDestinationID != selectedDestinationID,
-               routeContainsDestination(
-                   selectedTrailDestinationID,
-                   anchorEdgeIDs: reorderedAnchorEdgeIDs,
-                   allTrails: displayedTrails
-               ) {
-                switchPrimaryDestinationPreservingRoute(
-                    to: selectedTrailDestinationID,
-                    allTrails: displayedTrails
-                )
-            }
         } else {
             selectedTrailID = trailID
             selectedTrailSegment = selection?.segment
