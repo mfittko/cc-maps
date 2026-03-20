@@ -33,10 +33,6 @@ struct PlanningPanel: View {
         displayOrderedSections
     }
 
-    private var trailsByID: [String: TrailFeature] {
-        allTrails.keyedByIDPreservingFirst()
-    }
-
     private var sectionElevationsByEdgeID: [String: SectionElevationSummary] {
         guard let elevationResponse else {
             return [:]
@@ -345,7 +341,17 @@ struct PlanningPanel: View {
     }
 
     private func trailLabel(for section: PlanningSection) -> String {
-        guard let trail = trailsByID[section.trailID] else {
+        guard let trail = allTrails.first(where: { trail in
+            guard trail.id == section.trailID else {
+                return false
+            }
+
+            if let sectionDestinationID = section.destinationID {
+                return trail.destinationId == sectionDestinationID
+            }
+
+            return true
+        }) else {
             return section.formattedDistanceLabel
         }
 

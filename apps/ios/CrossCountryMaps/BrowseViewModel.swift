@@ -779,7 +779,10 @@ final class BrowseViewModel: ObservableObject {
             clearSelectedPlannedSection()
 
             let displayedTrails = primaryTrails + previewTrails
-            let selectedTrailDestinationID = displayedTrails.first { $0.id == trailID }?.destinationId
+            let selectedTrailDestinationID = GeoMath
+                .planningSections(for: [anchorEdgeID], allTrails: displayedTrails)
+                .first?
+                .destinationID
 
             var nextAnchorEdgeIDs = routePlan.anchorEdgeIDs
 
@@ -1419,7 +1422,9 @@ final class BrowseViewModel: ObservableObject {
 
     private func replaceDisplayedTrails(with trails: [TrailFeature]) {
         let deduplicatedTrails = trails.reduce(into: [TrailFeature]()) { result, trail in
-            guard !result.contains(where: { $0.id == trail.id }) else {
+            guard !result.contains(where: {
+                $0.id == trail.id && $0.destinationId == trail.destinationId
+            }) else {
                 return
             }
 

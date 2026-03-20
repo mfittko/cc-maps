@@ -1070,6 +1070,67 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testPlanningModeExitPreservesCrossDestinationRouteWhenTrailIDsOverlap() async throws {
+        let suiteName = "PlanningContractTests.PlanningModeExitPreservesCrossDestinationRouteWhenTrailIDsOverlap"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Owner sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "300", name: "Joined sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 500, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "300": [
+                    try makeTrailSegment(id: 500, destinationId: 300, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil {
+            Set(viewModel.allTrails.compactMap(\.destinationId)) == Set(["100", "300"])
+        }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "500", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "500", anchorEdgeID: Self.edgeC, segment: nil))
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "300" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "300"]
+        }
+
+        viewModel.exitPlanningMode()
+
+        XCTAssertFalse(viewModel.isInPlanningMode)
+        XCTAssertEqual(viewModel.selectedDestinationID, "300")
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "300"])
+        XCTAssertEqual(
+            Set(viewModel.primaryTrails.compactMap(\.destinationId)),
+            Set(["100", "300"]),
+            "Planning-mode exit must keep route-participating destinations glued into the primary trail source even when trail IDs overlap"
+        )
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "300"])
+        )
+    }
+
+    @MainActor
     func testManualReselectingCurrentDestinationDoesNotClearActiveRoute() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
