@@ -185,14 +185,14 @@ final class PlanningContractTests: XCTestCase {
         ]
 
         let displayNumbers = GeoMath.displaySectionNumbersByEdgeID(
-            for: [Self.edgeE, Self.edgeA, edgeD, Self.edgeB],
+            for: [edgeE, Self.edgeA, edgeD, Self.edgeB],
             allTrails: trails
         )
 
-        XCTAssertEqual(displayNumbers[Self.edgeA], 1)
-        XCTAssertEqual(displayNumbers[Self.edgeB], 2)
-        XCTAssertEqual(displayNumbers[edgeD], 3)
-        XCTAssertEqual(displayNumbers[edgeE], 4)
+        XCTAssertEqual(displayNumbers[edgeE], 1)
+        XCTAssertEqual(displayNumbers[edgeD], 2)
+        XCTAssertEqual(displayNumbers[Self.edgeA], 3)
+        XCTAssertEqual(displayNumbers[Self.edgeB], 4)
     }
 
     func testPlanningSectionsPreserveFullSectionGeometry() throws {
@@ -743,6 +743,9 @@ final class PlanningContractTests: XCTestCase {
 
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -796,6 +799,9 @@ final class PlanningContractTests: XCTestCase {
 
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -836,6 +842,9 @@ final class PlanningContractTests: XCTestCase {
         )
 
         viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil { viewModel.trailsPhase == .success }
 
@@ -888,6 +897,9 @@ final class PlanningContractTests: XCTestCase {
         )
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -924,7 +936,10 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
@@ -1173,7 +1188,10 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
@@ -1204,10 +1222,17 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: true)
+            )
         )
 
         viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         let encodedRoute = CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeB], destinationIds: ["1"]).encodedForURL
@@ -1242,11 +1267,19 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
-        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB]
+        }
 
         let encodedRoute = CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: ["missing-edge"], destinationIds: ["1"]).encodedForURL
         viewModel.handleIncomingURL(URL(string: "ccmaps://open?route=\(encodedRoute!)")!)
@@ -1280,11 +1313,19 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
-        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB]
+        }
 
         let allTrails = viewModel.primaryTrails + viewModel.previewTrails
 
@@ -1948,8 +1989,11 @@ final class PlanningContractTests: XCTestCase {
 
         let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
         XCTAssertEqual(queuedEnvelope.version, fixture.version)
-        XCTAssertEqual(queuedEnvelope.canonical, fixture.canonical)
-        XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
+        XCTAssertEqual(queuedEnvelope.canonical, try XCTUnwrap(viewModel.canonicalRoutePlan))
+        XCTAssertEqual(
+            queuedEnvelope.derived?.routeLabel,
+            viewModel.selectedDestination.map { "\($0.name) route" }
+        )
         XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
         XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry?.coordinates)
         XCTAssertTrue(

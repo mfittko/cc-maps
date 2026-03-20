@@ -396,6 +396,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -442,6 +444,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -495,6 +499,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -581,6 +587,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -632,6 +640,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -681,6 +691,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             apiClient.callLog == [.destinations, .trails("1")]
@@ -730,6 +742,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.previewPhase == .success &&
@@ -761,6 +775,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success

@@ -916,6 +916,16 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        if selectedDestinationID == routePlan.destinationId {
+            pendingRestoreContext = resolvePendingRestoreContext(for: routePlan.destinationId)
+
+            if trailsPhase == .success {
+                schedulePreviewEvaluation()
+            }
+
+            return
+        }
+
         selectDestination(id: routePlan.destinationId, manual: true)
     }
 
