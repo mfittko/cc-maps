@@ -225,7 +225,7 @@ struct PlanningPanel: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if routeUsesPreviewDestinations {
-                Label("Includes nearby preview sectors", systemImage: "location.viewfinder")
+                Label("Includes multiple sectors", systemImage: "location.viewfinder")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
