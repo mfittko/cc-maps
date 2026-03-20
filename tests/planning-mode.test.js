@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildRouteGraph } from '../lib/route-graph.js';
-import { createRoutePlan } from '../lib/route-plan.js';
+import { createClearedRoutePlan, createRoutePlan } from '../lib/route-plan.js';
 import {
   appendRoutePlanAnchor,
+  areRequiredPreviewDestinationIdsLoaded,
   createRoutePlanGeoJson,
   findNearestRouteTraversalFeature,
   findNearestRouteGraphEdgeId,
@@ -10,6 +11,7 @@ import {
   reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
+  shouldMergePreviewTrailsIntoRouteGraph,
 } from '../lib/planning-mode.js';
 
 const graphGeoJson = {
@@ -156,6 +158,27 @@ describe('planning-mode helpers', () => {
     });
   });
 
+  describe('route-graph preview merging', () => {
+    it('merges preview trails while planning is active', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(true, [])).toBe(true);
+    });
+
+    it('merges preview trails during reload pre-hydration when planned destinations exist', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(false, ['8'])).toBe(true);
+    });
+
+    it('keeps browse mode bounded when no route is active or pending hydration', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(false, [])).toBe(false);
+    });
+
+    it('treats route-required previews as loaded when every required destination is already present', () => {
+      expect(areRequiredPreviewDestinationIdsLoaded(['8'], ['8', '9'])).toBe(true);
+      expect(areRequiredPreviewDestinationIdsLoaded([], ['8', '9'])).toBe(true);
+      expect(areRequiredPreviewDestinationIdsLoaded(['8', '10'], ['8', '9'])).toBe(false);
+      expect(areRequiredPreviewDestinationIdsLoaded(['8'], [])).toBe(false);
+    });
+  });
+
   describe('route-plan mutations', () => {
     it('appends anchors to an existing plan', () => {
       const initialPlan = createRoutePlan('7', ['edge-a']);
@@ -259,6 +282,68 @@ describe('planning-mode helpers', () => {
 
     it('returns an empty plan when removing from a missing route plan', () => {
       expect(removeRoutePlanAnchor(null, '7', 0)).toEqual(createRoutePlan('7', []));
+    });
+
+    it('preserves canonical owner when reversing a multi-destination plan regardless of browse focus', () => {
+      // When browse focus is destination '8' but the canonical owner is '7',
+      // reverseRoutePlan must be called with plan.destinationId ('7') to keep
+      // the canonical identity stable. The resulting plan must not adopt the
+      // browse-focus destination as its new owner.
+      const graph = buildRouteGraph(multiDestinationGraphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const plan = createRoutePlan('7', [edgeIds[0], edgeIds[1]], ['7', '8']);
+
+      const reversed = reverseRoutePlan(plan, plan.destinationId);
+
+      expect(reversed.destinationId).toBe('7');
+      expect(reversed.destinationIds[0]).toBe('7');
+      expect(reversed.anchorEdgeIds).toEqual([edgeIds[1], edgeIds[0]]);
+    });
+
+    it('preserves canonical owner when removing an anchor from a multi-destination plan', () => {
+      // removeRoutePlanAnchor should receive plan.destinationId as owner so
+      // the resulting plan keeps the same canonical identity after removal.
+      const graph = buildRouteGraph(multiDestinationGraphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const plan = createRoutePlan('7', [edgeIds[0], edgeIds[1]], ['7', '8']);
+
+      const trimmed = removeRoutePlanAnchor(plan, plan.destinationId, 1, graph);
+
+      expect(trimmed.destinationId).toBe('7');
+      expect(trimmed.destinationIds[0]).toBe('7');
+      expect(trimmed.anchorEdgeIds).toEqual([edgeIds[0]]);
+    });
+
+    it('preserves canonical owner when appending an anchor from the browse-focus destination', () => {
+      // appendRoutePlanAnchor must be called with plan.destinationId (the canonical
+      // owner) rather than the currently focused destination so the resulting plan
+      // keeps the same owner even when a new anchor comes from a different sector.
+      const graph = buildRouteGraph(multiDestinationGraphGeoJson);
+      const edgeIds = [...graph.edges.keys()];
+      const plan = createRoutePlan('7', [edgeIds[0]]);
+
+      // Anchor from destination '8' sector, but owner stays '7'.
+      const extended = appendRoutePlanAnchor(plan, plan.destinationId, edgeIds[1], graph);
+
+      expect(extended.destinationId).toBe('7');
+      expect(extended.destinationIds[0]).toBe('7');
+      expect(extended.anchorEdgeIds).toContain(edgeIds[1]);
+    });
+
+    it('reseeds canonical owner from the current browse focus after clearing a previous route', () => {
+      const previouslyOwnedPlan = createRoutePlan('7', ['edge-a']);
+      const clearedPlan = createClearedRoutePlan(previouslyOwnedPlan, '8');
+
+      const restartedPlan = appendRoutePlanAnchor(
+        clearedPlan,
+        clearedPlan.destinationId,
+        'edge-b'
+      );
+
+      expect(clearedPlan).toEqual(createRoutePlan('8', []));
+      expect(restartedPlan.destinationId).toBe('8');
+      expect(restartedPlan.destinationIds[0]).toBe('8');
+      expect(restartedPlan.anchorEdgeIds).toEqual(['edge-b']);
     });
   });
 

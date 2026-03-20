@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getPersistedRoutePlanSources,
   getMapViewFromValues,
   getSingleQueryValue,
   getTrailCacheStorageKey,
@@ -10,6 +11,7 @@ import {
   readStoredMapSettings,
   writeCachedTrailGeoJson,
 } from '../lib/map-persistence';
+import { createRoutePlan, writeStoredRoutePlan } from '../lib/route-plan';
 
 const storageKey = 'cc-maps:settings';
 
@@ -100,5 +102,44 @@ describe('map-persistence', () => {
     expect(readCachedTrailGeoJson('8', storageKey, 100, 100)).toBeNull();
     expect(() => persistMapSettings(storageKey, { destination: '1' })).not.toThrow();
     expect(() => writeCachedTrailGeoJson('8', { hello: 'world' }, storageKey, 100)).not.toThrow();
+  });
+
+  it('prefers the canonical route from the URL even when browse focus is on another destination', () => {
+    const routePlan = createRoutePlan('7', ['edge-a', 'edge-b'], ['7', '8']);
+
+    const persistedSources = getPersistedRoutePlanSources(
+      '2|7|7;8|edge-a,edge-b',
+      '8',
+      storageKey
+    );
+
+    expect(persistedSources.routeFromUrl).toEqual(routePlan);
+    expect(persistedSources.routeFromStorage).toBeNull();
+    expect(persistedSources.persistedRoutePlan).toEqual(routePlan);
+  });
+
+  it('falls back to destination-scoped storage when there is no route in the URL', () => {
+    const routePlan = createRoutePlan('8', ['edge-b'], ['8']);
+    writeStoredRoutePlan(routePlan, storageKey);
+
+    const persistedSources = getPersistedRoutePlanSources('', '8', storageKey);
+
+    expect(persistedSources.routeFromUrl).toBeNull();
+    expect(persistedSources.routeFromStorage).toEqual(routePlan);
+    expect(persistedSources.persistedRoutePlan).toEqual(routePlan);
+  });
+
+  it('restores the active stored route when browse focus differs from the canonical owner', () => {
+    const browseFocusPlan = createRoutePlan('8', ['edge-b'], ['8']);
+    const canonicalRoutePlan = createRoutePlan('7', ['edge-a'], ['7', '8']);
+
+    writeStoredRoutePlan(browseFocusPlan, storageKey);
+    writeStoredRoutePlan(canonicalRoutePlan, storageKey);
+
+    const persistedSources = getPersistedRoutePlanSources('', '8', storageKey);
+
+    expect(persistedSources.routeFromUrl).toBeNull();
+    expect(persistedSources.routeFromStorage).toEqual(canonicalRoutePlan);
+    expect(persistedSources.persistedRoutePlan).toEqual(canonicalRoutePlan);
   });
 });
