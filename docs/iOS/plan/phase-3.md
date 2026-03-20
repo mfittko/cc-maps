@@ -7,8 +7,8 @@ Phase 3 is complete.
 Closeout scope delivered:
 
 1. Native iPhone browse-and-inspect flow under `apps/ios/` with destination-first loading, manual destination selection stabilization, destination-scoped primary trail loading, bounded nearby previews, inspect-first trail tapping, and a map-first SwiftUI plus MapKit presentation.
-2. Shared fixture-backed parity coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail categories, interval-aware trail inspection, and whole-feature inspection fallback.
-3. Native XCTest coverage for fallback destination selection, trail-proximity auto-selection, bounded nearby previews, trail-detail labels, bootstrap request order, manual-selection lockout, stale primary-response invalidation, and fit-trigger stability during nearby preview loading.
+2. Shared fixture-backed parity coverage for trail-proximity auto-selection, bounded nearby previews, trail-detail categories, interval-aware trail inspection, and whole-feature inspection fallback.
+3. Native XCTest coverage for trail-proximity auto-selection, bounded nearby previews, trail-detail labels, bootstrap request order, manual-selection lockout, stale primary-response invalidation, and fit-trigger stability during nearby preview loading.
 4. iPhone simulator validation against the checked-in Xcode project and the local Next.js API surface.
 
 ## 1. Refined problem statement
@@ -37,8 +37,8 @@ In scope for this phase:
 2. App bootstrap that starts in a destination-first state with no trail overlays loaded.
 3. Initial fetch of active destinations from the existing `GET /api/destinations` route.
 4. Automatic initial destination resolution when the user has not explicitly chosen a destination in the current session.
-5. Foreground geolocation-based nearest-destination selection that follows the current web behavior closely enough to preserve parity.
-6. Fallback destination selection based on the default Oslo-region reference when geolocation is unavailable or denied.
+5. Foreground geolocation-based destination selection derived from current-location trail proximity, with nearest-trail resolution when multiple nearby trail candidates exist.
+6. No destination-center fallback when geolocation is unavailable, denied, or does not produce a trail match; the app remains destination-first until location data or an explicit manual choice resolves selection.
 7. Manual destination selection from a native destination control and from tappable map destination annotations.
 8. Manual-selection stabilization so later automatic location updates do not switch destinations unless the user explicitly chooses another destination.
 9. Selected-destination trail fetching through the existing `GET /api/trails?destinationid=<id>` route only.
@@ -99,8 +99,8 @@ Required bootstrap sequence:
 3. Do not request trails before destination resolution has completed.
 4. Resolve the active destination using this precedence:
 	- explicit manual destination already chosen in the current session, if any
-	- automatic nearest-destination resolution from foreground geolocation when no manual choice exists
-	- fallback destination nearest the default Oslo-centered reference if geolocation is unavailable, denied, or times out
+	- automatic trail-proximity destination resolution from foreground geolocation when no manual choice exists
+	- no automatic selection if foreground geolocation is unavailable, denied, times out, or produces no trail match
 5. Once one active destination is resolved, request trails only for that destination.
 6. Only after primary trails are loaded should nearby preview logic become eligible to run.
 
@@ -240,7 +240,7 @@ Required evidence package:
 1. The app launches into the destination-first model, with destinations requested before any trail request.
 2. Destinations load before trails.
 3. Trail requests remain destination-scoped in the intended flow.
-4. The initial active destination is resolved from foreground geolocation when no explicit manual destination has been chosen in the current session, with fallback to the default Oslo-region reference when geolocation is unavailable.
+4. The initial active destination is resolved from foreground geolocation when no explicit manual destination has been chosen in the current session, using current-location trail proximity rather than destination-center proximity.
 5. Manual destination choice remains explicit.
 6. Manual destination selection stabilizes the current context.
 7. Once a destination is selected, the app loads only that destination's trails in the normal flow.
@@ -280,7 +280,7 @@ Required evidence package:
 ### 7.2 Destination-selection parity validation
 
 1. Verify nearest-destination auto-selection against shared location fixtures and the current web selection behavior.
-2. Verify fallback selection when geolocation is unavailable or denied.
+2. Verify that unavailable or denied geolocation does not fall back to destination-center proximity.
 3. Verify that a manual destination choice from the native picker suppresses later automatic destination switching.
 4. Verify that a manual destination choice from a map destination annotation behaves the same way.
 5. Keep the early fixture-backed browse contract under `tests/fixtures/browse-contract/` and validate it with `tests/browse-contract.test.js` so native parity work starts from the shipped web outcomes rather than reinterpreting them ad hoc.
@@ -340,7 +340,7 @@ Known Phase 3 simplifications retained intentionally:
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
 | `MapKit` limitations or native interaction differences tempt a product redesign too early. | Phase 3 stops being a clone proof and becomes a prototype drift point. | Optimize for behavioral parity, not visual sameness. Treat interaction redesign as out of scope unless a native platform constraint makes parity impossible. |
-| Automatic destination logic drifts from the web selection model. | The iPhone client stops feeling like the same product and becomes harder to compare objectively. | Use fixture-backed parity checks for nearest-destination selection, geolocation fallback, and manual-selection lockout. |
+| Automatic destination logic drifts from the intended trail-proximity model. | The iPhone client stops feeling like the same product and becomes harder to reason about. | Use fixture-backed parity checks for trail-proximity selection, no center-based fallback, and manual-selection lockout. |
 | Trail loading broadens beyond the selected destination. | Performance boundaries and backend assumptions break immediately. | Treat destination-first loading as a release blocker. Assert that the normal path never issues an unbounded `/api/trails` request. |
 | Nearby previews accidentally become primary behavior. | The browse MVP regresses into multi-destination trail fan-out. | Keep preview radius, preview count, and preview styling explicitly bounded. Do not allow preview loads to auto-promote selection. |
 | `MapKit` overlay updates become expensive or unstable. | Native browsing becomes sluggish and creates the wrong baseline for planning work. | Separate primary, preview, and selected-trail overlay concerns. Update only the overlay sets that changed. |
@@ -411,7 +411,7 @@ Known Phase 3 simplifications retained intentionally:
 | Platform stack | Use `SwiftUI` and `MapKit` for the iPhone browse MVP. | Matches the accepted Apple stack and keeps the platform substitution explicit. |
 | Backend boundary | Keep all destination and trail access behind the existing Next.js API routes. | Preserves request validation, cache behavior, and contract ownership. |
 | Bootstrap order | The app must request destinations before it requests any trails. | This preserves the destination-first performance boundary. |
-| Initial destination resolution | Use foreground geolocation when no manual destination exists, then fall back to the default Oslo-region reference. | Matches the current web behavior closely enough for objective parity checks. |
+| Initial destination resolution | Use foreground geolocation and trail proximity when no manual destination exists; do not fall back to destination-center proximity. | Keeps runtime selection tied to the actual trail network and avoids contradictory auto-selection rules. |
 | Manual-selection stabilization | A manual destination choice suppresses later automatic destination switching for the current session. | This is core product behavior and must remain stable before planning is added. |
 | Trail request scope | The normal browse path uses only destination-scoped trail requests. | Prevents regression into broad trail fan-out. |
 | Nearby previews | Nearby preview behavior is in scope only as a bounded secondary enhancement. | It is shipped web behavior, but it must stay radius-limited, capped, and visually subordinate. |
