@@ -150,10 +150,9 @@ struct ContentView: View {
                             .foregroundStyle(.red)
                     }
                 }
-                .padding(.top, 30)
+                .padding(.top, 40)
                 .padding(.horizontal, 14)
                 .padding(.bottom, 14)
-                .padding(.top, 10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)

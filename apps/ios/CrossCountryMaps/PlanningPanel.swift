@@ -211,7 +211,7 @@ struct PlanningPanel: View {
             HStack(spacing: 8) {
                 summaryChip(label: routeSummary.formattedDistanceLabel, systemImage: "ruler")
                 summaryChip(
-                    label: "\(routeSummary.sectionCount)",
+                    label: routeSummary.sectionCount == 1 ? "1 section" : "\(routeSummary.sectionCount) sections",
                     systemImage: "point.topleft.down.to.point.bottomright.curvepath"
                 )
                 if let elevationLabel = routeSummary.formattedElevationLabel {
