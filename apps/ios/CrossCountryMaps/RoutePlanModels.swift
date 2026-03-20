@@ -278,6 +278,92 @@ struct CanonicalRoutePlan: Codable, Equatable {
     }
 }
 
+struct WatchRouteTransferEnvelope: Codable, Equatable {
+    static let currentVersion = 2
+
+    let version: Int
+    let canonical: CanonicalRoutePlan
+    let derived: WatchRouteTransferDerivedPayload?
+
+    init(canonical: CanonicalRoutePlan, derived: WatchRouteTransferDerivedPayload?) {
+        version = Self.currentVersion
+        self.canonical = canonical
+        self.derived = derived
+    }
+}
+
+struct WatchRouteTransferDerivedPayload: Codable, Equatable {
+    let routeLabel: String?
+    let routeGeometry: WatchRouteTransferGeometry?
+    let totalDistanceKm: Double?
+    let elevationGainM: Double?
+    let elevationLossM: Double?
+    let sectionSummaries: [WatchRouteTransferSectionSummary]
+}
+
+struct WatchRouteTransferGeometry: Codable, Equatable {
+    let type: String
+    let coordinates: [[Double]]
+}
+
+struct WatchRouteTransferSectionSummary: Codable, Equatable {
+    let anchorEdgeId: String
+    let destinationId: String
+    let distanceKm: Double
+    let label: String?
+}
+
+enum WatchRouteTransferAvailability: Equatable {
+    case unavailableNoPairedWatch
+    case unavailableWatchAppMissing
+    case unavailableNoActiveRoute
+    case temporarilyUnavailableSessionNotReady
+    case ready
+}
+
+enum WatchRouteTransferSendState: Equatable {
+    case idle
+    case pending(transferID: String)
+    case success(transferID: String)
+    case failure(String)
+}
+
+struct WatchRouteTransferSessionState: Equatable {
+    let isSupported: Bool
+    let isPaired: Bool
+    let isWatchAppInstalled: Bool
+    let isSessionReady: Bool
+
+    static let unsupported = WatchRouteTransferSessionState(
+        isSupported: false,
+        isPaired: false,
+        isWatchAppInstalled: false,
+        isSessionReady: false
+    )
+}
+
+enum WatchRouteTransferAcknowledgementResult: String, Codable, Equatable {
+    case success = "acknowledged-success"
+    case invalidPayload = "acknowledged-rejected-invalid-payload"
+    case persistenceFailure = "acknowledged-persistence-failure"
+
+    var failureMessage: String? {
+        switch self {
+        case .success:
+            return nil
+        case .invalidPayload:
+            return "The watch rejected this route payload."
+        case .persistenceFailure:
+            return "The watch received the route but could not store it."
+        }
+    }
+}
+
+struct WatchRouteTransferAcknowledgement: Equatable {
+    let transferID: String
+    let result: WatchRouteTransferAcknowledgementResult
+}
+
 enum RoutePlanHydrationStatus: String, Equatable {
     case ok
     case partial

@@ -115,7 +115,7 @@ struct ContentView: View {
                         }
                         .padding(.horizontal, 14)
                         .padding(.vertical, 12)
-                        .background(Color.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .background(Color(.secondarySystemGroupedBackground).opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                     }
                     .buttonStyle(.plain)
 
@@ -186,6 +186,14 @@ struct ContentView: View {
                 onExitPlanning: { viewModel.exitPlanningMode() },
                 onShareRoute: { presentRouteShareSheet() },
                 onExportGpx: { presentGpxExportSheet() },
+                watchTransferAvailability: viewModel.watchTransferAvailability,
+                watchTransferSendState: viewModel.watchTransferSendState,
+                watchTransferStatusTitle: viewModel.watchTransferStatusTitle,
+                watchTransferStatusMessage: viewModel.watchTransferStatusMessage,
+                watchTransferShouldShowSendButton: viewModel.watchTransferShouldShowSendButton,
+                watchTransferButtonLabel: viewModel.watchTransferButtonLabel,
+                canSendToWatch: viewModel.canSendRouteToWatch,
+                onSendToWatch: { viewModel.sendRouteToWatch() },
                 onReverse: { viewModel.reverseRoute() },
                 onClear: { viewModel.clearRoute() },
                 onRemove: { edgeID in viewModel.removeRouteAnchor(edgeID: edgeID) },
@@ -488,7 +496,7 @@ private struct TrailDetailCard: View {
             .minimumScaleFactor(0.85)
             .padding(.horizontal, compact ? 8 : 10)
             .padding(.vertical, compact ? 7 : 8)
-            .background(Color.white.opacity(0.82), in: Capsule())
+            .background(Color(.secondarySystemGroupedBackground).opacity(0.82), in: Capsule())
     }
 }
 

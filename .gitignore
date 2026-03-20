@@ -33,3 +33,5 @@ apps/ios/**/*.xcuserstate
 .DS_Store
 
 .build/
+build/
+dist/
