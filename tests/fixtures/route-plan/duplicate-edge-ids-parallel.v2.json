@@ -1,0 +1,21 @@
+{
+  "description": "Anchor edge IDs with the :2 suffix (parallel edges between the same node pair, as produced by lib/route-graph.js for parallel trail segments) round-trip unchanged through compact URL encoding, local storage, and hydration against a graph that contains the suffixed parallel edge.",
+  "canonical": {
+    "version": 2,
+    "destinationId": "100",
+    "destinationIds": ["100"],
+    "anchorEdgeIds": [
+      "10.750000:59.910000~10.760000:59.910000",
+      "10.750000:59.910000~10.760000:59.910000:2"
+    ]
+  },
+  "expectedUrl": "2|100|100|10.750000:59.910000~10.760000:59.910000,10.750000:59.910000~10.760000:59.910000:2",
+  "expectedHydration": {
+    "status": "ok",
+    "validAnchorEdgeIds": [
+      "10.750000:59.910000~10.760000:59.910000",
+      "10.750000:59.910000~10.760000:59.910000:2"
+    ],
+    "staleAnchorEdgeIds": []
+  }
+}

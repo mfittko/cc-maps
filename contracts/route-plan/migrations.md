@@ -73,6 +73,16 @@ The shared contract rejects:
 3. empty anchor identifiers
 4. coordinate-heavy payloads presented as canonical state
 
+## Browse-focus changes are not migrations
+
+Canonical route identity is not affected by browse-focus changes. This is Option A from RFC mfittko/cc-maps#44 and is a no-migration decision.
+
+1. Changing the selected destination in the UI is a browse-focus change, not a route-owner change.
+2. A focus change must not mutate canonical `destinationId`.
+3. A focus change must not reorder `destinationIds` or alter `anchorEdgeIds`.
+4. No storage-key migration, no URL share-format migration, and no watch-envelope redesign is required when focus changes.
+5. Implementations must distinguish `destinationId` (stable route owner, fixed at route creation) from the currently selected or focused destination (derived UI state).
+
 ## Export boundary
 
 `GPX` remains export output generated from resolved route features.

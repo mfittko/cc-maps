@@ -69,6 +69,38 @@ const parityGeoJson = {
   ],
 };
 
+// Two features sharing the same endpoint node pair produce one base edge and
+// one parallel `:2` edge.  Feature 2 arcs north to ensure no internal crossing
+// is introduced, keeping each feature as a single un-split graph edge.
+const parallelEdgeGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 1, destinationid: 100, trailtypesymbol: 30, prepsymbol: 20 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.75, 59.91],
+          [10.76, 59.91],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 2, destinationid: 100, trailtypesymbol: 30, prepsymbol: 20 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.75, 59.91],
+          [10.755, 59.92],
+          [10.76, 59.91],
+        ],
+      },
+    },
+  ],
+};
+
 describe('route-plan contract fixtures', () => {
   beforeEach(() => {
     global.window = {
@@ -167,5 +199,68 @@ describe('route-plan contract fixtures', () => {
 
     expect(canonicalFromDerived).toEqual(fixture.canonical);
     expect(fixture.derived.routeGeometry.coordinates.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('preserves canonical owner, owner-first destinationIds, and anchors when browse focus changes', () => {
+    const fixture = readFixture('focus-change-stable-owner.v2.json');
+
+    expect(fixture.canonicalOwner).toEqual(fixture.expectedCanonicalAfterFocusChange);
+    expect(fixture.canonicalOwner.destinationId).toBe('100');
+    expect(fixture.canonicalOwner.destinationIds[0]).toBe(fixture.canonicalOwner.destinationId);
+    expect(fixture.canonicalOwner.destinationId).not.toBe(fixture.browseFocusDestinationId);
+    expect(encodeRoutePlanToUrl(fixture.canonicalOwner)).toBe(fixture.expectedUrlAfterFocusChange);
+    expect(decodeRoutePlanFromUrl(fixture.expectedUrlAfterFocusChange)).toEqual(fixture.canonicalOwner);
+  });
+
+  it('round-trips duplicate edge IDs with :2 suffix unchanged through compact URL encoding', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+
+    expect(encodeRoutePlanToUrl(fixture.canonical)).toBe(fixture.expectedUrl);
+    expect(decodeRoutePlanFromUrl(fixture.expectedUrl)).toEqual(fixture.canonical);
+  });
+
+  it('round-trips duplicate edge IDs with :2 suffix unchanged through local storage', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+
+    window.localStorage.setItem(
+      `${storageKey}:plan:${fixture.canonical.destinationId}`,
+      JSON.stringify(fixture.canonical)
+    );
+
+    expect(readStoredRoutePlan(fixture.canonical.destinationId, storageKey)).toEqual(fixture.canonical);
+  });
+
+  it('hydrates duplicate edge IDs with :2 suffix as valid anchors against a graph containing the parallel edge', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+    const graph = buildRouteGraph(parallelEdgeGeoJson);
+
+    expect(graph.edges.has('10.750000:59.910000~10.760000:59.910000')).toBe(true);
+    expect(graph.edges.has('10.750000:59.910000~10.760000:59.910000:2')).toBe(true);
+    expect(hydrateRoutePlan(fixture.canonical, graph)).toEqual(fixture.expectedHydration);
+  });
+
+  it('treats all anchors as stale when no graph is available and keeps them visible', () => {
+    const fixture = readFixture('canonical-single-destination.v2.json');
+    const result = hydrateRoutePlan(fixture, null);
+
+    expect(result.status).toBe('empty');
+    expect(result.validAnchorEdgeIds).toEqual([]);
+    expect(result.staleAnchorEdgeIds).toEqual(fixture.anchorEdgeIds);
+    expect(result.staleAnchorEdgeIds.length).toBeGreaterThan(0);
+  });
+
+  it('distinguishes all-stale hydration (no graph) from a user-created empty route', () => {
+    const fixtureWithAnchors = readFixture('canonical-single-destination.v2.json');
+    const emptyFixture = readFixture('canonical-empty-anchors.v2.json');
+    const graph = buildRouteGraph(parityGeoJson);
+
+    const allStaleResult = hydrateRoutePlan(fixtureWithAnchors, null);
+    const userEmptyResult = hydrateRoutePlan(emptyFixture, graph);
+
+    expect(allStaleResult.status).toBe('empty');
+    expect(allStaleResult.staleAnchorEdgeIds.length).toBeGreaterThan(0);
+
+    expect(userEmptyResult.status).toBe('empty');
+    expect(userEmptyResult.staleAnchorEdgeIds).toEqual([]);
   });
 });
