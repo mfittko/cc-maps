@@ -42,6 +42,7 @@ import {
 } from '../lib/planning-mode';
 import {
   clearStoredRoutePlan,
+  createClearedRoutePlan,
   createRoutePlan,
   decodeRoutePlanFromUrl,
   encodeRoutePlanToUrl,
@@ -746,9 +747,10 @@ export default function Home() {
   }
 
   function handleClearPlan() {
-    const ownerDestinationId = routePlan?.destinationId || selectedDestinationId;
+    const previousOwnerDestinationId = routePlan?.destinationId || selectedDestinationId;
+    const clearedRoutePlan = createClearedRoutePlan(routePlan, selectedDestinationId);
 
-    if (!ownerDestinationId) {
+    if (!previousOwnerDestinationId || !clearedRoutePlan) {
       return;
     }
 
@@ -760,7 +762,8 @@ export default function Home() {
       return;
     }
 
-    setRoutePlan(createRoutePlan(ownerDestinationId, []));
+    clearStoredRoutePlan(previousOwnerDestinationId, MAP_SETTINGS_STORAGE_KEY);
+    setRoutePlan(clearedRoutePlan);
   }
 
   function handleReverseRoute() {

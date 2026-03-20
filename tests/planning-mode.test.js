@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRouteGraph } from '../lib/route-graph.js';
-import { createRoutePlan } from '../lib/route-plan.js';
+import { createClearedRoutePlan, createRoutePlan } from '../lib/route-plan.js';
 import {
   appendRoutePlanAnchor,
   areRequiredPreviewDestinationIdsLoaded,
@@ -328,6 +328,22 @@ describe('planning-mode helpers', () => {
       expect(extended.destinationId).toBe('7');
       expect(extended.destinationIds[0]).toBe('7');
       expect(extended.anchorEdgeIds).toContain(edgeIds[1]);
+    });
+
+    it('reseeds canonical owner from the current browse focus after clearing a previous route', () => {
+      const previouslyOwnedPlan = createRoutePlan('7', ['edge-a']);
+      const clearedPlan = createClearedRoutePlan(previouslyOwnedPlan, '8');
+
+      const restartedPlan = appendRoutePlanAnchor(
+        clearedPlan,
+        clearedPlan.destinationId,
+        'edge-b'
+      );
+
+      expect(clearedPlan).toEqual(createRoutePlan('8', []));
+      expect(restartedPlan.destinationId).toBe('8');
+      expect(restartedPlan.destinationIds[0]).toBe('8');
+      expect(restartedPlan.anchorEdgeIds).toEqual(['edge-b']);
     });
   });
 
