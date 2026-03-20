@@ -231,7 +231,7 @@ The planner may span nearby preview sectors only when the current product alread
 
 Required participation rules:
 
-1. The primary selected destination remains the main planning context.
+1. The selected destination drives the active planning UI and trail-loading context. It is browse focus, not canonical route ownership. The canonical `destinationId` (route owner) is fixed at route creation and does not change when the user browses a different destination.
 2. Nearby preview sectors may participate only when they are already part of the bounded preview set or explicitly required to rehydrate a shared or persisted route.
 3. The route must not widen into arbitrary destination discovery beyond the selected destination plus required preview sectors.
 4. Hydration of a shared or persisted route may request only the additional destination sectors named by canonical route state.

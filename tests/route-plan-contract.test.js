@@ -168,4 +168,58 @@ describe('route-plan contract fixtures', () => {
     expect(canonicalFromDerived).toEqual(fixture.canonical);
     expect(fixture.derived.routeGeometry.coordinates.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('preserves canonical owner, owner-first destinationIds, and anchors when browse focus changes', () => {
+    const fixture = readFixture('focus-change-stable-owner.v2.json');
+
+    expect(fixture.canonicalOwner).toEqual(fixture.expectedCanonicalAfterFocusChange);
+    expect(fixture.canonicalOwner.destinationId).toBe('100');
+    expect(fixture.canonicalOwner.destinationIds[0]).toBe(fixture.canonicalOwner.destinationId);
+    expect(fixture.canonicalOwner.destinationId).not.toBe(fixture.browseFocusDestinationId);
+    expect(encodeRoutePlanToUrl(fixture.canonicalOwner)).toBe(fixture.expectedUrlAfterFocusChange);
+    expect(decodeRoutePlanFromUrl(fixture.expectedUrlAfterFocusChange)).toEqual(fixture.canonicalOwner);
+  });
+
+  it('round-trips duplicate edge IDs with :2 suffix unchanged through compact URL encoding', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+
+    expect(encodeRoutePlanToUrl(fixture.canonical)).toBe(fixture.expectedUrl);
+    expect(decodeRoutePlanFromUrl(fixture.expectedUrl)).toEqual(fixture.canonical);
+  });
+
+  it('round-trips duplicate edge IDs with :2 suffix unchanged through local storage', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+
+    window.localStorage.setItem(
+      `${storageKey}:plan:${fixture.canonical.destinationId}`,
+      JSON.stringify(fixture.canonical)
+    );
+
+    expect(readStoredRoutePlan(fixture.canonical.destinationId, storageKey)).toEqual(fixture.canonical);
+  });
+
+  it('treats all anchors as stale when no graph is available and keeps them visible', () => {
+    const fixture = readFixture('canonical-single-destination.v2.json');
+    const result = hydrateRoutePlan(fixture, null);
+
+    expect(result.status).toBe('empty');
+    expect(result.validAnchorEdgeIds).toEqual([]);
+    expect(result.staleAnchorEdgeIds).toEqual(fixture.anchorEdgeIds);
+    expect(result.staleAnchorEdgeIds.length).toBeGreaterThan(0);
+  });
+
+  it('distinguishes all-stale hydration (no graph) from a user-created empty route', () => {
+    const fixtureWithAnchors = readFixture('canonical-single-destination.v2.json');
+    const emptyFixture = readFixture('canonical-empty-anchors.v2.json');
+    const graph = buildRouteGraph(parityGeoJson);
+
+    const allStaleResult = hydrateRoutePlan(fixtureWithAnchors, null);
+    const userEmptyResult = hydrateRoutePlan(emptyFixture, graph);
+
+    expect(allStaleResult.status).toBe('empty');
+    expect(allStaleResult.staleAnchorEdgeIds.length).toBeGreaterThan(0);
+
+    expect(userEmptyResult.status).toBe('empty');
+    expect(userEmptyResult.staleAnchorEdgeIds).toEqual([]);
+  });
 });

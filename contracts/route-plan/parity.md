@@ -23,6 +23,8 @@ This document ties the shared contract fixtures to current shipped web behavior.
 | `invalid-future-version.json` | Unsupported future version rejection | Reject unsupported versions rather than guessing |
 | `invalid-bad-destination-ids.json` | Invalid numeric-string destination ids | Reject malformed canonical payloads |
 | `invalid-empty-anchor-entry.json` | Empty anchor identifier rejection | Reject malformed anchor lists consistently across storage and URL semantics |
+| `focus-change-stable-owner.v2.json` | Browse-focus change does not mutate canonical route owner | `destinationId` and owner-first `destinationIds` are unchanged after a focus change; Option A invariant |
+| `duplicate-edge-ids-parallel.v2.json` | Parallel edge IDs with `:2` suffix round-trip unchanged | Suffixed edge ids survive compact URL encoding and local-storage round-trips without modification |
 
 ## Parity conclusions
 
@@ -31,3 +33,5 @@ This document ties the shared contract fixtures to current shipped web behavior.
 3. Deterministic edge ids remain graph-derived coordinate-pair ids from `lib/route-graph.js`.
 4. Hydration remains strictly `ok`, `partial`, or `empty`.
 5. `GPX` remains derived export output and is outside the contract boundary.
+6. `destinationId` is the stable route owner for the lifetime of a route. Browse-focus changes (selected destination) are derived, non-canonical UI state and must not mutate canonical route identity.
+7. Parallel edge IDs with suffixes such as `:2` are valid anchor identifiers and must survive all persistence, URL, and hydration paths unchanged.

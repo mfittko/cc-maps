@@ -15,14 +15,25 @@ The authoritative route identity remains compact and limited to four fields:
 
 Anything else remains derived and non-authoritative.
 
+## Route ownership versus browse focus
+
+`destinationId` is the stable route owner for the lifetime of a canonical route.
+
+1. Setting `destinationId` at route creation fixes the route owner.
+2. Changing browse focus (the currently selected destination in the UI) does not mutate canonical `destinationId`.
+3. `destinationIds` always lists the route owner first. Its first element must equal `destinationId`.
+4. Browse-focus changes are derived, non-canonical UI state. They must never alter `destinationId`, reorder `destinationIds`, or mutate `anchorEdgeIds`.
+
+This is Option A from RFC mfittko/cc-maps#44 and requires no canonical version bump, no storage-key migration, no share-format migration, and no watch-envelope redesign.
+
 ## Canonical payload
 
 Canonical payload file: `schema/route-plan-canonical.v2.schema.json`
 
 Canonical route identity rules:
 
-1. `destinationId` is the primary destination and must be a numeric string.
-2. `destinationIds` is the ordered, unique set of participating destination ids with the primary destination first.
+1. `destinationId` is the primary destination, the stable route owner, and must be a numeric string.
+2. `destinationIds` is the ordered, unique set of participating destination ids with the route owner (`destinationId`) first.
 3. `anchorEdgeIds` is the ordered list of deterministic graph edge ids in user-visible route order.
 4. Canonical payloads must not embed route polylines, route summaries, GPX content, or watch-only display state.
 
