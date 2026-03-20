@@ -69,6 +69,38 @@ const parityGeoJson = {
   ],
 };
 
+// Two features sharing the same endpoint node pair produce one base edge and
+// one parallel `:2` edge.  Feature 2 arcs north to ensure no internal crossing
+// is introduced, keeping each feature as a single un-split graph edge.
+const parallelEdgeGeoJson = {
+  type: 'FeatureCollection',
+  features: [
+    {
+      type: 'Feature',
+      properties: { id: 1, destinationid: 100, trailtypesymbol: 30, prepsymbol: 20 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.75, 59.91],
+          [10.76, 59.91],
+        ],
+      },
+    },
+    {
+      type: 'Feature',
+      properties: { id: 2, destinationid: 100, trailtypesymbol: 30, prepsymbol: 20 },
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [10.75, 59.91],
+          [10.755, 59.92],
+          [10.76, 59.91],
+        ],
+      },
+    },
+  ],
+};
+
 describe('route-plan contract fixtures', () => {
   beforeEach(() => {
     global.window = {
@@ -196,6 +228,15 @@ describe('route-plan contract fixtures', () => {
     );
 
     expect(readStoredRoutePlan(fixture.canonical.destinationId, storageKey)).toEqual(fixture.canonical);
+  });
+
+  it('hydrates duplicate edge IDs with :2 suffix as valid anchors against a graph containing the parallel edge', () => {
+    const fixture = readFixture('duplicate-edge-ids-parallel.v2.json');
+    const graph = buildRouteGraph(parallelEdgeGeoJson);
+
+    expect(graph.edges.has('10.750000:59.910000~10.760000:59.910000')).toBe(true);
+    expect(graph.edges.has('10.750000:59.910000~10.760000:59.910000:2')).toBe(true);
+    expect(hydrateRoutePlan(fixture.canonical, graph)).toEqual(fixture.expectedHydration);
   });
 
   it('treats all anchors as stale when no graph is available and keeps them visible', () => {
