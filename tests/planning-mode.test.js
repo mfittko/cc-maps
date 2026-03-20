@@ -10,6 +10,7 @@ import {
   reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
+  shouldMergePreviewTrailsIntoRouteGraph,
 } from '../lib/planning-mode.js';
 
 const graphGeoJson = {
@@ -153,6 +154,20 @@ describe('planning-mode helpers', () => {
           originalEvent: { ctrlKey: false, metaKey: true },
         })
       ).toBe(false);
+    });
+  });
+
+  describe('route-graph preview merging', () => {
+    it('merges preview trails while planning is active', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(true, [])).toBe(true);
+    });
+
+    it('merges preview trails during reload pre-hydration when planned destinations exist', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(false, ['8'])).toBe(true);
+    });
+
+    it('keeps browse mode bounded when no route is active or pending hydration', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(false, [])).toBe(false);
     });
   });
 

@@ -23,6 +23,7 @@ import {
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
 import {
+  getPersistedRoutePlanSources,
   readCachedTrailGeoJson,
   isPlanningModeQueryValue,
   writeCachedTrailGeoJson,
@@ -36,6 +37,7 @@ import {
   reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
+  shouldMergePreviewTrailsIntoRouteGraph,
 } from '../lib/planning-mode';
 import {
   clearStoredRoutePlan,
@@ -43,7 +45,6 @@ import {
   decodeRoutePlanFromUrl,
   encodeRoutePlanToUrl,
   hydrateRoutePlan,
-  readStoredRoutePlan,
   shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
 } from '../lib/route-plan';
@@ -447,12 +448,12 @@ export default function Home() {
     [trailsGeoJson, suggestedTrailsGeoJson]
   );
   const routeGraphTrailsGeoJson = useMemo(() => {
-    if (!isPlanning) {
+    if (!shouldMergePreviewTrailsIntoRouteGraph(isPlanning, plannedDestinationIds)) {
       return trailsGeoJson;
     }
 
     return mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]);
-  }, [isPlanning, trailsGeoJson, suggestedTrailsGeoJson]);
+  }, [isPlanning, plannedDestinationIds, trailsGeoJson, suggestedTrailsGeoJson]);
   const routeTraversalGeoJson = useMemo(
     () => createRoutePlanGeoJson(routePlan, routeGraph).traversal,
     [routeGraph, routePlan]
@@ -972,16 +973,11 @@ export default function Home() {
 
     const searchParams =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const routeFromUrl = decodeRoutePlanFromUrl(
-      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    const { persistedRoutePlan } = getPersistedRoutePlanSources(
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route),
+      selectedDestinationId,
+      MAP_SETTINGS_STORAGE_KEY
     );
-    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
-    const persistedRoutePlan =
-      routeFromUrl?.destinationId === selectedDestinationId
-        ? routeFromUrl
-        : routeFromStorage?.destinationId === selectedDestinationId
-          ? routeFromStorage
-          : null;
 
     setPlannedDestinationIds(
       getPreviewDestinationIds(persistedRoutePlan?.destinationIds || [], selectedDestinationId)
@@ -995,16 +991,13 @@ export default function Home() {
 
     const searchParams =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const routeFromUrl = decodeRoutePlanFromUrl(
-      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    const routeQueryValue =
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route);
+    const { routeFromUrl, persistedRoutePlan: nextRoutePlan } = getPersistedRoutePlanSources(
+      routeQueryValue,
+      selectedDestinationId,
+      MAP_SETTINGS_STORAGE_KEY
     );
-    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
-    const nextRoutePlan =
-      routeFromUrl?.destinationId === selectedDestinationId
-        ? routeFromUrl
-        : routeFromStorage?.destinationId === selectedDestinationId
-          ? routeFromStorage
-          : null;
     const requiredPreviewDestinationIds = getPreviewDestinationIds(
       nextRoutePlan?.destinationIds || [],
       selectedDestinationId
