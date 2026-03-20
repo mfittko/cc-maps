@@ -1770,6 +1770,45 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testWatchTransferUnavailableWhenASectionCannotResolveDestinationID() async throws {
+        let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let watchTransferService = WatchRouteTransferServiceSpy(
+            sessionState: .init(isSupported: true, isPaired: true, isWatchAppInstalled: true, isSessionReady: true)
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(
+                destinationsResponse: [makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522)],
+                trailsByDestination: [
+                    "1": [
+                        try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                        try makeTrailSegmentWithoutDestinationID(id: 102, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                    ],
+                ]
+            ),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: routePlanUserDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(),
+            watchTransferService: watchTransferService
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { !viewModel.primaryTrails.isEmpty }
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
+
+        XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableNoActiveRoute)
+
+        viewModel.sendRouteToWatch()
+
+        XCTAssertEqual(viewModel.watchTransferSendState, .failure("Add a route before sending it to Apple Watch."))
+        XCTAssertNil(watchTransferService.lastQueuedEnvelope)
+    }
+
+    @MainActor
     func testWatchTransferSendTransitionsPendingThenSuccessAfterAcknowledgement() async throws {
         let routePlanUserDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
         let watchTransferService = WatchRouteTransferServiceSpy(
@@ -1980,6 +2019,36 @@ private func makeTrailSegment(
         "properties": [
             "id": id,
             "destinationid": destinationId,
+            "trailtypesymbol": 30,
+            "prepsymbol": 20,
+            "has_classic": true,
+            "has_skating": true,
+            "st_length(shape)": 1000,
+        ],
+        "geometry": [
+            "type": "LineString",
+            "coordinates": [
+                [startLongitude, startLatitude],
+                [endLongitude, endLatitude],
+            ],
+        ],
+    ]
+
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return try JSONDecoder().decode(TrailFeature.self, from: data)
+}
+
+private func makeTrailSegmentWithoutDestinationID(
+    id: Int,
+    startLongitude: Double,
+    startLatitude: Double,
+    endLongitude: Double,
+    endLatitude: Double
+) throws -> TrailFeature {
+    let object: [String: Any] = [
+        "type": "Feature",
+        "properties": [
+            "id": id,
             "trailtypesymbol": 30,
             "prepsymbol": 20,
             "has_classic": true,

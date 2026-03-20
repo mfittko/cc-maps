@@ -1,6 +1,7 @@
 import CoreLocation
 import Foundation
 import MapKit
+import OSLog
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -83,7 +84,7 @@ enum WatchRouteTransferSendError: LocalizedError {
         case .watchAppMissing:
             return "Install the companion watch app before sending this route."
         case .sessionNotReady:
-            return "The watch session is still activating."
+            return "The watch session is still activating. Wait for the watch companion connection to settle, then try again."
         case .serializationFailed:
             return "The route could not be prepared for watch transfer."
         }
@@ -565,11 +566,30 @@ final class BrowseViewModel: ObservableObject {
         }
 
         let sections = plannedSections
-        guard !sections.isEmpty else {
+        guard !sections.isEmpty,
+              sections.map(\.edgeID) == canonicalRoutePlan.anchorEdgeIds else {
             return nil
         }
 
         let trailsByID = Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+        var sectionSummaries: [WatchRouteTransferSectionSummary] = []
+        sectionSummaries.reserveCapacity(sections.count)
+
+        for (index, section) in sections.enumerated() {
+            guard let destinationID = trailsByID[section.trailID]?.destinationId else {
+                return nil
+            }
+
+            sectionSummaries.append(
+                WatchRouteTransferSectionSummary(
+                    anchorEdgeId: section.edgeID,
+                    destinationId: destinationID,
+                    distanceKm: roundedWatchTransferDistance(section.distanceKm),
+                    label: "Section \(index + 1)"
+                )
+            )
+        }
+
         let coordinates = mergedWatchTransferCoordinates(sections: sections)
         let geometry = coordinates.count >= 2
             ? WatchRouteTransferGeometry(
@@ -586,18 +606,7 @@ final class BrowseViewModel: ObservableObject {
                 totalDistanceKm: routeSummary.totalDistanceKm,
                 elevationGainM: routeSummary.ascentMeters,
                 elevationLossM: routeSummary.descentMeters,
-                sectionSummaries: sections.enumerated().compactMap { index, section in
-                    guard let destinationID = trailsByID[section.trailID]?.destinationId else {
-                        return nil
-                    }
-
-                    return WatchRouteTransferSectionSummary(
-                        anchorEdgeId: section.edgeID,
-                        destinationId: destinationID,
-                        distanceKm: roundedWatchTransferDistance(section.distanceKm),
-                        label: "Section \(index + 1)"
-                    )
-                }
+                sectionSummaries: sectionSummaries
             )
         )
     }
@@ -1506,6 +1515,7 @@ struct APIClient: BrowseAPIClient {
 final class WatchRouteTransferController: NSObject, WatchRouteTransferServing {
     var onSessionStateChange: ((WatchRouteTransferSessionState) -> Void)?
     var onAcknowledgement: ((WatchRouteTransferAcknowledgement) -> Void)?
+    private let logger = Logger(subsystem: "cc-maps", category: "WatchTransferPhone")
 
 #if canImport(WatchConnectivity)
     private let session: WCSession?
@@ -1523,8 +1533,11 @@ final class WatchRouteTransferController: NSObject, WatchRouteTransferServing {
 
     func activate() {
 #if canImport(WatchConnectivity)
+    logSessionSnapshot(reason: "Activating watch session")
         session?.activate()
         onSessionStateChange?(currentSessionState())
+#else
+    logger.notice("WatchConnectivity unsupported while activating watch transfer session")
 #endif
     }
 
@@ -1548,18 +1561,22 @@ final class WatchRouteTransferController: NSObject, WatchRouteTransferServing {
     func queueTransfer(id: String, envelope: WatchRouteTransferEnvelope) throws {
 #if canImport(WatchConnectivity)
         guard let session else {
+            logger.error("Route transfer \(id, privacy: .public) failed: WatchConnectivity session unavailable")
             throw WatchRouteTransferSendError.unsupported
         }
 
         guard session.isPaired else {
+            logger.error("Route transfer \(id, privacy: .public) failed: no paired watch. \(self.sessionSnapshot(for: session), privacy: .public)")
             throw WatchRouteTransferSendError.noPairedWatch
         }
 
         guard session.isWatchAppInstalled else {
+            logger.error("Route transfer \(id, privacy: .public) failed: watch app missing. \(self.sessionSnapshot(for: session), privacy: .public)")
             throw WatchRouteTransferSendError.watchAppMissing
         }
 
         guard session.activationState == .activated else {
+            logger.error("Route transfer \(id, privacy: .public) failed: session not ready. \(self.sessionSnapshot(for: session), privacy: .public)")
             throw WatchRouteTransferSendError.sessionNotReady
         }
 
@@ -1570,14 +1587,40 @@ final class WatchRouteTransferController: NSObject, WatchRouteTransferServing {
         )
 
         guard let userInfo = submission.userInfo else {
+            logger.error(
+                "Route transfer \(id, privacy: .public) failed: envelope serialization. anchors=\(envelope.canonical.anchorEdgeIds.count) destinations=\(envelope.canonical.destinationIds.count)"
+            )
             throw WatchRouteTransferSendError.serializationFailed
         }
 
-        session.transferUserInfo(userInfo)
+        let payloadBytes = (userInfo[WatchRouteTransferSubmission.envelopeKey] as? String)?.utf8.count ?? 0
+        logger.notice(
+            "Queueing route transfer \(id, privacy: .public). payloadBytes=\(payloadBytes) anchors=\(envelope.canonical.anchorEdgeIds.count) destinations=\(envelope.canonical.destinationIds.count) outstandingBefore=\(session.outstandingUserInfoTransfers.count). \(self.sessionSnapshot(for: session), privacy: .public)"
+        )
+        let transfer = session.transferUserInfo(userInfo)
+        logger.notice(
+            "Queued route transfer \(id, privacy: .public). isTransferring=\(transfer.isTransferring) outstandingAfter=\(session.outstandingUserInfoTransfers.count)"
+        )
 #else
+        logger.error("Route transfer \(id, privacy: .public) failed: WatchConnectivity unsupported")
         throw WatchRouteTransferSendError.unsupported
 #endif
     }
+
+#if canImport(WatchConnectivity)
+    private func sessionSnapshot(for session: WCSession) -> String {
+        "activation=\(session.activationState.rawValue) paired=\(session.isPaired) watchAppInstalled=\(session.isWatchAppInstalled) reachable=\(session.isReachable) outstandingTransfers=\(session.outstandingUserInfoTransfers.count)"
+    }
+
+    private func logSessionSnapshot(reason: String, session: WCSession? = nil) {
+        guard let activeSession = session ?? self.session else {
+            logger.notice("\(reason, privacy: .public): WatchConnectivity session unavailable")
+            return
+        }
+
+        logger.notice("\(reason, privacy: .public): \(self.sessionSnapshot(for: activeSession), privacy: .public)")
+    }
+#endif
 }
 
 #if canImport(WatchConnectivity)
@@ -1587,28 +1630,74 @@ extension WatchRouteTransferController: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: (any Error)?
     ) {
+        if let error {
+            logger.error(
+                "Watch session activation completed with error. state=\(activationState.rawValue) error=\(String(describing: error), privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
+        } else {
+            logger.notice(
+                "Watch session activation completed. state=\(activationState.rawValue). \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
+        }
         onSessionStateChange?(currentSessionState())
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {
+        logSessionSnapshot(reason: "Watch session became inactive", session: session)
         onSessionStateChange?(currentSessionState())
     }
 
     func sessionDidDeactivate(_ session: WCSession) {
+        logSessionSnapshot(reason: "Watch session did deactivate", session: session)
         onSessionStateChange?(currentSessionState())
         session.activate()
+        logSessionSnapshot(reason: "Reactivating watch session after deactivation", session: session)
+    }
+
+    func sessionReachabilityDidChange(_ session: WCSession) {
+        logSessionSnapshot(reason: "Watch session reachability changed", session: session)
+        onSessionStateChange?(currentSessionState())
+    }
+
+    func sessionWatchStateDidChange(_ session: WCSession) {
+        logSessionSnapshot(reason: "Watch session watch state changed", session: session)
+        onSessionStateChange?(currentSessionState())
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
+        let keys = userInfo.keys.sorted().joined(separator: ",")
         guard let messageType = userInfo["ccMapsMessageType"] as? String,
               messageType == "route-transfer-ack",
               let transferID = userInfo["transferId"] as? String,
               let resultValue = userInfo["result"] as? String,
               let result = WatchRouteTransferAcknowledgementResult(rawValue: resultValue) else {
+            logger.error(
+                "Received unexpected watch userInfo on phone. keys=\(keys, privacy: .public) \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
             return
         }
 
+        logger.notice(
+            "Received watch acknowledgement \(result.rawValue, privacy: .public) for transfer \(transferID, privacy: .public). keys=\(keys, privacy: .public)"
+        )
         onAcknowledgement?(WatchRouteTransferAcknowledgement(transferID: transferID, result: result))
+    }
+
+    func session(
+        _ session: WCSession,
+        didFinish userInfoTransfer: WCSessionUserInfoTransfer,
+        error: (any Error)?
+    ) {
+        let transferID = (userInfoTransfer.userInfo?[WatchRouteTransferSubmission.transferIDKey] as? String) ?? "unknown"
+        if let error {
+            logger.error(
+                "Finished queued phone transfer \(transferID, privacy: .public) with error=\(String(describing: error), privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
+        } else {
+            logger.notice(
+                "Finished queued phone transfer \(transferID, privacy: .public) successfully. \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
+        }
     }
 }
 #endif

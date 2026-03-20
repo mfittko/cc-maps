@@ -53,8 +53,8 @@ xcodebuild test -project apps/ios/CrossCountryMaps.xcodeproj -scheme CrossCountr
 1. Ensure the Next.js app is serving the existing `/api/destinations` and `/api/trails` routes at the URL configured by `APP_API_BASE_URL` in `Config/Base.xcconfig`.
 2. Select the `CrossCountryMaps` scheme and an iPhone simulator destination.
 3. Run the app. The root screen should load destinations first, auto-select a destination when possible, and render selected-destination trails as the primary MapKit overlay set.
-3. Select the `CrossCountryMapsWatch` scheme and a paired Apple Watch simulator destination.
-4. Run the app. The root screen should show a companion-oriented waiting state until the iPhone sends a route, then surface the latest stored route summary without implying watch-side route authoring.
+4. Select the `CrossCountryMapsWatch` scheme and a paired Apple Watch simulator destination.
+5. Run the app. The root screen should show a companion-oriented waiting state until the iPhone sends a route, then surface the latest stored route summary without implying watch-side route authoring.
 
 ## Phase 3 behavior
 

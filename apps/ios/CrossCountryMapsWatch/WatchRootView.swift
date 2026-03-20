@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftUI
 #if canImport(WatchConnectivity)
 import WatchConnectivity
@@ -165,6 +166,7 @@ private final class WatchRouteStore: NSObject, ObservableObject {
     @Published private(set) var storedRoute: WatchStoredRouteRecord?
     @Published private(set) var lastFailureMessage: String?
 
+    private let logger = Logger(subsystem: "cc-maps", category: "WatchTransferWatch")
     private let userDefaults: UserDefaults
     private let storageKey = "cc-maps:watch-route-transfer"
     private let session: WCSession?
@@ -177,6 +179,13 @@ private final class WatchRouteStore: NSObject, ObservableObject {
         super.init()
         session?.delegate = self
         storedRoute = loadStoredRoute()
+        if let storedRoute {
+            logger.notice(
+                "Loaded persisted watch route \(storedRoute.transferID, privacy: .public) with \(storedRoute.sectionCount) sections"
+            )
+        } else {
+            logger.notice("No persisted watch route available at launch")
+        }
     }
 
     var isRouteAvailable: Bool {
@@ -199,6 +208,7 @@ private final class WatchRouteStore: NSObject, ObservableObject {
     }
 
     func activate() {
+        logSessionSnapshot(reason: "Activating watch session")
         session?.activate()
     }
 
@@ -214,7 +224,12 @@ private final class WatchRouteStore: NSObject, ObservableObject {
             return nil
         }
 
-        return try? decoder.decode(WatchStoredRouteRecord.self, from: data)
+        do {
+            return try decoder.decode(WatchStoredRouteRecord.self, from: data)
+        } catch {
+            logger.error("Failed to decode persisted watch route: \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     private func storeRoute(_ storedRoute: WatchStoredRouteRecord) throws {
@@ -226,29 +241,77 @@ private final class WatchRouteStore: NSObject, ObservableObject {
         userDefaults.set(encoded, forKey: storageKey)
         self.storedRoute = storedRoute
         lastFailureMessage = nil
+        logger.notice(
+            "Persisted watch route \(storedRoute.transferID, privacy: .public) with \(storedRoute.sectionCount) sections"
+        )
     }
 
     private func acknowledge(transferID: String, result: WatchTransferAcknowledgementResult) {
-        session?.transferUserInfo([
+        guard let session else {
+            logger.error(
+                "Unable to send watch acknowledgement \(result.rawValue, privacy: .public) for transfer \(transferID, privacy: .public): session unavailable"
+            )
+            return
+        }
+
+        logger.notice(
+            "Queueing watch acknowledgement \(result.rawValue, privacy: .public) for transfer \(transferID, privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+        )
+        let transfer = session.transferUserInfo([
             "ccMapsMessageType": "route-transfer-ack",
             "transferId": transferID,
             "result": result.rawValue,
             "receivedAt": ISO8601DateFormatter().string(from: Date()),
         ])
+        logger.notice(
+            "Queued watch acknowledgement \(result.rawValue, privacy: .public) for transfer \(transferID, privacy: .public). isTransferring=\(transfer.isTransferring) pendingTransfers=\(session.outstandingUserInfoTransfers.count)"
+        )
     }
 
     private func handleTransfer(userInfo: [String: Any]) {
-        guard let transferID = userInfo["transferId"] as? String,
-              let encodedEnvelope = userInfo["envelope"] as? String,
-              let data = encodedEnvelope.data(using: .utf8),
-              let envelope = try? decoder.decode(WatchTransferEnvelope.self, from: data),
-              envelope.isValid else {
-            if let transferID = userInfo["transferId"] as? String {
-                acknowledge(transferID: transferID, result: .invalidPayload)
-            }
+        let keys = userInfo.keys.sorted().joined(separator: ",")
+        logger.notice("Handling incoming watch route userInfo. keys=\(keys, privacy: .public)")
+
+        guard let transferID = userInfo["transferId"] as? String else {
+            logger.error("Rejecting watch route payload: missing transferId. keys=\(keys, privacy: .public)")
             lastFailureMessage = "The latest route payload could not be validated."
             return
         }
+
+        guard let encodedEnvelope = userInfo["envelope"] as? String,
+              let data = encodedEnvelope.data(using: .utf8) else {
+            logger.error(
+                "Rejecting watch route payload \(transferID, privacy: .public): missing envelope data"
+            )
+            lastFailureMessage = "The latest route payload could not be validated."
+            acknowledge(transferID: transferID, result: .invalidPayload)
+            return
+        }
+
+        let envelope: WatchTransferEnvelope
+        do {
+            envelope = try decoder.decode(WatchTransferEnvelope.self, from: data)
+        } catch {
+            logger.error(
+                "Rejecting watch route payload \(transferID, privacy: .public): decode failed with error=\(String(describing: error), privacy: .public)"
+            )
+            lastFailureMessage = "The latest route payload could not be validated."
+            acknowledge(transferID: transferID, result: .invalidPayload)
+            return
+        }
+
+        guard envelope.isValid else {
+            logger.error(
+                "Rejecting watch route payload \(transferID, privacy: .public): envelope validation failed. canonicalAnchors=\(envelope.canonical.anchorEdgeIds.count) canonicalDestinations=\(envelope.canonical.destinationIds.count)"
+            )
+            lastFailureMessage = "The latest route payload could not be validated."
+            acknowledge(transferID: transferID, result: .invalidPayload)
+            return
+        }
+
+        logger.notice(
+            "Validated watch route payload \(transferID, privacy: .public). anchors=\(envelope.canonical.anchorEdgeIds.count) destinations=\(envelope.canonical.destinationIds.count) hasDerived=\(envelope.derived != nil)"
+        )
 
         let storedRoute = WatchStoredRouteRecord(
             transferID: transferID,
@@ -258,12 +321,31 @@ private final class WatchRouteStore: NSObject, ObservableObject {
 
         do {
             try storeRoute(storedRoute)
+            logger.notice("Accepted watch route payload \(transferID, privacy: .public) and persisted it successfully")
             acknowledge(transferID: transferID, result: .success)
         } catch {
+            logger.error(
+                "Failed to persist watch route payload \(transferID, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
             lastFailureMessage = "The latest route could not be stored on the watch."
             acknowledge(transferID: transferID, result: .persistenceFailure)
         }
     }
+
+#if canImport(WatchConnectivity)
+    private func sessionSnapshot(for session: WCSession) -> String {
+        "activation=\(session.activationState.rawValue) companionInstalled=\(session.isCompanionAppInstalled) reachable=\(session.isReachable) hasContentPending=\(session.hasContentPending) pendingTransfers=\(session.outstandingUserInfoTransfers.count)"
+    }
+
+    private func logSessionSnapshot(reason: String, session: WCSession? = nil) {
+        guard let activeSession = session ?? self.session else {
+            logger.notice("\(reason, privacy: .public): WatchConnectivity session unavailable")
+            return
+        }
+
+        logger.notice("\(reason, privacy: .public): \(self.sessionSnapshot(for: activeSession), privacy: .public)")
+    }
+#endif
 }
 
 #if canImport(WatchConnectivity)
@@ -272,16 +354,63 @@ extension WatchRouteStore: WCSessionDelegate {
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: (any Error)?
-    ) {}
+    ) {
+        Task { @MainActor in
+            if let error {
+                self.logger.error(
+                    "Watch session activation completed with error. state=\(activationState.rawValue) error=\(String(describing: error), privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+                )
+            } else {
+                self.logger.notice(
+                    "Watch session activation completed. state=\(activationState.rawValue). \(self.sessionSnapshot(for: session), privacy: .public)"
+                )
+            }
+        }
+    }
 
     nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
+        let keys = userInfo.keys.sorted().joined(separator: ",")
+        Task { @MainActor in
+            self.logger.notice(
+                "Watch didReceiveUserInfo callback fired. keys=\(keys, privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+            )
+        }
+
         guard let messageType = userInfo["ccMapsMessageType"] as? String,
               messageType == "route-transfer" else {
+            Task { @MainActor in
+                self.logger.error("Ignoring unexpected watch userInfo payload. keys=\(keys, privacy: .public)")
+            }
             return
         }
 
         Task { @MainActor in
             self.handleTransfer(userInfo: userInfo)
+        }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in
+            self.logSessionSnapshot(reason: "Watch session reachability changed", session: session)
+        }
+    }
+
+    nonisolated func session(
+        _ session: WCSession,
+        didFinish userInfoTransfer: WCSessionUserInfoTransfer,
+        error: (any Error)?
+    ) {
+        let transferID = (userInfoTransfer.userInfo?["transferId"] as? String) ?? "unknown"
+        Task { @MainActor in
+            if let error {
+                self.logger.error(
+                    "Finished queued watch userInfo transfer \(transferID, privacy: .public) with error=\(String(describing: error), privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"
+                )
+            } else {
+                self.logger.notice(
+                    "Finished queued watch userInfo transfer \(transferID, privacy: .public) successfully. \(self.sessionSnapshot(for: session), privacy: .public)"
+                )
+            }
         }
     }
 }
