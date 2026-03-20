@@ -12,6 +12,8 @@ struct TrailMapView: UIViewRepresentable {
     let selectedTrailID: String?
     let selectedTrailSegment: TrailSegment?
     let selectedPlannedSectionEdgeID: String?
+    let routeDisplaySections: [PlanningSection]
+    let routePresentationRefreshID: Int
     let fitRequestID: Int
     let restoredMapRegion: PersistedMapRegion?
     let mapRegionRestoreRequestID: Int
@@ -56,7 +58,8 @@ struct TrailMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.syncAnnotations(on: mapView)
         context.coordinator.syncOverlays(on: mapView)
-        context.coordinator.syncDirectionAnnotations(on: mapView)
+        context.coordinator.syncRoutePresentation(on: mapView)
+        context.coordinator.syncRouteSelectionStyling(on: mapView)
 
         if context.coordinator.lastMapRegionRestoreRequestID != mapRegionRestoreRequestID,
            let restoredMapRegion {
@@ -97,7 +100,8 @@ struct TrailMapView: UIViewRepresentable {
         var lastBaseOverlaySignature = ""
         var lastEmphasisOverlaySignature = ""
         var lastSegmentAnnotationSignature = ""
-        var lastDirectionSignature = ""
+        var lastRoutePresentationRefreshID = 0
+        var lastSelectedPlannedSectionEdgeID: String?
         var pendingPlanningWork: DispatchWorkItem?
         var lastFitRequestID = 0
         var lastMapRegionRestoreRequestID = 0
@@ -125,8 +129,6 @@ struct TrailMapView: UIViewRepresentable {
                 "selected:\(parent.selectedDestinationID)",
                 "preview:\(parent.nearbyPreviewDestinationIDs.sorted().joined(separator: ","))",
                 "trails:\(displayedTrails.map(\.id).joined(separator: ","))",
-                "planning:\(parent.isInPlanningMode ? "1" : "0")",
-                "anchors:\(parent.routePlan.anchorEdgeIDs.joined(separator: ","))",
                 "segment-trail:\(parent.selectedTrailID ?? "")",
                 "segment-visible:\(shouldShowSegmentLabels ? "1" : "0")"
             ].joined(separator: "|")
@@ -137,7 +139,15 @@ struct TrailMapView: UIViewRepresentable {
 
             lastAnnotationSignature = signature
             let existingAnnotations = mapView.annotations.filter {
-                $0 is DestinationAnnotation || $0 is TrailSegmentAnnotation
+                if $0 is DestinationAnnotation {
+                    return true
+                }
+
+                guard let segmentAnnotation = $0 as? TrailSegmentAnnotation else {
+                    return false
+                }
+
+                return segmentAnnotation.kind == .trailDetail
             }
             mapView.removeAnnotations(existingAnnotations)
 
@@ -181,10 +191,8 @@ struct TrailMapView: UIViewRepresentable {
                 "\($0.startDistanceKm)-\($0.endDistanceKm)"
             } ?? ""
             let emphasisSignature = [
-                "planning:\(parent.isInPlanningMode ? "1" : "0")",
                 "selected:\(parent.selectedTrailID ?? "")",
                 "segment:\(segmentSig)",
-                "planned-edge:\(parent.selectedPlannedSectionEdgeID ?? "")",
                 "anchors:\(parent.routePlan.anchorEdgeIDs.joined(separator: ","))",
                 "trails:\((parent.primaryTrails + parent.previewTrails).map(\.id).joined(separator: ","))"
             ].joined(separator: "|")
@@ -195,35 +203,76 @@ struct TrailMapView: UIViewRepresentable {
 
             lastEmphasisOverlaySignature = emphasisSignature
             let existingEmphasisOverlays = mapView.overlays.filter {
-                $0 is SelectedTrailOverlay || $0 is PlannedSectionOverlay
+                $0 is SelectedTrailOverlay
             }
             mapView.removeOverlays(existingEmphasisOverlays)
 
             let displayedTrails = parent.primaryTrails + parent.previewTrails
             let selectedTrailOverlays = buildSelectedTrailOverlays(trails: displayedTrails)
-            let plannedSectionOverlays = buildPlannedSectionOverlays(trails: displayedTrails)
 
-            mapView.addOverlays(selectedTrailOverlays + plannedSectionOverlays, level: .aboveLabels)
+            mapView.addOverlays(selectedTrailOverlays, level: .aboveLabels)
         }
 
-        func syncDirectionAnnotations(on mapView: MKMapView) {
-            let signature = [
-                parent.routePlan.anchorEdgeIDs.joined(separator: ","),
-                parent.primaryTrails.map(\.id).joined(separator: ","),
-                parent.previewTrails.map(\.id).joined(separator: ",")
-            ].joined(separator: "|")
-
-            guard signature != lastDirectionSignature else {
+        func syncRoutePresentation(on mapView: MKMapView) {
+            guard lastRoutePresentationRefreshID != parent.routePresentationRefreshID else {
                 return
             }
 
-            lastDirectionSignature = signature
+            lastRoutePresentationRefreshID = parent.routePresentationRefreshID
 
-            let existingDirections = mapView.annotations.filter { $0 is RouteDirectionAnnotation }
-            mapView.removeAnnotations(existingDirections)
+            let existingRouteOverlays = mapView.overlays.filter { $0 is RouteSectionOverlay }
+            mapView.removeOverlays(existingRouteOverlays)
 
-            let directionAnnotations = buildRouteDirectionAnnotations(trails: parent.primaryTrails + parent.previewTrails)
-            mapView.addAnnotations(directionAnnotations)
+            let existingRouteAnnotations = mapView.annotations.filter {
+                if $0 is RouteDirectionAnnotation {
+                    return true
+                }
+
+                guard let segmentAnnotation = $0 as? TrailSegmentAnnotation else {
+                    return false
+                }
+
+                return segmentAnnotation.kind == .plannedRoute
+            }
+            mapView.removeAnnotations(existingRouteAnnotations)
+
+            let plannedSections = parent.routeDisplaySections
+
+            guard !plannedSections.isEmpty else {
+                lastSelectedPlannedSectionEdgeID = parent.selectedPlannedSectionEdgeID
+                return
+            }
+
+            mapView.addOverlays(buildRouteSectionOverlays(plannedSections: plannedSections), level: .aboveLabels)
+            mapView.addAnnotations(buildRouteSectionAnnotations(plannedSections: plannedSections))
+            mapView.addAnnotations(buildRouteDirectionAnnotations(plannedSections: plannedSections))
+            syncRouteSelectionStyling(on: mapView)
+        }
+
+        func syncRouteSelectionStyling(on mapView: MKMapView) {
+            guard lastSelectedPlannedSectionEdgeID != parent.selectedPlannedSectionEdgeID else {
+                return
+            }
+
+            lastSelectedPlannedSectionEdgeID = parent.selectedPlannedSectionEdgeID
+
+            for overlay in mapView.overlays {
+                guard let routeOverlay = overlay as? RouteSectionOverlay else {
+                    continue
+                }
+
+                let shouldBeSelected = routeOverlay.edgeID == parent.selectedPlannedSectionEdgeID
+                guard routeOverlay.isSelectedRouteSection != shouldBeSelected else {
+                    continue
+                }
+
+                routeOverlay.isSelectedRouteSection = shouldBeSelected
+
+                if let renderer = mapView.renderer(for: routeOverlay) as? MKOverlayPathRenderer {
+                    renderer.invalidatePath()
+                    renderer.setNeedsDisplay()
+                }
+            }
         }
 
         func fitMapToVisibleContent(on mapView: MKMapView) {
@@ -481,33 +530,41 @@ struct TrailMapView: UIViewRepresentable {
             max(startA, startB) <= min(endA, endB) + tolerance
         }
 
-        func buildPlannedSectionOverlays(trails: [TrailFeature]) -> [PlannedSectionOverlay] {
-            guard !parent.routePlan.isEmpty else {
-                return []
-            }
-
-            let plannedSections = plannedSections(for: trails)
-
+        func buildRouteSectionOverlays(plannedSections: [PlanningSection]) -> [RouteSectionOverlay] {
             return plannedSections.enumerated().compactMap { index, section in
                 guard section.coordinates.count >= 2 else {
                     return nil
                 }
 
-                let overlay = PlannedSectionOverlay(coordinates: section.coordinates, count: section.coordinates.count)
+                let overlay = RouteSectionOverlay(coordinates: section.coordinates, count: section.coordinates.count)
                 overlay.trailID = section.trailID
                 overlay.edgeID = section.edgeID
                 overlay.sequenceIndex = index + 1
-                overlay.isSelectedPlannedSection = section.edgeID == parent.selectedPlannedSectionEdgeID
+                overlay.isSelectedRouteSection = section.edgeID == parent.selectedPlannedSectionEdgeID
                 return overlay
             }
         }
 
-        func buildRouteDirectionAnnotations(trails: [TrailFeature]) -> [RouteDirectionAnnotation] {
-            guard !parent.routePlan.isEmpty else {
+        func buildRouteSectionAnnotations(plannedSections: [PlanningSection]) -> [TrailSegmentAnnotation] {
+            return plannedSections.enumerated().compactMap { index, section in
+                guard let midpoint = section.midpoint else {
+                    return nil
+                }
+
+                return TrailSegmentAnnotation(
+                    coordinate: midpoint,
+                    title: "\(index + 1) · \(section.formattedDistanceLabel)",
+                    distanceKm: section.distanceKm,
+                    trailID: section.trailID,
+                    kind: .plannedRoute
+                )
+            }
+        }
+
+        func buildRouteDirectionAnnotations(plannedSections: [PlanningSection]) -> [RouteDirectionAnnotation] {
+            guard !plannedSections.isEmpty else {
                 return []
             }
-
-            let plannedSections = plannedSections(for: trails)
             let spacingKm = 0.35
 
             return plannedSections.flatMap { section -> [RouteDirectionAnnotation] in
@@ -545,12 +602,7 @@ struct TrailMapView: UIViewRepresentable {
         }
 
         func segmentAnnotations(for trails: [TrailFeature], shouldShowLabels: Bool) -> [TrailSegmentAnnotation] {
-            let plannedSections = parent.isInPlanningMode
-                ? plannedSections(for: parent.primaryTrails + parent.previewTrails)
-                : []
-
-            // Planned route labels are always visible; other labels respect zoom level
-            guard shouldShowLabels || !plannedSections.isEmpty else {
+            guard shouldShowLabels else {
                 cachedSegmentAnnotations = []
                 lastSegmentAnnotationSignature = ""
                 return []
@@ -558,10 +610,8 @@ struct TrailMapView: UIViewRepresentable {
 
             let signature = [
                 parent.selectedTrailID ?? "",
-                parent.isInPlanningMode ? "1" : "0",
-                parent.routePlan.anchorEdgeIDs.joined(separator: ","),
                 trails.map(\.id).joined(separator: ","),
-                shouldShowLabels ? "labels" : "no-labels"
+                "labels"
             ].joined(separator: "|")
 
             guard signature != lastSegmentAnnotationSignature else {
@@ -569,23 +619,6 @@ struct TrailMapView: UIViewRepresentable {
             }
 
             lastSegmentAnnotationSignature = signature
-
-            if !plannedSections.isEmpty {
-                cachedSegmentAnnotations = plannedSections.enumerated().compactMap { index, section in
-                    guard let midpoint = section.midpoint else {
-                        return nil
-                    }
-
-                    return TrailSegmentAnnotation(
-                        coordinate: midpoint,
-                        title: "\(index + 1) · \(section.formattedDistanceLabel)",
-                        distanceKm: section.distanceKm,
-                        trailID: section.trailID,
-                        kind: .plannedRoute
-                    )
-                }
-                return cachedSegmentAnnotations
-            }
 
             guard let selectedTrailID = parent.selectedTrailID,
                   let selectedTrail = trails.first(where: { $0.id == selectedTrailID }) else {
@@ -646,7 +679,8 @@ struct TrailMapView: UIViewRepresentable {
                     continue
                 }
 
-                view.setVisibility(shouldShowLabels)
+                let isVisible = segmentAnnotation.kind == .plannedRoute ? true : shouldShowLabels
+                view.setVisibility(isVisible)
             }
         }
 
@@ -725,16 +759,18 @@ struct TrailMapView: UIViewRepresentable {
             let renderer = MKPolylineRenderer(overlay: trailOverlay)
 
             let baseColor = trailOverlay.groomingColor ?? UIColor.systemGreen
+            let routeColor = UIColor(red: 0.13, green: 0.53, blue: 0.98, alpha: 0.96)
+            let selectedRouteColor = UIColor(red: 0.03, green: 0.36, blue: 0.82, alpha: 1.0)
 
-            if overlay is PlannedSectionOverlay {
-                let plannedOverlay = overlay as? PlannedSectionOverlay
-                renderer.strokeColor = plannedOverlay?.isSelectedPlannedSection == true
-                    ? UIColor(red: 0.0, green: 0.17, blue: 0.58, alpha: 1.0)
-                    : UIColor.systemBlue.withAlphaComponent(0.96)
-                renderer.lineWidth = plannedOverlay?.isSelectedPlannedSection == true ? 12 : 9
+            if overlay is RouteSectionOverlay {
+                let plannedOverlay = overlay as? RouteSectionOverlay
+                renderer.strokeColor = plannedOverlay?.isSelectedRouteSection == true
+                    ? selectedRouteColor
+                    : routeColor
+                renderer.lineWidth = plannedOverlay?.isSelectedRouteSection == true ? 10 : 9
             } else if let selectedOverlay = overlay as? SelectedTrailOverlay, selectedOverlay.isOverPlannedRoute {
-                renderer.strokeColor = UIColor(red: 0.0, green: 0.1, blue: 0.35, alpha: 1.0)
-                renderer.lineWidth = 13
+                renderer.strokeColor = selectedRouteColor.withAlphaComponent(0.9)
+                renderer.lineWidth = 10
             } else if overlay is SelectedTrailOverlay {
                 renderer.strokeColor = baseColor.withAlphaComponent(0.98)
                 renderer.lineWidth = 8
@@ -764,10 +800,10 @@ class SelectedTrailOverlay: TrailOverlay {
     var isOverPlannedRoute = false
 }
 
-class PlannedSectionOverlay: TrailOverlay {
+class RouteSectionOverlay: TrailOverlay {
     var edgeID = ""
     var sequenceIndex = 0
-    var isSelectedPlannedSection = false
+    var isSelectedRouteSection = false
 }
 
 final class RouteDirectionAnnotation: NSObject, MKAnnotation {

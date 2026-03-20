@@ -174,6 +174,27 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertEqual(reordered, [Self.edgeA, Self.edgeB, Self.edgeC])
     }
 
+    func testDisplaySectionNumbersFollowFirstTraversableWalkOnSharedPath() throws {
+        let edgeD = "10.760000:59.910000~10.760000:59.920000"
+        let edgeE = "10.760000:59.920000~10.760000:59.930000"
+        let trails = [
+            try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+            try makeTrailSegment(id: 202, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+            try makeTrailSegment(id: 404, destinationId: 1, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.92),
+            try makeTrailSegment(id: 505, destinationId: 1, startLongitude: 10.76, startLatitude: 59.92, endLongitude: 10.76, endLatitude: 59.93),
+        ]
+
+        let displayNumbers = GeoMath.displaySectionNumbersByEdgeID(
+            for: [edgeE, Self.edgeA, edgeD, Self.edgeB],
+            allTrails: trails
+        )
+
+        XCTAssertEqual(displayNumbers[edgeE], 1)
+        XCTAssertEqual(displayNumbers[edgeD], 2)
+        XCTAssertEqual(displayNumbers[Self.edgeA], 3)
+        XCTAssertEqual(displayNumbers[Self.edgeB], 4)
+    }
+
     func testPlanningSectionsPreserveFullSectionGeometry() throws {
         let bentEdgeID = "10.750000:59.910000~10.770000:59.920000"
         let trails = [
@@ -722,6 +743,9 @@ final class PlanningContractTests: XCTestCase {
 
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -775,6 +799,9 @@ final class PlanningContractTests: XCTestCase {
 
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -815,6 +842,9 @@ final class PlanningContractTests: XCTestCase {
         )
 
         viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil { viewModel.trailsPhase == .success }
 
@@ -867,6 +897,9 @@ final class PlanningContractTests: XCTestCase {
         )
         viewModel.start()
 
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         viewModel.enterPlanningMode()
@@ -903,7 +936,10 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
@@ -964,6 +1000,173 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testPlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute() async throws {
+        let suiteName = "PlanningContractTests.PlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 2 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "3", anchorEdgeID: Self.edgeC, segment: nil))
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "200" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["200", "100"]
+        }
+
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "100"))
+        XCTAssertEqual(
+            routePlanStore.readRoutePlan(for: "200"),
+            CanonicalRoutePlan(destinationId: "200", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["200", "100"])
+        )
+
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "2", anchorEdgeID: Self.edgeB, segment: nil))
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "100" &&
+                Set(viewModel.routePlan.anchorEdgeIDs) == Set([Self.edgeA, Self.edgeB, Self.edgeC]) &&
+                viewModel.activeRouteDestinationIDs == ["100", "200"]
+        }
+
+        XCTAssertEqual(
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: viewModel.routePlan.anchorEdgeIDs, destinationIds: ["100", "200"])
+        )
+    }
+
+    @MainActor
+    func testManualReselectingCurrentDestinationDoesNotClearActiveRoute() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 2 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "3", anchorEdgeID: Self.edgeC, segment: nil))
+
+        await waitUntil {
+            viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.selectedDestinationID == "200"
+        }
+
+        viewModel.selectDestination(id: "200", manual: true)
+
+        XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeC])
+        XCTAssertEqual(viewModel.selectedDestinationID, "200")
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["200", "100"])
+    }
+
+    @MainActor
+    func testManualSelectingRouteParticipatingDestinationDoesNotClearActiveRoute() async throws {
+        let suiteName = "PlanningContractTests.ManualSelectingRouteParticipatingDestinationDoesNotClearActiveRoute"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 2 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "3", anchorEdgeID: Self.edgeC, segment: nil))
+
+        await waitUntil {
+            viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.selectedDestinationID == "200"
+        }
+
+        viewModel.selectDestination(id: "100", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "100" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC]
+        }
+
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"])
+        XCTAssertEqual(
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"])
+        )
+    }
+
+    @MainActor
     func testStoredPartialRouteRestoresValidAnchorsAndSurfacesWarning() async throws {
         let suiteName = "PlanningContractTests.StoredPartialRouteRestoresValidAnchorsAndSurfacesWarning"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
@@ -985,7 +1188,10 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
@@ -1016,10 +1222,17 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: true)
+            )
         )
 
         viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
         await waitUntil { viewModel.trailsPhase == .success }
 
         let encodedRoute = CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeB], destinationIds: ["1"]).encodedForURL
@@ -1054,11 +1267,19 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
-        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB]
+        }
 
         let encodedRoute = CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: ["missing-edge"], destinationIds: ["1"]).encodedForURL
         viewModel.handleIncomingURL(URL(string: "ccmaps://open?route=\(encodedRoute!)")!)
@@ -1092,11 +1313,19 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            routePlanStore: routePlanStore
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
-        await waitUntil { viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB] }
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB]
+        }
 
         let allTrails = viewModel.primaryTrails + viewModel.previewTrails
 
@@ -1760,8 +1989,11 @@ final class PlanningContractTests: XCTestCase {
 
         let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
         XCTAssertEqual(queuedEnvelope.version, fixture.version)
-        XCTAssertEqual(queuedEnvelope.canonical, fixture.canonical)
-        XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
+        XCTAssertEqual(queuedEnvelope.canonical, try XCTUnwrap(viewModel.canonicalRoutePlan))
+        XCTAssertEqual(
+            queuedEnvelope.derived?.routeLabel,
+            viewModel.selectedDestination.map { "\($0.name) route" }
+        )
         XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
         XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry?.coordinates)
         XCTAssertTrue(

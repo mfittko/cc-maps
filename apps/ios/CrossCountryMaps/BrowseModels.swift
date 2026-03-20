@@ -109,6 +109,16 @@ struct TrailFeatureCollection: Decodable {
     let features: [TrailFeature]
 }
 
+extension Sequence where Element == TrailFeature {
+    func keyedByIDPreservingFirst() -> [String: TrailFeature] {
+        reduce(into: [:]) { result, trail in
+            if result[trail.id] == nil {
+                result[trail.id] = trail
+            }
+        }
+    }
+}
+
 struct TrailFeature: Decodable, Identifiable, Equatable {
     let id: String
     let destinationId: String?
@@ -476,6 +486,31 @@ enum GeoMath {
         return bestMatch?.destination
     }
 
+    static func closestDestinationByNearestTrail(
+        destinations: [Destination],
+        trails: [TrailFeature],
+        reference: CLLocationCoordinate2D
+    ) -> Destination? {
+        let destinationsByID = Dictionary(uniqueKeysWithValues: destinations.map { ($0.id, $0) })
+        var bestMatch: (destination: Destination, distance: Double)?
+
+        for trail in trails {
+            guard let destinationID = trail.destinationId, let destination = destinationsByID[destinationID] else {
+                continue
+            }
+
+            let distance = distanceToTrailKilometers(reference: reference, trail: trail)
+
+            if let bestMatch, bestMatch.distance <= distance {
+                continue
+            }
+
+            bestMatch = (destination, distance)
+        }
+
+        return bestMatch?.destination
+    }
+
     static func distanceToTrailKilometers(reference: CLLocationCoordinate2D, trail: TrailFeature) -> Double {
         trail.coordinateSets.reduce(Double.greatestFiniteMagnitude) { closest, coordinates in
             min(closest, distanceToPolylineKilometers(reference: reference, coordinates: coordinates))
@@ -746,6 +781,122 @@ enum GeoMath {
         }
 
         return path + uniqueEdgeIDs.filter { !visitedEdgeIDs.contains($0) }
+    }
+
+    static func displaySectionNumbersByEdgeID(
+        for anchorEdgeIDs: [String],
+        allTrails: [TrailFeature]
+    ) -> [String: Int] {
+        let orderedSections = displayOrderedPlanningSections(for: anchorEdgeIDs, allTrails: allTrails)
+        return Dictionary(uniqueKeysWithValues: orderedSections.enumerated().map { index, section in
+            (section.edgeID, index + 1)
+        })
+    }
+
+    static func displayOrderedPlanningSections(
+        for anchorEdgeIDs: [String],
+        allTrails: [TrailFeature]
+    ) -> [PlanningSection] {
+        let graph = planningGraph(in: allTrails)
+        let orderedEdgeIDs = displayOrderedAnchorEdgeIDs(anchorEdgeIDs, allTrails: allTrails)
+        var sections = orderedEdgeIDs.compactMap { graph.edgesByID[$0] }
+
+        guard sections.count >= 2 else {
+            return sections
+        }
+
+        for index in 1..<sections.count {
+            let previousEnd = sections[index - 1].coordinates.last!
+            let currentStart = sections[index].coordinates.first!
+            let currentEnd = sections[index].coordinates.last!
+
+            if distanceKilometers(from: previousEnd, to: currentEnd) < distanceKilometers(from: previousEnd, to: currentStart) {
+                sections[index] = sections[index].reversed()
+            }
+        }
+
+        let firstEnd = sections[0].coordinates.last!
+        let secondStart = sections[1].coordinates.first!
+        let firstStart = sections[0].coordinates.first!
+
+        if distanceKilometers(from: firstStart, to: secondStart) < distanceKilometers(from: firstEnd, to: secondStart) {
+            sections[0] = sections[0].reversed()
+        }
+
+        return sections
+    }
+
+    private static func displayOrderedAnchorEdgeIDs(
+        _ anchorEdgeIDs: [String],
+        allTrails: [TrailFeature]
+    ) -> [String] {
+        let graph = planningGraph(in: allTrails)
+        let uniqueEdgeIDs = anchorEdgeIDs.reduce(into: [String]()) { result, edgeID in
+            guard graph.edgesByID[edgeID] != nil, !result.contains(edgeID) else {
+                return
+            }
+
+            result.append(edgeID)
+        }
+
+        guard uniqueEdgeIDs.count >= 2 else {
+            return uniqueEdgeIDs.isEmpty ? anchorEdgeIDs : uniqueEdgeIDs
+        }
+
+        let originalIndexByEdgeID = Dictionary(uniqueKeysWithValues: uniqueEdgeIDs.enumerated().map { ($1, $0) })
+        var selectedNeighborMap = Dictionary(uniqueKeysWithValues: uniqueEdgeIDs.map { ($0, [String]()) })
+
+        for leftIndex in 0..<uniqueEdgeIDs.count {
+            for rightIndex in (leftIndex + 1)..<uniqueEdgeIDs.count {
+                let leftEdgeID = uniqueEdgeIDs[leftIndex]
+                let rightEdgeID = uniqueEdgeIDs[rightIndex]
+
+                guard graph.areAdjacent(leftEdgeID, rightEdgeID) else {
+                    continue
+                }
+
+                selectedNeighborMap[leftEdgeID, default: []].append(rightEdgeID)
+                selectedNeighborMap[rightEdgeID, default: []].append(leftEdgeID)
+            }
+        }
+
+        for edgeID in uniqueEdgeIDs {
+            selectedNeighborMap[edgeID]?.sort {
+                originalIndexByEdgeID[$0, default: .max] < originalIndexByEdgeID[$1, default: .max]
+            }
+        }
+
+        var orderedEdgeIDs: [String] = []
+        var visitedEdgeIDs = Set<String>()
+
+        func appendWalk(from edgeID: String) {
+            guard !visitedEdgeIDs.contains(edgeID) else {
+                return
+            }
+
+            visitedEdgeIDs.insert(edgeID)
+            orderedEdgeIDs.append(edgeID)
+
+            for neighborEdgeID in selectedNeighborMap[edgeID] ?? [] {
+                appendWalk(from: neighborEdgeID)
+            }
+        }
+
+        while visitedEdgeIDs.count < uniqueEdgeIDs.count {
+            let remainingEdgeIDs = uniqueEdgeIDs.filter { !visitedEdgeIDs.contains($0) }
+            let endpointEdgeIDs = remainingEdgeIDs.filter {
+                (selectedNeighborMap[$0] ?? []).filter { !visitedEdgeIDs.contains($0) }.count <= 1
+            }
+            let nextStartEdgeID = (endpointEdgeIDs.isEmpty ? remainingEdgeIDs : endpointEdgeIDs).min {
+                originalIndexByEdgeID[$0, default: .max] < originalIndexByEdgeID[$1, default: .max]
+            }
+
+            if let nextStartEdgeID {
+                appendWalk(from: nextStartEdgeID)
+            }
+        }
+
+        return orderedEdgeIDs
     }
 
     static func resolvedSegment(

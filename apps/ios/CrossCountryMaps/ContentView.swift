@@ -6,6 +6,7 @@ struct ContentView: View {
     @StateObject private var viewModel = BrowseViewModel()
     @State private var isDestinationPickerPresented = false
     @State private var activeShareSheet: ShareSheetPayload?
+    @State private var isDestinationOverlayExpanded = true
 
     var body: some View {
         NavigationStack {
@@ -27,6 +28,8 @@ struct ContentView: View {
                         selectedTrailID: viewModel.selectedTrailID,
                         selectedTrailSegment: viewModel.selectedTrailSegment,
                         selectedPlannedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
+                        routeDisplaySections: viewModel.routeDisplaySections,
+                        routePresentationRefreshID: viewModel.routePresentationRefreshID,
                         fitRequestID: viewModel.fitRequestID,
                         restoredMapRegion: viewModel.visibleMapRegion,
                         mapRegionRestoreRequestID: viewModel.mapRegionRestoreRequestID,
@@ -50,6 +53,7 @@ struct ContentView: View {
 
                     VStack(spacing: 0) {
                         topOverlay
+                        mapOverlayControls
                         Spacer(minLength: 0)
                         bottomOverlay
                     }
@@ -78,6 +82,11 @@ struct ContentView: View {
                     viewModel.start()
                 }
             }
+            .onChange(of: viewModel.isManualDestinationSelection) { _, isManualSelection in
+                if isManualSelection {
+                    isDestinationOverlayExpanded = true
+                }
+            }
             .onOpenURL { url in
                 viewModel.handleIncomingURL(url)
             }
@@ -89,10 +98,8 @@ struct ContentView: View {
 
     private var topOverlay: some View {
         Group {
-            if viewModel.isManualDestinationSelection {
+            if viewModel.isManualDestinationSelection && isDestinationOverlayExpanded {
                 VStack(alignment: .leading, spacing: 10) {
-                    topManualControlRow
-
                     Button {
                         isDestinationPickerPresented = true
                     } label: {
@@ -143,17 +150,20 @@ struct ContentView: View {
                             .foregroundStyle(.red)
                     }
                 }
-                .padding(14)
+                .padding(.top, 40)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)
+                .overlay(alignment: .topTrailing) {
+                    closeDestinationOverlayButton
+                        .padding(12)
+                }
             } else {
                 HStack(spacing: 8) {
                     manualDestinationMenu
                     Spacer(minLength: 0)
-                    if viewModel.canEnableAutoLocation {
-                        autoFollowButton
-                    }
                 }
                 .padding(.horizontal, 4)
             }
@@ -161,15 +171,15 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var topManualControlRow: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Spacer()
-
-            if viewModel.canEnableAutoLocation {
+    private var mapOverlayControls: some View {
+        if viewModel.canEnableAutoLocation {
+            HStack {
+                Spacer(minLength: 0)
                 autoFollowButton
             }
+            .padding(.top, 12)
+            .padding(.horizontal, 4)
         }
-        .frame(height: 40)
     }
 
     @ViewBuilder
@@ -181,6 +191,7 @@ struct ContentView: View {
                 elevationResponse: viewModel.routeElevation,
                 routeUsesPreviewDestinations: viewModel.routeUsesPreviewDestinations,
                 allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                displayOrderedSections: viewModel.routeDisplaySections,
                 hydrationNotice: viewModel.routeHydrationNotice,
                 selectedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                 onExitPlanning: { viewModel.exitPlanningMode() },
@@ -212,8 +223,19 @@ struct ContentView: View {
             .transition(.move(edge: .bottom).combined(with: .opacity))
         } else if viewModel.trailsPhase == .success {
             HStack(spacing: 10) {
-                Image(systemName: "figure.skiing.crosscountry")
-                    .foregroundStyle(Color(red: 0.08, green: 0.34, blue: 0.44))
+                if !viewModel.routePlan.isEmpty {
+                    Button {
+                        viewModel.focusPlannedRouteIfAvailable()
+                    } label: {
+                        Image(systemName: "figure.skiing.crosscountry")
+                            .font(.body.weight(.semibold))
+                            .frame(width: 34, height: 34)
+                            .background(Color(red: 0.08, green: 0.34, blue: 0.44), in: Circle())
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Center planned route")
+                }
                 Text("Tap trail")
                     .font(.footnote.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -281,11 +303,26 @@ struct ContentView: View {
         .accessibilityLabel("Enable automatic location follow")
     }
 
+    private var closeDestinationOverlayButton: some View {
+        Button {
+            isDestinationOverlayExpanded = false
+        } label: {
+            Image(systemName: "xmark")
+                .font(.body.weight(.semibold))
+                .frame(width: 32, height: 32)
+                .background(Color.black.opacity(0.16), in: Circle())
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Close destination selection")
+    }
+
     private var manualDestinationMenu: some View {
         Button {
+            isDestinationOverlayExpanded = true
             isDestinationPickerPresented = true
         } label: {
-            Label("Choose", systemImage: "line.3.horizontal.decrease.circle")
+            Label(viewModel.selectedDestination?.name ?? "Choose", systemImage: "line.3.horizontal.decrease.circle")
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 8)
@@ -293,7 +330,7 @@ struct ContentView: View {
                 .foregroundStyle(.primary)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Choose destination manually")
+        .accessibilityLabel("Open destination selection")
     }
 
     private func presentRouteShareSheet() {
@@ -395,6 +432,17 @@ private struct TrailDetailCard: View {
         max(sectionCount - 1, 0)
     }
 
+    private var selectedSegmentNumber: Int? {
+        guard let selectedSegment else {
+            return nil
+        }
+
+        return trailSegments.firstIndex(where: { segment in
+            abs(segment.startDistanceKm - selectedSegment.startDistanceKm) < 0.0001 &&
+                abs(segment.endDistanceKm - selectedSegment.endDistanceKm) < 0.0001
+        }).map { $0 + 1 }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
@@ -432,13 +480,15 @@ private struct TrailDetailCard: View {
                 detailChip(label: trail.compactGroomingLabel, systemImage: "hourglass")
                 detailChip(label: trail.formattedLengthLabel, systemImage: "ruler")
 
-                if let routeContext {
-                    if let selectedSegment {
-                        detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
-                    }
+                if let selectedSegmentNumber,
+                   let selectedSegment {
+                    detailChip(label: "\(selectedSegmentNumber)/\(sectionCount)", systemImage: "arrow.triangle.branch")
+                    detailChip(label: selectedSegment.formattedDistanceLabel, systemImage: "ruler.fill")
+                }
 
+                if let routeContext {
                     detailChip(label: routeContext.selectedSectionElevationDetailLabel, systemImage: "mountain.2.fill")
-                } else if sectionCount > 1 {
+                } else if selectedSegmentNumber == nil, sectionCount > 1 {
                     detailChip(label: "\(sectionCount) sections", systemImage: "arrow.triangle.branch")
                 }
 

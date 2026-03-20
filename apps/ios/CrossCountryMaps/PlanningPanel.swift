@@ -2,12 +2,15 @@ import SwiftUI
 
 struct PlanningPanel: View {
     @State private var isShareExpanded = false
+    @State private var isWatchTransferExpanded = false
+    @State private var isClearConfirmationPresented = false
 
     let plan: RoutePlanState
     let routeSummary: RouteSummary
     let elevationResponse: ElevationApiResponse?
     let routeUsesPreviewDestinations: Bool
     let allTrails: [TrailFeature]
+    let displayOrderedSections: [PlanningSection]
     let hydrationNotice: RoutePlanHydrationNotice?
     let selectedSectionEdgeID: String?
     let onExitPlanning: () -> Void
@@ -27,11 +30,11 @@ struct PlanningPanel: View {
     let onSelectSection: (String) -> Void
 
     private var plannedSections: [PlanningSection] {
-        GeoMath.planningSections(for: plan.anchorEdgeIDs, allTrails: allTrails)
+        displayOrderedSections
     }
 
     private var trailsByID: [String: TrailFeature] {
-        Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+        allTrails.keyedByIDPreservingFirst()
     }
 
     private var sectionElevationsByEdgeID: [String: SectionElevationSummary] {
@@ -46,13 +49,12 @@ struct PlanningPanel: View {
         )
     }
 
-    private var anchorListHeight: CGFloat {
-        let rowHeight: CGFloat = 35
-        return CGFloat(plannedSections.count) * rowHeight
-    }
-
     private var scrollAreaMaxHeight: CGFloat {
         UIScreen.main.bounds.height * 0.35
+    }
+
+    private var shouldScrollAnchorList: Bool {
+        plannedSections.count > 6
     }
 
     var body: some View {
@@ -65,7 +67,7 @@ struct PlanningPanel: View {
 
             if plan.isEmpty {
                 emptyState
-                watchTransferCard
+                expandedWatchTransferCard
                     .padding(.horizontal, 16)
                     .padding(.bottom, 14)
             } else {
@@ -73,22 +75,37 @@ struct PlanningPanel: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 10)
 
-                watchTransferCard
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-
-                ScrollView {
-                    anchorList
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    if shouldScrollAnchorList {
+                        ScrollView {
+                            anchorList
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: scrollAreaMaxHeight)
+                    } else {
+                        anchorList
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
-                .frame(height: min(anchorListHeight, scrollAreaMaxHeight))
                 Divider()
+                    .padding(.horizontal, 16)
+                expandedWatchTransferCard
                     .padding(.horizontal, 16)
                 actionRow
             }
         }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .shadow(color: Color.black.opacity(0.1), radius: 16, y: 6)
+        .confirmationDialog(
+            "Clear route?",
+            isPresented: $isClearConfirmationPresented,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Route", role: .destructive, action: onClear)
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all route sections from the current plan.")
+        }
     }
 
     private var header: some View {
@@ -141,9 +158,10 @@ struct PlanningPanel: View {
 
     private var anchorList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(plannedSections.enumerated()), id: \.element.edgeID) { index, section in
+            ForEach(Array(displayOrderedSections.enumerated()), id: \.offset) { index, section in
+                let displayNumber = index + 1
                 HStack(spacing: 10) {
-                    Text("\(index + 1)")
+                    Text("\(displayNumber)")
                         .font(.caption.monospacedDigit().weight(.bold))
                         .foregroundStyle(.primary)
                         .frame(width: 22, alignment: .trailing)
@@ -166,7 +184,7 @@ struct PlanningPanel: View {
                             .font(.callout)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Remove section \(index + 1)")
+                    .accessibilityLabel("Remove section \(displayNumber)")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
@@ -180,7 +198,7 @@ struct PlanningPanel: View {
                 }
                 .accessibilityAddTraits(selectedSectionEdgeID == section.edgeID ? [.isSelected] : [])
 
-                if index < plannedSections.count - 1 {
+                if index < displayOrderedSections.count - 1 {
                     Divider()
                         .padding(.leading, 46)
                 }
@@ -189,22 +207,22 @@ struct PlanningPanel: View {
     }
 
     private var routeSummaryView: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 summaryChip(label: routeSummary.formattedDistanceLabel, systemImage: "ruler")
                 summaryChip(
-                    label: "\(routeSummary.sectionCount) section\(routeSummary.sectionCount == 1 ? "" : "s")",
+                    label: routeSummary.sectionCount == 1 ? "1 section" : "\(routeSummary.sectionCount) sections",
                     systemImage: "point.topleft.down.to.point.bottomright.curvepath"
                 )
+                if let elevationLabel = routeSummary.formattedElevationLabel {
+                    summaryChip(label: elevationLabel, systemImage: "mountain.2")
+                } else {
+                    Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-
-            if let elevationLabel = routeSummary.formattedElevationLabel {
-                summaryChip(label: elevationLabel, systemImage: "mountain.2")
-            } else {
-                Label(RouteSummary.elevationUnavailableNote, systemImage: "mountain.2")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             if routeUsesPreviewDestinations {
                 Label("Includes nearby preview sectors", systemImage: "location.viewfinder")
@@ -229,6 +247,9 @@ struct PlanningPanel: View {
                 accessibilityLabel: isShareExpanded ? "Collapse share options" : "Show share options"
             ) {
                 withAnimation(.easeInOut(duration: 0.2)) {
+                    if isShareExpanded {
+                        isWatchTransferExpanded = false
+                    }
                     isShareExpanded.toggle()
                 }
             }
@@ -241,6 +262,7 @@ struct PlanningPanel: View {
                 ) {
                     onShareRoute()
                     withAnimation(.easeInOut(duration: 0.2)) {
+                        isWatchTransferExpanded = false
                         isShareExpanded = false
                     }
                 }
@@ -252,7 +274,18 @@ struct PlanningPanel: View {
                 ) {
                     onExportGpx()
                     withAnimation(.easeInOut(duration: 0.2)) {
+                        isWatchTransferExpanded = false
                         isShareExpanded = false
+                    }
+                }
+
+                actionIconButton(
+                    systemImage: watchTransferIconName,
+                    tint: watchTransferTint,
+                    accessibilityLabel: isWatchTransferExpanded ? "Collapse watch transfer options" : "Show watch transfer options"
+                ) {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isWatchTransferExpanded.toggle()
                     }
                 }
             }
@@ -263,12 +296,15 @@ struct PlanningPanel: View {
                 systemImage: "trash",
                 tint: .red,
                 accessibilityLabel: "Clear all route sections",
-                action: onClear
+                action: {
+                    isClearConfirmationPresented = true
+                }
             )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .animation(.easeInOut(duration: 0.2), value: isShareExpanded)
+        .animation(.easeInOut(duration: 0.2), value: isWatchTransferExpanded)
     }
 
     private func actionIconButton(
@@ -320,6 +356,16 @@ struct PlanningPanel: View {
         }
 
         return "\(trail.trailTypeLabel) · \(distanceLabel)"
+    }
+
+    @ViewBuilder
+    private var expandedWatchTransferCard: some View {
+        if isShareExpanded && isWatchTransferExpanded {
+            watchTransferCard
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
     }
 
     private var watchTransferCard: some View {

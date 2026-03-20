@@ -4,18 +4,6 @@ import XCTest
 @testable import CrossCountryMaps
 
 final class BrowseContractTests: XCTestCase {
-    func testFallbackDestinationSelectionMatchesSharedFixture() throws {
-        let fixture: FallbackDestinationFixture = try FixtureLoader.decode("default-destination-fallback.json")
-
-        XCTAssertEqual(
-            GeoMath.closestDestination(
-                destinations: fixture.destinations,
-                reference: fixture.referenceCoordinate
-            )?.id,
-            fixture.expectedDestinationId
-        )
-    }
-
     func testTrailProximityAutoSelectionMatchesSharedFixture() throws {
         let fixture: TrailProximityFixture = try FixtureLoader.decode("trail-proximity-auto-selection.json")
 
@@ -25,6 +13,19 @@ final class BrowseContractTests: XCTestCase {
                 trails: fixture.trails.features,
                 reference: fixture.referenceCoordinate,
                 thresholdKilometers: fixture.thresholdKm
+            )?.id,
+            fixture.expectedDestinationId
+        )
+    }
+
+    func testNearestTrailDestinationSelectionMatchesSharedFixture() throws {
+        let fixture: TrailProximityFixture = try FixtureLoader.decode("trail-proximity-auto-selection.json")
+
+        XCTAssertEqual(
+            GeoMath.closestDestinationByNearestTrail(
+                destinations: fixture.destinations,
+                trails: fixture.trails.features,
+                reference: fixture.referenceCoordinate
             )?.id,
             fixture.expectedDestinationId
         )
@@ -109,7 +110,7 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
-    func testBrowseBootstrapLoadsDestinationsBeforeDestinationScopedTrails() async throws {
+    func testBrowseBootstrapWaitsForTrailMatchedDestinationBeforeLoadingTrails() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
@@ -128,13 +129,47 @@ final class BrowseContractTests: XCTestCase {
         viewModel.start()
 
         await waitUntil {
-            viewModel.trailsPhase == .success
+            viewModel.destinationsPhase == .success
         }
 
-        XCTAssertEqual(apiClient.callLog, [.destinations, .trails("1")])
-        XCTAssertEqual(viewModel.selectedDestinationID, "1")
-        XCTAssertEqual(viewModel.fitRequestID, 1)
+        XCTAssertEqual(apiClient.callLog, [.destinations])
+        XCTAssertEqual(viewModel.selectedDestinationID, "")
+        XCTAssertEqual(viewModel.trailsPhase, .idle)
+        XCTAssertEqual(viewModel.fitRequestID, 0)
         XCTAssertEqual(locationService.startCallCount, 1)
+    }
+
+    @MainActor
+    func testStartupLocationUpdateSelectsTrailMatchedDestinationAndLoadsScopedTrails() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ],
+            nearbyTrailsResponse: [
+                try makeTrail(id: 301, destinationId: 1, latitude: 59.9139, longitude: 10.7522),
+            ]
+        )
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        locationService.sendLocation(CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522))
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
+        }
+
+        XCTAssertEqual(apiClient.callLog, [.destinations, .nearbyTrails, .trails("1")])
+        XCTAssertEqual(viewModel.fitRequestID, 1)
     }
 
     @MainActor
@@ -361,6 +396,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -388,7 +425,7 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
-    func testAutoModeOnlyAvailableWhenLocationIsWithin100KmOfDestination() async throws {
+    func testEnableAutoLocationStillRecentersWithoutTrailMatch() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
@@ -407,6 +444,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -426,17 +465,19 @@ final class BrowseContractTests: XCTestCase {
             viewModel.currentLocation?.latitude == 58.9690
         }
 
-        XCTAssertFalse(viewModel.canEnableAutoLocation)
+        XCTAssertTrue(viewModel.canEnableAutoLocation)
+        let locationFocusRequestIDBefore = viewModel.locationFocusRequestID
 
         viewModel.enableAutoLocation()
 
-        XCTAssertTrue(viewModel.isManualDestinationSelection)
-        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 0)
+        XCTAssertFalse(viewModel.isManualDestinationSelection)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBefore + 1)
         XCTAssertEqual(viewModel.selectedDestinationID, "2")
     }
 
     @MainActor
-    func testEnableAutoLocationUsesNearbyDestinationWithin100Km() async throws {
+    func testEnableAutoLocationUsesNearestTrailMatchedDestination() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
@@ -458,6 +499,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -478,6 +521,145 @@ final class BrowseContractTests: XCTestCase {
         }
 
         XCTAssertTrue(viewModel.canEnableAutoLocation)
+        let fitRequestCountBeforeAutoLocation = viewModel.fitRequestID
+
+        viewModel.enableAutoLocation()
+
+        await waitUntil {
+            !viewModel.isManualDestinationSelection && viewModel.selectedDestinationID == "1"
+        }
+
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+        XCTAssertEqual(viewModel.fitRequestID, fitRequestCountBeforeAutoLocation)
+    }
+
+    @MainActor
+    func testAuthorizationUnavailableDoesNotFallbackToDefaultCenterDestination() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ]
+        )
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.destinationsPhase == .success
+        }
+
+        locationService.sendAuthorizationUnavailable()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(apiClient.callLog, [.destinations])
+        XCTAssertEqual(viewModel.selectedDestinationID, "")
+        XCTAssertEqual(viewModel.trailsPhase, .idle)
+    }
+
+    @MainActor
+    func testEnableAutoLocationDoesNotFallBackToDestinationCenterProximity() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ],
+            nearbyTrailsResponse: []
+        )
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
+        }
+
+        viewModel.selectDestination(id: "2", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.trailsPhase == .success &&
+            viewModel.primaryTrails.map(\.id) == ["202"]
+        }
+
+        locationService.sendLocation(CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522))
+
+        await waitUntil {
+            viewModel.currentLocation?.latitude == 59.9139
+        }
+
+        viewModel.enableAutoLocation()
+
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertFalse(viewModel.isManualDestinationSelection)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+        XCTAssertEqual(viewModel.selectedDestinationID, "2")
+    }
+
+    @MainActor
+    func testEnableAutoLocationForcesFreshTrailBasedDestinationSelectionAtCurrentLocation() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 61.1153, longitude: 10.4662)],
+            ],
+            nearbyTrailsResponse: [
+                try makeTrail(id: 301, destinationId: 1, latitude: 59.9139, longitude: 10.7522),
+            ]
+        )
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
+        }
+
+        locationService.sendLocation(CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522))
+
+        await waitUntil {
+            viewModel.currentLocation?.latitude == 59.9139
+        }
+
+        viewModel.selectDestination(id: "2", manual: false)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "2" &&
+            viewModel.trailsPhase == .success &&
+            viewModel.primaryTrails.map(\.id) == ["202"]
+        }
 
         viewModel.enableAutoLocation()
 
@@ -509,6 +691,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             apiClient.callLog == [.destinations, .trails("1")]
@@ -558,6 +742,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.previewPhase == .success &&
@@ -589,6 +775,8 @@ final class BrowseContractTests: XCTestCase {
         )
 
         viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
 
         await waitUntil {
             viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
@@ -996,6 +1184,10 @@ private final class LocationServiceSpy: @preconcurrency BrowseLocationServing {
 
     func requestCurrentLocation() {
         requestCurrentLocationCallCount += 1
+    }
+
+    func sendAuthorizationUnavailable() {
+        onAuthorizationUnavailable?()
     }
 
     func sendLocation(_ coordinate: CLLocationCoordinate2D) {

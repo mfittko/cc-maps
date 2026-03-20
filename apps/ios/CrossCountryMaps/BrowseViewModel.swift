@@ -43,16 +43,13 @@ protocol BrowseLocationServing: AnyObject {
 
 struct BrowseTimingConfig {
     let destinationSuggestionDebounceNanoseconds: UInt64
-    let initialFallbackDelayNanoseconds: UInt64
 
     static let live = BrowseTimingConfig(
-        destinationSuggestionDebounceNanoseconds: AppConfig.destinationSuggestionDebounceNanoseconds,
-        initialFallbackDelayNanoseconds: AppConfig.initialFallbackDelayNanoseconds
+        destinationSuggestionDebounceNanoseconds: AppConfig.destinationSuggestionDebounceNanoseconds
     )
 
     static let immediate = BrowseTimingConfig(
-        destinationSuggestionDebounceNanoseconds: 0,
-        initialFallbackDelayNanoseconds: 0
+        destinationSuggestionDebounceNanoseconds: 0
     )
 }
 
@@ -282,6 +279,9 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var isManualDestinationSelection = false
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
+    @Published private(set) var routePresentationRefreshID = 0
+    @Published private(set) var routeDisplaySections: [PlanningSection] = []
+    @Published private(set) var routeDisplaySectionNumbersByEdgeID: [String: Int] = [:]
     private(set) var handledLocationUpdateCount = 0
     @Published private(set) var isInPlanningMode = false
     @Published private(set) var routePlan = RoutePlanState()
@@ -309,11 +309,9 @@ final class BrowseViewModel: ObservableObject {
     private let browseSettingsStore: BrowseSettingsPersisting
     private let watchTransferService: WatchRouteTransferServing
     private var hasStarted = false
-    private var hasAutoSelectedDestination = false
     private var lastAutoLocation: CLLocationCoordinate2D?
     private var primaryLoadToken = UUID()
     private var previewLoadToken = UUID()
-    private var fallbackTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
     private var elevationTask: Task<Void, Never>?
     private var pendingIncomingRoutePlan: CanonicalRoutePlan?
@@ -322,6 +320,7 @@ final class BrowseViewModel: ObservableObject {
     private var pendingStoredPlanningModeActive = false
     private var pendingMapRegionPreservationDestinationID: String?
     private var isIgnoringMapRegionUpdatesDuringStartupRestore = false
+    private var shouldPreserveMapRegionForNextAutoLocationSelection = false
     private var activeWatchTransferID: String?
 
     init(
@@ -348,7 +347,7 @@ final class BrowseViewModel: ObservableObject {
 
         locationService.onAuthorizationUnavailable = { [weak self] in
             Task { @MainActor in
-                self?.scheduleFallbackSelection()
+                self?.requestError = nil
             }
         }
 
@@ -370,7 +369,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     var canEnableAutoLocation: Bool {
-        autoEligibleDestination != nil
+        true
     }
 
     var selectedTrail: TrailFeature? {
@@ -517,9 +516,8 @@ final class BrowseViewModel: ObservableObject {
         let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
         let selectedSection = plannedSections[matchingIndex]
         let selectedSectionElevation = routeElevation?.sectionElevation(for: selectedSection.edgeID)
-
         return RouteAwareTrailDetailContext(
-            selectedSectionNumber: matchingIndex + 1,
+            selectedSectionNumber: routeDisplaySectionNumbersByEdgeID[selectedSection.edgeID] ?? (matchingIndex + 1),
             totalSections: summary.sectionCount,
             totalDistanceKm: summary.totalDistanceKm,
             ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
@@ -556,7 +554,7 @@ final class BrowseViewModel: ObservableObject {
             return "Loading destinations first"
         }
 
-        return "Waiting for destination selection"
+        return "Waiting for current location or destination selection"
     }
 
     private var watchRouteTransferEnvelope: WatchRouteTransferEnvelope? {
@@ -571,7 +569,7 @@ final class BrowseViewModel: ObservableObject {
             return nil
         }
 
-        let trailsByID = Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+        let trailsByID = allTrails.keyedByIDPreservingFirst()
         var sectionSummaries: [WatchRouteTransferSectionSummary] = []
         sectionSummaries.reserveCapacity(sections.count)
 
@@ -658,21 +656,45 @@ final class BrowseViewModel: ObservableObject {
         }
     }
 
-    func selectDestination(id: String, manual: Bool) {
+    func selectDestination(id: String, manual: Bool, preserveMapRegion: Bool = false) {
         guard selectedDestinationID != id || manual else {
             return
-        }
-
-        if pendingMapRegionPreservationDestinationID != id {
-            pendingMapRegionPreservationDestinationID = nil
-            isIgnoringMapRegionUpdatesDuringStartupRestore = false
         }
 
         if manual {
             isManualDestinationSelection = true
         }
 
-        fallbackTask?.cancel()
+        if selectedDestinationID == id {
+            persistBrowseSettings()
+            return
+        }
+
+        let displayedTrails = primaryTrails + previewTrails
+        if manual,
+           !routePlan.isEmpty,
+           routeContainsDestination(
+               id,
+               anchorEdgeIDs: routePlan.anchorEdgeIDs,
+               allTrails: displayedTrails
+           ) {
+            isInPlanningMode = false
+            selectedTrailID = nil
+            selectedTrailSegment = nil
+            selectedRouteDetailSectionEdgeID = nil
+            clearSelectedPlannedSection()
+            switchPrimaryDestinationPreservingRoute(to: id, allTrails: displayedTrails)
+            return
+        }
+
+        if preserveMapRegion {
+            pendingMapRegionPreservationDestinationID = id
+            isIgnoringMapRegionUpdatesDuringStartupRestore = true
+        } else if pendingMapRegionPreservationDestinationID != id {
+            pendingMapRegionPreservationDestinationID = nil
+            isIgnoringMapRegionUpdatesDuringStartupRestore = false
+        }
+
         previewTask?.cancel()
         primaryLoadToken = UUID()
         previewLoadToken = UUID()
@@ -681,6 +703,7 @@ final class BrowseViewModel: ObservableObject {
         isInPlanningMode = false
         routeHydrationNotice = nil
         routePlan.clear()
+        refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
         activeRouteDestinationIDs = []
         clearSelectedPlannedSection()
         routeElevation = nil
@@ -726,6 +749,9 @@ final class BrowseViewModel: ObservableObject {
 
             clearSelectedPlannedSection()
 
+            let displayedTrails = primaryTrails + previewTrails
+            let selectedTrailDestinationID = displayedTrails.first { $0.id == trailID }?.destinationId
+
             var nextAnchorEdgeIDs = routePlan.anchorEdgeIDs
 
             if let existingIndex = nextAnchorEdgeIDs.firstIndex(of: anchorEdgeID) {
@@ -734,13 +760,29 @@ final class BrowseViewModel: ObservableObject {
                 nextAnchorEdgeIDs.append(anchorEdgeID)
             }
 
-            applyRouteAnchorEdgeIDs(
-                GeoMath.reorderedAnchorEdgeIDs(
-                    nextAnchorEdgeIDs,
-                    allTrails: primaryTrails + previewTrails
-                ),
-                allTrails: primaryTrails + previewTrails
+            let reorderedAnchorEdgeIDs = GeoMath.reorderedAnchorEdgeIDs(
+                nextAnchorEdgeIDs,
+                allTrails: displayedTrails
             )
+
+            applyRouteAnchorEdgeIDs(
+                reorderedAnchorEdgeIDs,
+                allTrails: displayedTrails
+            )
+
+            if let selectedTrailDestinationID,
+               !selectedTrailDestinationID.isEmpty,
+               selectedTrailDestinationID != selectedDestinationID,
+               routeContainsDestination(
+                   selectedTrailDestinationID,
+                   anchorEdgeIDs: reorderedAnchorEdgeIDs,
+                   allTrails: displayedTrails
+               ) {
+                switchPrimaryDestinationPreservingRoute(
+                    to: selectedTrailDestinationID,
+                    allTrails: displayedTrails
+                )
+            }
         } else {
             selectedTrailID = trailID
             selectedTrailSegment = selection?.segment
@@ -829,6 +871,14 @@ final class BrowseViewModel: ObservableObject {
         removeRouteAnchor(at: index)
     }
 
+    func focusPlannedRouteIfAvailable() {
+        guard !isInPlanningMode, !routePlan.isEmpty else {
+            return
+        }
+
+        fitRequestID += 1
+    }
+
     func sendRouteToWatch() {
         guard watchTransferAvailability == .ready else {
             watchTransferSendState = .failure(watchTransferStatusMessage)
@@ -866,24 +916,29 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        if selectedDestinationID == routePlan.destinationId {
+            pendingRestoreContext = resolvePendingRestoreContext(for: routePlan.destinationId)
+
+            if trailsPhase == .success {
+                schedulePreviewEvaluation()
+            }
+
+            return
+        }
+
         selectDestination(id: routePlan.destinationId, manual: true)
     }
 
     func enableAutoLocation() {
-        guard autoEligibleDestination != nil else {
-            return
-        }
-
         isManualDestinationSelection = false
+        shouldPreserveMapRegionForNextAutoLocationSelection = true
         locationFocusRequestID += 1
         locationService.requestCurrentLocation()
 
         if let currentLocation {
             Task {
-                await handleLocationUpdate(currentLocation)
+                await handleLocationUpdate(currentLocation, forceSelectionRefresh: true)
             }
-        } else {
-            scheduleFallbackSelection()
         }
     }
 
@@ -933,8 +988,6 @@ final class BrowseViewModel: ObservableObject {
 
             if let currentLocation {
                 await handleLocationUpdate(currentLocation)
-            } else {
-                scheduleFallbackSelection()
             }
         } catch {
             destinationsPhase = .failure("Failed to load destinations")
@@ -952,6 +1005,7 @@ final class BrowseViewModel: ObservableObject {
                 }
 
                 primaryTrails = response.features
+                refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
                 trailsPhase = .success
 
                 if pendingMapRegionPreservationDestinationID == destinationID {
@@ -974,44 +1028,28 @@ final class BrowseViewModel: ObservableObject {
 
                 isIgnoringMapRegionUpdatesDuringStartupRestore = false
                 primaryTrails = []
+                refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
                 trailsPhase = .failure("Failed to load trails for the selected destination")
                 requestError = error.localizedDescription
             }
         }
     }
 
-    private func scheduleFallbackSelection() {
-        fallbackTask?.cancel()
-        fallbackTask = Task { [weak self] in
-            if let self, self.timingConfig.initialFallbackDelayNanoseconds > 0 {
-                try? await Task.sleep(nanoseconds: self.timingConfig.initialFallbackDelayNanoseconds)
-            }
-            self?.applyFallbackSelectionIfNeeded()
-        }
-    }
-
-    private func applyFallbackSelectionIfNeeded() {
-        guard !isManualDestinationSelection, selectedDestinationID.isEmpty else {
-            return
-        }
-
-        guard let fallbackDestination = GeoMath.closestDestination(destinations: destinations, reference: AppConfig.defaultCenter) else {
-            return
-        }
-
-        hasAutoSelectedDestination = true
-        selectDestination(id: fallbackDestination.id, manual: false)
-    }
-
-    private func handleLocationUpdate(_ coordinate: CLLocationCoordinate2D) async {
+    private func handleLocationUpdate(
+        _ coordinate: CLLocationCoordinate2D,
+        forceSelectionRefresh: Bool = false
+    ) async {
         handledLocationUpdateCount += 1
         currentLocation = coordinate
+        let shouldPreserveMapRegion = shouldPreserveMapRegionForNextAutoLocationSelection
+        shouldPreserveMapRegionForNextAutoLocationSelection = false
 
         guard !isManualDestinationSelection, !destinations.isEmpty else {
             return
         }
 
-        if let lastAutoLocation,
+          if !forceSelectionRefresh,
+              let lastAutoLocation,
            GeoMath.distanceKilometers(from: lastAutoLocation, to: coordinate) < AppConfig.currentLocationRecheckDistanceKm {
             return
         }
@@ -1019,32 +1057,40 @@ final class BrowseViewModel: ObservableObject {
         lastAutoLocation = coordinate
 
         do {
-            let nearbyTrails = try await apiClient.fetchNearbyTrails(reference: coordinate)
-            if let matchedDestination = GeoMath.closestDestinationByTrailProximity(
-                destinations: destinations,
-                trails: nearbyTrails.features,
-                reference: coordinate,
-                thresholdKilometers: AppConfig.currentLocationTrackMatchThresholdKm
-            ), matchedDestination.id != selectedDestinationID {
-                hasAutoSelectedDestination = true
-                selectDestination(id: matchedDestination.id, manual: false)
+            if let matchedDestination = try await matchedDestinationForCurrentLocation(coordinate),
+               matchedDestination.id != selectedDestinationID {
+                selectDestination(
+                    id: matchedDestination.id,
+                    manual: false,
+                    preserveMapRegion: shouldPreserveMapRegion
+                )
                 return
             }
         } catch {
-            // Nearby trail matching is an optimization. Fallback still preserves destination-first behavior.
+            // Live destination switching must stay trail-based. If nearby-trail lookup fails,
+            // keep the current selection rather than falling back to destination-center proximity.
+        }
+    }
+
+    private func matchedDestinationForCurrentLocation(
+        _ coordinate: CLLocationCoordinate2D
+    ) async throws -> Destination? {
+        let nearbyTrails = try await apiClient.fetchNearbyTrails(reference: coordinate)
+
+        if let matchedDestination = GeoMath.closestDestinationByTrailProximity(
+            destinations: destinations,
+            trails: nearbyTrails.features,
+            reference: coordinate,
+            thresholdKilometers: AppConfig.currentLocationTrackMatchThresholdKm
+        ) {
+            return matchedDestination
         }
 
-        guard let fallbackDestination = autoEligibleDestination(for: coordinate) else {
-            if selectedDestinationID.isEmpty {
-                applyFallbackSelectionIfNeeded()
-            }
-            return
-        }
-
-        if !hasAutoSelectedDestination || selectedDestinationID.isEmpty || selectedDestinationID != fallbackDestination.id {
-            hasAutoSelectedDestination = true
-            selectDestination(id: fallbackDestination.id, manual: false)
-        }
+        return GeoMath.closestDestinationByNearestTrail(
+            destinations: destinations,
+            trails: nearbyTrails.features,
+            reference: coordinate
+        )
     }
 
     private func schedulePreviewEvaluation() {
@@ -1084,6 +1130,7 @@ final class BrowseViewModel: ObservableObject {
 
         guard !previewDestinations.isEmpty else {
             previewTrails = []
+            refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
             previewPhase = .success
             let trails = primaryTrails
             Task.detached(priority: .utility) {
@@ -1110,6 +1157,7 @@ final class BrowseViewModel: ObservableObject {
             }
 
             previewTrails = nextPreviewTrails
+            refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
             previewPhase = .success
 
             let trails = primaryTrails + nextPreviewTrails
@@ -1123,6 +1171,7 @@ final class BrowseViewModel: ObservableObject {
             }
 
             previewTrails = []
+            refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
             previewPhase = .failure("Nearby previews unavailable")
             applyPendingRouteHydrationIfNeeded()
         }
@@ -1203,6 +1252,7 @@ final class BrowseViewModel: ObservableObject {
         if hydrationResult.validAnchorEdgeIds.isEmpty {
             routePlan.clear()
             activeRouteDestinationIDs = []
+            refreshRoutePresentationDerivedState(allTrails: allTrails)
 
             if restoreSource == .storage {
                 routePlanStore.clearRoutePlan(for: pendingRestoreContext.routePlan.destinationId)
@@ -1216,6 +1266,7 @@ final class BrowseViewModel: ObservableObject {
             )
             routePlan.replaceAnchorEdges(with: reorderedAnchorEdgeIDs)
             activeRouteDestinationIDs = routeDestinationIDs(for: reorderedAnchorEdgeIDs, allTrails: allTrails)
+            refreshRoutePresentationDerivedState(allTrails: allTrails)
             persistCurrentRoutePlan()
             fitRequestID += 1
 
@@ -1240,6 +1291,7 @@ final class BrowseViewModel: ObservableObject {
         resetWatchTransferLifecycle()
         clearSelectedPlannedSection()
         routePlan.replaceAnchorEdges(with: anchorEdgeIDs)
+        refreshRoutePresentationDerivedState(allTrails: allTrails)
         routeHydrationNotice = nil
 
         guard !selectedDestinationID.isEmpty else {
@@ -1263,21 +1315,84 @@ final class BrowseViewModel: ObservableObject {
         scheduleElevationFetch(sections: sections, destinationID: selectedDestinationID)
     }
 
+    private func switchPrimaryDestinationPreservingRoute(to destinationID: String, allTrails: [TrailFeature]) {
+        guard !destinationID.isEmpty,
+              destinationID != selectedDestinationID else {
+            return
+        }
+
+        resetWatchTransferLifecycle()
+        let previousDestinationID = selectedDestinationID
+        let existingAnchorEdgeIDs = routePlan.anchorEdgeIDs
+        let existingRouteDestinationIDs = activeRouteDestinationIDs
+        let repartitionedPrimaryTrails = allTrails.filter { $0.destinationId == destinationID }
+        let repartitionedPreviewTrails = allTrails.filter { $0.destinationId != destinationID }
+
+        previewTask?.cancel()
+        pendingMapRegionPreservationDestinationID = nil
+        isIgnoringMapRegionUpdatesDuringStartupRestore = false
+        primaryLoadToken = UUID()
+        previewLoadToken = UUID()
+        selectedDestinationID = destinationID
+        isManualDestinationSelection = true
+        primaryTrails = repartitionedPrimaryTrails
+        previewTrails = repartitionedPreviewTrails
+        refreshRoutePresentationDerivedState(allTrails: repartitionedPrimaryTrails + repartitionedPreviewTrails)
+        nearbyPreviewDestinations = destinations.filter {
+            existingRouteDestinationIDs.contains($0.id) && $0.id != destinationID
+        }
+        trailsPhase = repartitionedPrimaryTrails.isEmpty ? .loading : .success
+        requestError = nil
+
+        if !previousDestinationID.isEmpty {
+            routePlanStore.clearRoutePlan(for: previousDestinationID)
+        }
+
+        if existingAnchorEdgeIDs.isEmpty {
+            activeRouteDestinationIDs = []
+            routeElevation = nil
+        } else {
+            activeRouteDestinationIDs = CanonicalRoutePlan(
+                destinationId: destinationID,
+                anchorEdgeIds: existingAnchorEdgeIDs,
+                destinationIds: existingRouteDestinationIDs
+            ).destinationIds
+            refreshRoutePresentationDerivedState(allTrails: allTrails)
+            persistCurrentRoutePlan()
+
+            let sections = GeoMath.planningSections(for: existingAnchorEdgeIDs, allTrails: allTrails)
+            scheduleElevationFetch(sections: sections, destinationID: destinationID)
+        }
+
+        persistBrowseSettings()
+        loadPrimaryTrails(for: destinationID, token: primaryLoadToken)
+    }
+
     private func routeDestinationIDs(for anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
         guard !selectedDestinationID.isEmpty else {
             return []
         }
 
-        let trailsByID = Dictionary(uniqueKeysWithValues: allTrails.map { ($0.id, $0) })
+        let trailsByID = allTrails.keyedByIDPreservingFirst()
         let sectionDestinationIDs = GeoMath.planningSections(for: anchorEdgeIDs, allTrails: allTrails).compactMap { section in
             trailsByID[section.trailID]?.destinationId
         }
 
-        return CanonicalRoutePlan(
-            destinationId: selectedDestinationID,
-            anchorEdgeIds: anchorEdgeIDs,
-            destinationIds: sectionDestinationIDs
-        ).destinationIds
+        return ([selectedDestinationID] + sectionDestinationIDs).reduce(into: [String]()) { result, destinationID in
+            guard !destinationID.isEmpty, !result.contains(destinationID) else {
+                return
+            }
+
+            result.append(destinationID)
+        }
+    }
+
+    private func routeContainsDestination(
+        _ destinationID: String,
+        anchorEdgeIDs: [String],
+        allTrails: [TrailFeature]
+    ) -> Bool {
+        routeDestinationIDs(for: anchorEdgeIDs, allTrails: allTrails).contains(destinationID)
     }
 
     private func persistCurrentRoutePlan() {
@@ -1302,6 +1417,28 @@ final class BrowseViewModel: ObservableObject {
                 isPlanningModeActive: isInPlanningMode
             )
         )
+    }
+
+    private func refreshRoutePresentationDerivedState(allTrails: [TrailFeature]) {
+        let nextDisplaySections = GeoMath.displayOrderedPlanningSections(
+            for: routePlan.anchorEdgeIDs,
+            allTrails: allTrails
+        )
+        let nextDisplaySectionNumbersByEdgeID = Dictionary(
+            uniqueKeysWithValues: nextDisplaySections.enumerated().map { index, section in
+                (section.edgeID, index + 1)
+            }
+        )
+
+        let didChange = nextDisplaySections != routeDisplaySections ||
+            nextDisplaySectionNumbersByEdgeID != routeDisplaySectionNumbersByEdgeID
+
+        routeDisplaySections = nextDisplaySections
+        routeDisplaySectionNumbersByEdgeID = nextDisplaySectionNumbersByEdgeID
+
+        if didChange {
+            routePresentationRefreshID += 1
+        }
     }
 
     private func handleWatchTransferAcknowledgement(_ acknowledgement: WatchRouteTransferAcknowledgement) {
@@ -1424,22 +1561,6 @@ final class BrowseViewModel: ObservableObject {
         }
     }
 
-    private var autoEligibleDestination: Destination? {
-        guard let currentLocation else {
-            return nil
-        }
-
-        return autoEligibleDestination(for: currentLocation)
-    }
-
-    private func autoEligibleDestination(for coordinate: CLLocationCoordinate2D) -> Destination? {
-        guard let destination = GeoMath.closestDestination(destinations: destinations, reference: coordinate) else {
-            return nil
-        }
-
-        let distanceKm = GeoMath.distanceKilometers(from: coordinate, to: destination.coordinate)
-        return distanceKm <= AppConfig.autoLocationDestinationRadiusKm ? destination : nil
-    }
 }
 
 struct APIClient: BrowseAPIClient {
