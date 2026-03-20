@@ -1291,6 +1291,64 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testStoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let storedRoutePlan = CanonicalRoutePlan(
+            destinationId: "100",
+            anchorEdgeIds: [Self.edgeA, Self.edgeC],
+            destinationIds: ["100", "200"]
+        )
+        routePlanStore.writeRoutePlan(storedRoutePlan)
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(
+                    destinationID: "200",
+                    mapRegion: nil,
+                    isPlanningModeActive: true,
+                    activeRouteOwnerDestinationID: "100"
+                )
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "200" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200"] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.canonicalRoutePlan, storedRoutePlan)
+        XCTAssertEqual(viewModel.selectedDestinationID, "200")
+        XCTAssertNil(viewModel.routeHydrationNotice)
+        XCTAssertEqual(routePlanStore.readRoutePlan(for: "100"), storedRoutePlan)
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "200"))
+    }
+
+    @MainActor
     func testIncomingUrlHydratesRouteForSharedLink() async throws {
         let suiteName = "PlanningContractTests.IncomingUrlHydratesRouteForSharedLink"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)

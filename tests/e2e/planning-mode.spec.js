@@ -162,6 +162,17 @@ async function emitMapLayerClick(page, layerId, feature, lngLat, originalEvent) 
   );
 }
 
+async function selectDesktopDestination(page, destinationId) {
+  const select = page.locator('.control-panel-desktop .select-input');
+
+  await expect(select).toBeVisible();
+  await page.waitForFunction(() => {
+    const element = document.querySelector('.control-panel-desktop .select-input');
+    return Boolean(element) && !element.disabled;
+  });
+  await select.selectOption(destinationId);
+}
+
 async function waitForSuggestedTrailPreview(page, destinationId) {
   await expect.poll(async () =>
     page.evaluate((expectedDestinationId) => {
@@ -171,6 +182,34 @@ async function waitForSuggestedTrailPreview(page, destinationId) {
 
       return features.some(
         (feature) => String(feature?.properties?.destinationid) === String(expectedDestinationId)
+      );
+    }, destinationId)
+  ).toBe(true);
+}
+
+async function expectDestinationInPrimaryTrails(page, destinationId) {
+  await expect.poll(async () =>
+    page.evaluate((expectedDestinationId) => {
+      const mockMap = window.__ccMapsMockMap;
+      const source = mockMap?.getSource('trails');
+      const features = source?.data?.features || [];
+
+      return features.some(
+        (feature) => String(feature?.properties?.destinationid) === String(expectedDestinationId)
+      );
+    }, destinationId)
+  ).toBe(true);
+}
+
+async function expectDestinationNotInSuggestedTrails(page, destinationId) {
+  await expect.poll(async () =>
+    page.evaluate((expectedDestinationId) => {
+      const mockMap = window.__ccMapsMockMap;
+      const source = mockMap?.getSource('suggested-trails');
+      const features = source?.data?.features || [];
+
+      return features.every(
+        (feature) => String(feature?.properties?.destinationid) !== String(expectedDestinationId)
       );
     }, destinationId)
   ).toBe(true);
@@ -207,18 +246,47 @@ async function waitForPersistedRoutePlan(page, destinationId, anchorCount) {
   ).toBe(true);
 }
 
+async function waitForRouteUrl(page, anchorCount) {
+  await expect.poll(async () =>
+    page.evaluate((expectedAnchorCount) => {
+      const routeParam = new URLSearchParams(window.location.search).get('route') || '';
+      const routeParts = routeParam.split('|');
+
+      return (
+        routeParts.length >= 4 &&
+        routeParts[3] &&
+        routeParts[3].split(',').filter(Boolean).length === expectedAnchorCount
+      );
+    }, anchorCount)
+  ).toBe(true);
+}
+
+async function getMockMapView(page) {
+  return page.evaluate(() => {
+    const mockMap = window.__ccMapsMockMap;
+    const center = mockMap?.getCenter?.();
+    const zoom = mockMap?.getZoom?.();
+
+    return {
+      longitude: center?.lng ?? null,
+      latitude: center?.lat ?? null,
+      zoom: zoom ?? null,
+    };
+  });
+}
+
 test.describe('planning mode interactions', () => {
   test('planning mode off still opens trail details on trail click', async ({ page }) => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await emitPrimaryTrailClick(page);
 
     await expect(page.getByRole('heading', { name: 'Machine groomed' })).toBeVisible();
-    await expect(page.getByText('Classic: Yes · Skating: Yes')).toBeVisible();
+    await expect(page.getByText('0.6 km')).toBeVisible();
   });
 
   test('desktop quick action opens and closes planning mode with desktop hint text', async ({
@@ -227,8 +295,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
 
@@ -251,8 +319,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
@@ -270,11 +338,11 @@ test.describe('planning mode interactions', () => {
     await page.getByRole('button', { name: 'Exit planning mode' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('2');
-    await expect(page.getByRole('heading', { name: 'Østmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '2');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
   });
 
@@ -282,8 +350,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
@@ -305,7 +373,7 @@ test.describe('planning mode interactions', () => {
     );
 
     await expect(page.getByText(/^2 sections/)).toBeVisible();
-    await waitForPersistedRoutePlan(page, '1', 2);
+    await waitForRouteUrl(page, 2);
 
     await page.reload();
 
@@ -318,12 +386,101 @@ test.describe('planning mode interactions', () => {
     await expect.poll(async () =>
       page.evaluate(() => {
         const mockMap = window.__ccMapsMockMap;
-        const source = mockMap?.getSource('suggested-trails');
+        const source = mockMap?.getSource('trails');
         const features = source?.data?.features || [];
 
         return features.some((feature) => String(feature?.properties?.destinationid) === '2');
       })
     ).toBe(true);
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+  test('route destinations stay in the primary trail source when focus flips between them', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await selectDesktopDestination(page, '2');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '1');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '1');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+  test('adding and removing a secondary destination keeps the current map view', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    const viewBeforeSecondaryAdd = await getMockMapView(page);
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expect(await getMockMapView(page)).toEqual(viewBeforeSecondaryAdd);
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(1);
+    await expect(await getMockMapView(page)).toEqual(viewBeforeSecondaryAdd);
   });
 
   test.describe('mobile viewport', () => {

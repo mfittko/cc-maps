@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000';
+const defaultPort = 3100;
+const baseURL = process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${defaultPort}`;
 const shouldUseMapboxMock = !process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
 export default defineConfig({
@@ -14,7 +15,7 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run dev',
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${defaultPort}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI,
     env: {

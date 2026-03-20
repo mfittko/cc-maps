@@ -164,21 +164,25 @@ struct BrowseSettings: Codable, Equatable {
     let destinationID: String
     let mapRegion: PersistedMapRegion?
     let isPlanningModeActive: Bool
+    let activeRouteOwnerDestinationID: String?
 
     enum CodingKeys: String, CodingKey {
         case destinationID = "destination"
         case mapRegion
         case isPlanningModeActive = "planningModeActive"
+        case activeRouteOwnerDestinationID = "activeRouteOwnerDestination"
     }
 
     init(
         destinationID: String,
         mapRegion: PersistedMapRegion?,
-        isPlanningModeActive: Bool = false
+        isPlanningModeActive: Bool = false,
+        activeRouteOwnerDestinationID: String? = nil
     ) {
         self.destinationID = destinationID
         self.mapRegion = mapRegion
         self.isPlanningModeActive = isPlanningModeActive
+        self.activeRouteOwnerDestinationID = activeRouteOwnerDestinationID
     }
 
     init(from decoder: Decoder) throws {
@@ -186,6 +190,7 @@ struct BrowseSettings: Codable, Equatable {
         destinationID = try container.decode(String.self, forKey: .destinationID)
         mapRegion = try container.decodeIfPresent(PersistedMapRegion.self, forKey: .mapRegion)
         isPlanningModeActive = try container.decodeIfPresent(Bool.self, forKey: .isPlanningModeActive) ?? false
+        activeRouteOwnerDestinationID = try container.decodeIfPresent(String.self, forKey: .activeRouteOwnerDestinationID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -193,6 +198,7 @@ struct BrowseSettings: Codable, Equatable {
         try container.encode(destinationID, forKey: .destinationID)
         try container.encodeIfPresent(mapRegion, forKey: .mapRegion)
         try container.encode(isPlanningModeActive, forKey: .isPlanningModeActive)
+        try container.encodeIfPresent(activeRouteOwnerDestinationID, forKey: .activeRouteOwnerDestinationID)
     }
 }
 
@@ -318,6 +324,7 @@ final class BrowseViewModel: ObservableObject {
     private var pendingRestoreContext: PendingRouteRestoreContext?
     private var pendingStoredDestinationID = ""
     private var pendingStoredPlanningModeActive = false
+    private var pendingStoredRouteOwnerDestinationID: String?
     private var pendingMapRegionPreservationDestinationID: String?
     private var isIgnoringMapRegionUpdatesDuringStartupRestore = false
     private var shouldPreserveMapRegionForNextAutoLocationSelection = false
@@ -645,6 +652,7 @@ final class BrowseViewModel: ObservableObject {
         visibleRegionCenter = storedBrowseSettings?.mapRegion?.center ?? AppConfig.defaultCenter
         pendingStoredDestinationID = storedBrowseSettings?.destinationID ?? ""
         pendingStoredPlanningModeActive = storedBrowseSettings?.isPlanningModeActive ?? false
+        pendingStoredRouteOwnerDestinationID = storedBrowseSettings?.activeRouteOwnerDestinationID
         isManualDestinationSelection = !pendingStoredDestinationID.isEmpty
         isIgnoringMapRegionUpdatesDuringStartupRestore = visibleMapRegion != nil && !pendingStoredDestinationID.isEmpty
         pendingMapRegionPreservationDestinationID = visibleMapRegion == nil || pendingStoredDestinationID.isEmpty
@@ -1194,6 +1202,16 @@ final class BrowseViewModel: ObservableObject {
             )
         }
 
+        if let pendingStoredRouteOwnerDestinationID,
+           let storedRoutePlan = routePlanStore.readRoutePlan(for: pendingStoredRouteOwnerDestinationID),
+           storedRoutePlan.destinationIds.contains(destinationID) {
+            return PendingRouteRestoreContext(
+                routePlan: storedRoutePlan,
+                source: .storage,
+                shouldEnterPlanningMode: pendingStoredPlanningModeActive && !storedRoutePlan.anchorEdgeIds.isEmpty
+            )
+        }
+
         if let storedRoutePlan = routePlanStore.readRoutePlan(for: destinationID), storedRoutePlan.destinationId == destinationID {
             return PendingRouteRestoreContext(
                 routePlan: storedRoutePlan,
@@ -1238,7 +1256,8 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func applyPendingRouteHydrationIfNeeded() {
-        guard let pendingRestoreContext, pendingRestoreContext.routePlan.destinationId == selectedDestinationID else {
+        guard let pendingRestoreContext,
+              pendingRestoreContext.routePlan.destinationIds.contains(selectedDestinationID) else {
             return
         }
 
@@ -1428,7 +1447,8 @@ final class BrowseViewModel: ObservableObject {
             BrowseSettings(
                 destinationID: selectedDestinationID,
                 mapRegion: visibleMapRegion,
-                isPlanningModeActive: isInPlanningMode
+                isPlanningModeActive: isInPlanningMode,
+                activeRouteOwnerDestinationID: routeOwnerDestinationID.isEmpty ? nil : routeOwnerDestinationID
             )
         )
     }
