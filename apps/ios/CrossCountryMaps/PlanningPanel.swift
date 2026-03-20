@@ -293,7 +293,7 @@ struct PlanningPanel: View {
             .font(.caption.weight(.semibold))
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.82), in: Capsule())
+            .background(Color(.secondarySystemGroupedBackground).opacity(0.82), in: Capsule())
     }
 
     private func sectionElevationChip(_ elevation: SectionElevationSummary) -> some View {
@@ -304,7 +304,7 @@ struct PlanningPanel: View {
         .font(.caption2.weight(.semibold))
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .background(Color.white.opacity(0.82), in: Capsule())
+        .background(Color(.secondarySystemGroupedBackground).opacity(0.82), in: Capsule())
         .foregroundStyle(elevation.formattedElevationLabel == nil ? .secondary : .primary)
     }
 
@@ -351,7 +351,7 @@ struct PlanningPanel: View {
             }
         }
         .padding(12)
-        .background(Color.white.opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground).opacity(0.72), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var watchTransferTint: Color {

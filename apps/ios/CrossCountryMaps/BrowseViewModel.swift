@@ -1688,7 +1688,7 @@ extension WatchRouteTransferController: WCSessionDelegate {
         didFinish userInfoTransfer: WCSessionUserInfoTransfer,
         error: (any Error)?
     ) {
-        let transferID = (userInfoTransfer.userInfo?[WatchRouteTransferSubmission.transferIDKey] as? String) ?? "unknown"
+        let transferID = (userInfoTransfer.userInfo[WatchRouteTransferSubmission.transferIDKey] as? String) ?? "unknown"
         if let error {
             logger.error(
                 "Finished queued phone transfer \(transferID, privacy: .public) with error=\(String(describing: error), privacy: .public). \(self.sessionSnapshot(for: session), privacy: .public)"

@@ -400,7 +400,7 @@ extension WatchRouteStore: WCSessionDelegate {
         didFinish userInfoTransfer: WCSessionUserInfoTransfer,
         error: (any Error)?
     ) {
-        let transferID = (userInfoTransfer.userInfo?["transferId"] as? String) ?? "unknown"
+        let transferID = (userInfoTransfer.userInfo["transferId"] as? String) ?? "unknown"
         Task { @MainActor in
             if let error {
                 self.logger.error(

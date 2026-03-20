@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 71;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -72,32 +72,33 @@
 		1A65D0D0F1368EBD84C5B2AD /* AppConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		2F74900E40ACABFCFB1B72F1 /* TrailMapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TrailMapView.swift; sourceTree = "<group>"; };
 		3421DF2A3086891AE8F2CF05 /* BrowseModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseModels.swift; sourceTree = "<group>"; };
+		3B3CBDB12F6CDA300058D556 /* MapKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MapKit.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS11.2.sdk/System/Library/Frameworks/MapKit.framework; sourceTree = DEVELOPER_DIR; };
 		3EE227589903682313B4BB7C /* PlanningPanel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanningPanel.swift; sourceTree = "<group>"; };
 		41E7EAF5750E180DD11E45C2 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		4966F3FF4BFAC13EFB8B055D /* CrossCountryMapsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrossCountryMapsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "nearby-preview-selection.json"; sourceTree = "<group>"; };
+		4A2B7C8C1EF3A9B04C5D6E71 /* ElevationModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ElevationModels.swift; sourceTree = "<group>"; };
+		52A32780BDE2F7E6350B399E /* nearby-preview-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "nearby-preview-selection.json"; sourceTree = "<group>"; };
 		583E7F6C8CFB5500BA913E48 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5D53A787AD4DB50C6341DE9D /* Release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		67CDBCB79F17E217AFB97120 /* BrowseViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
 		7BD77C88FE1F324F3593517B /* CrossCountryMapsApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsApp.swift; sourceTree = "<group>"; };
 		866B0D9DC4E6ADAA91BD7A3F /* ContentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		8E99E4EBE6C83D143B1FB821 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A976DB7912080A9359A42657 /* crossing-interval-inspection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "crossing-interval-inspection.json"; sourceTree = "<group>"; };
+		9D9105A391AB74684F9121A1 /* RouteExport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RouteExport.swift; sourceTree = "<group>"; };
+		A976DB7912080A9359A42657 /* crossing-interval-inspection.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "crossing-interval-inspection.json"; sourceTree = "<group>"; };
 		A9B3E04102827C74346A5C25 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10043845D617C73FE646FDD /* CrossCountryMapsWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CrossCountryMapsWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B7B2FEC43BC0EF45D127E19A /* Base.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		BA4047056C56412595C77135 /* RoutePlanModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RoutePlanModels.swift; sourceTree = "<group>"; };
-		9D9105A391AB74684F9121A1 /* RouteExport.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RouteExport.swift; sourceTree = "<group>"; };
-		4A2B7C8C1EF3A9B04C5D6E71 /* ElevationModels.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ElevationModels.swift; sourceTree = "<group>"; };
-		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
-		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
+		BAE3E55E59417244266E684F /* default-destination-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "default-destination-fallback.json"; sourceTree = "<group>"; };
+		C5175CEDF36819537F540ABE /* trail-crossing-segments.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "trail-crossing-segments.json"; sourceTree = "<group>"; };
 		C90064D714356D96F17DCBAF /* CrossCountryMapsWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CrossCountryMapsWatchApp.swift; sourceTree = "<group>"; };
 		CB1AA07079DB9A3FA0ED691D /* PlanningContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlanningContractTests.swift; sourceTree = "<group>"; };
-		CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "planning-ordered-anchors.json"; sourceTree = "<group>"; };
-		CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-proximity-auto-selection.json"; sourceTree = "<group>"; };
-		D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "whole-feature-inspection-fallback.json"; sourceTree = "<group>"; };
+		CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "planning-ordered-anchors.json"; sourceTree = "<group>"; };
+		CC6AE66170D10543FD58F007 /* trail-proximity-auto-selection.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "trail-proximity-auto-selection.json"; sourceTree = "<group>"; };
+		D2D2EC1F58C6F2E288632FAD /* whole-feature-inspection-fallback.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "whole-feature-inspection-fallback.json"; sourceTree = "<group>"; };
 		D8D3CC1F911553A0595F997D /* FixtureLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FixtureLoader.swift; sourceTree = "<group>"; };
-		DC908B22E54481619D452934 /* trail-detail-summary.json */ = {isa = PBXFileReference; includeInIndex = 1; path = "trail-detail-summary.json"; sourceTree = "<group>"; };
+		DC908B22E54481619D452934 /* trail-detail-summary.json */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json; path = "trail-detail-summary.json"; sourceTree = "<group>"; };
 		E2334348096308B55FE4C36B /* WatchRootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WatchRootView.swift; sourceTree = "<group>"; };
 		EDB26E456444DE15DF361628 /* BrowseContractTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseContractTests.swift; sourceTree = "<group>"; };
 		F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
@@ -138,8 +139,16 @@
 				CB1AA07079DB9A3FA0ED691D /* PlanningContractTests.swift */,
 				D8D3CC1F911553A0595F997D /* FixtureLoader.swift */,
 			);
-			name = CrossCountryMapsTests;
 			path = CrossCountryMapsTests;
+			sourceTree = "<group>";
+		};
+		66E009BE82B5EFF262B18BB0 /* PlanningContractFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */,
+			);
+			name = PlanningContractFixtures;
+			path = "../../../tests/fixtures/planning-contract";
 			sourceTree = "<group>";
 		};
 		8A1B88A62554D31AA4805847 /* iOS */ = {
@@ -156,13 +165,13 @@
 				F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */,
 				5D53A787AD4DB50C6341DE9D /* Release.xcconfig */,
 			);
-			name = Config;
 			path = Config;
 			sourceTree = "<group>";
 		};
 		ACEE1C57E0402005E1D7135A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				3B3CBDB12F6CDA300058D556 /* MapKit.framework */,
 				8A1B88A62554D31AA4805847 /* iOS */,
 				DCFA01B0C9D31CCB6C765C2A /* watchOS */,
 			);
@@ -186,7 +195,6 @@
 				583E7F6C8CFB5500BA913E48 /* Assets.xcassets */,
 				41E7EAF5750E180DD11E45C2 /* Info.plist */,
 			);
-			name = CrossCountryMaps;
 			path = CrossCountryMaps;
 			sourceTree = "<group>";
 		};
@@ -222,15 +230,6 @@
 			path = "../../../tests/fixtures/browse-contract";
 			sourceTree = "<group>";
 		};
-		66E009BE82B5EFF262B18BB0 /* PlanningContractFixtures */ = {
-			isa = PBXGroup;
-			children = (
-				CC3F297B711F74269C178F81 /* planning-ordered-anchors.json */,
-			);
-			name = PlanningContractFixtures;
-			path = "../../../tests/fixtures/planning-contract";
-			sourceTree = "<group>";
-		};
 		E1CB15354FF682E209E94686 = {
 			isa = PBXGroup;
 			children = (
@@ -251,7 +250,6 @@
 				A9B3E04102827C74346A5C25 /* Assets.xcassets */,
 				8E99E4EBE6C83D143B1FB821 /* Info.plist */,
 			);
-			name = CrossCountryMapsWatch;
 			path = CrossCountryMapsWatch;
 			sourceTree = "<group>";
 		};
@@ -318,8 +316,9 @@
 		0A4CBA21294C85ECCB681A87 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				BuildIndependentTargetsInParallel = YES;
 				LastSwiftUpdateCheck = 1600;
-				LastUpgradeCheck = 1600;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					2F7BA55454CE40181AD8912C = {
 						CreatedOnToolsVersion = 16.2;
@@ -342,8 +341,6 @@
 				Base,
 			);
 			mainGroup = E1CB15354FF682E209E94686;
-			minimizedProjectReferenceProxies = 0;
-			preferredProjectObjectVersion = 77;
 			productRefGroup = C93454FAB72C8D08EED50A55 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -449,17 +446,24 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
 			buildSettings = {
+				APP_API_BASE_URL = "https://cc-maps.vercel.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = CrossCountryMaps/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CC Maps";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_APP_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.mfittko.ccmaps;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -473,22 +477,29 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 5D53A787AD4DB50C6341DE9D /* Release.xcconfig */;
 			buildSettings = {
+				APP_API_BASE_URL = "https://cc-maps.vercel.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CC Maps";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WATCH_APP_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.mfittko.ccmaps.watch;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "watchsimulator watchos";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = 4;
 				VALIDATE_PRODUCT = YES;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.6;
 			};
 			name = Release;
 		};
@@ -527,7 +538,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = V6KRF2VXRS;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -548,6 +561,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -568,6 +582,7 @@
 					"@loader_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_TEST_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.mfittko.ccmaps.tests;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -590,6 +605,7 @@
 					"@loader_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_TEST_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.mfittko.ccmaps.tests;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -634,7 +650,9 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = V6KRF2VXRS;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -648,6 +666,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -658,17 +677,24 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
 			buildSettings = {
+				APP_API_BASE_URL = "https://cc-maps.vercel.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = CrossCountryMaps/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CC Maps";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(IOS_APP_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.mfittko.ccmaps;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -681,21 +707,28 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = F1C8E2BB2B7F648F9CAC0C24 /* Debug.xcconfig */;
 			buildSettings = {
+				APP_API_BASE_URL = "https://cc-maps.vercel.app";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				INFOPLIST_FILE = CrossCountryMapsWatch/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "CC Maps";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = "$(WATCH_APP_BUNDLE_IDENTIFIER)";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.mfittko.ccmaps.watch;
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = watchos;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "watchsimulator watchos";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				TARGETED_DEVICE_FAMILY = 4;
-				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.6;
 			};
 			name = Debug;
 		};

@@ -739,10 +739,10 @@ struct TrailMapView: UIViewRepresentable {
                 renderer.strokeColor = baseColor.withAlphaComponent(0.98)
                 renderer.lineWidth = 8
             } else if trailOverlay.isPreview || trailOverlay.isDimmed {
-                renderer.strokeColor = baseColor.withAlphaComponent(0.3)
+                renderer.strokeColor = baseColor.withAlphaComponent(0.45)
                 renderer.lineWidth = 4
             } else {
-                renderer.strokeColor = baseColor.withAlphaComponent(0.88)
+                renderer.strokeColor = baseColor
                 renderer.lineWidth = 5
             }
 
@@ -874,11 +874,11 @@ final class TrailSegmentAnnotationView: MKAnnotationView {
         centerOffset = CGPoint(x: 0, y: -2)
 
         label.font = .systemFont(ofSize: 11, weight: .bold)
-        label.textColor = UIColor(red: 0.08, green: 0.17, blue: 0.23, alpha: 1)
-        label.backgroundColor = UIColor.white.withAlphaComponent(0.92)
+        label.textColor = .label
+        label.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.92)
         label.layer.cornerRadius = 10
         label.layer.masksToBounds = true
-        label.layer.borderColor = UIColor.black.withAlphaComponent(0.08).cgColor
+        label.layer.borderColor = UIColor.separator.cgColor
         label.layer.borderWidth = 1
         addSubview(label)
     }
@@ -892,8 +892,8 @@ final class TrailSegmentAnnotationView: MKAnnotationView {
         label.text = title
         switch kind {
         case .trailDetail:
-            label.textColor = UIColor(red: 0.08, green: 0.17, blue: 0.23, alpha: 1)
-            label.backgroundColor = UIColor.white.withAlphaComponent(0.92)
+            label.textColor = .label
+            label.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.92)
         case .plannedRoute:
             label.textColor = .white
             label.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.92)
