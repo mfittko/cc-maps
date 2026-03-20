@@ -322,6 +322,9 @@ final class BrowseViewModel: ObservableObject {
     private var isIgnoringMapRegionUpdatesDuringStartupRestore = false
     private var shouldPreserveMapRegionForNextAutoLocationSelection = false
     private var activeWatchTransferID: String?
+    /// Stable canonical route owner. Set when the first anchor is added or a route is hydrated.
+    /// Never mutated by browse-focus (selectedDestinationID) changes.
+    private var routeOwnerDestinationID = ""
 
     init(
         apiClient: BrowseAPIClient = APIClient(),
@@ -368,6 +371,10 @@ final class BrowseViewModel: ObservableObject {
         destinations.first { $0.id == selectedDestinationID }
     }
 
+    private var routeOwnerDestination: Destination? {
+        destinations.first { $0.id == routeOwnerDestinationID }
+    }
+
     var canEnableAutoLocation: Bool {
         true
     }
@@ -394,12 +401,12 @@ final class BrowseViewModel: ObservableObject {
     }
 
     var canonicalRoutePlan: CanonicalRoutePlan? {
-        guard !selectedDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
+        guard !routeOwnerDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
             return nil
         }
 
         return CanonicalRoutePlan(
-            destinationId: selectedDestinationID,
+            destinationId: routeOwnerDestinationID,
             anchorEdgeIds: routePlan.anchorEdgeIDs,
             destinationIds: activeRouteDestinationIDs
         )
@@ -407,7 +414,7 @@ final class BrowseViewModel: ObservableObject {
 
     var routeShareArtifact: RouteShareArtifact? {
         guard let canonicalRoutePlan,
-              let destinationName = selectedDestination?.name else {
+              let destinationName = routeOwnerDestination?.name else {
             return nil
         }
 
@@ -559,7 +566,7 @@ final class BrowseViewModel: ObservableObject {
 
     private var watchRouteTransferEnvelope: WatchRouteTransferEnvelope? {
         guard let canonicalRoutePlan,
-              let destinationName = selectedDestination?.name else {
+              let ownerDestinationName = routeOwnerDestination?.name else {
             return nil
         }
 
@@ -599,7 +606,7 @@ final class BrowseViewModel: ObservableObject {
         return WatchRouteTransferEnvelope(
             canonical: canonicalRoutePlan,
             derived: WatchRouteTransferDerivedPayload(
-                routeLabel: "\(destinationName) route",
+                routeLabel: "\(ownerDestinationName) route",
                 routeGeometry: geometry,
                 totalDistanceKm: routeSummary.totalDistanceKm,
                 elevationGainM: routeSummary.ascentMeters,
@@ -703,6 +710,7 @@ final class BrowseViewModel: ObservableObject {
         isInPlanningMode = false
         routeHydrationNotice = nil
         routePlan.clear()
+        routeOwnerDestinationID = ""
         refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
         activeRouteDestinationIDs = []
         clearSelectedPlannedSection()
@@ -1234,6 +1242,9 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        // Restore the stable canonical route owner from the incoming plan.
+        routeOwnerDestinationID = pendingRestoreContext.routePlan.destinationId
+
         let allTrails = primaryTrails + previewTrails
         let hydrationResult = GeoMath.hydrateRoutePlan(pendingRestoreContext.routePlan, allTrails: allTrails)
         let restoreSource = pendingRestoreContext.source
@@ -1251,6 +1262,7 @@ final class BrowseViewModel: ObservableObject {
 
         if hydrationResult.validAnchorEdgeIds.isEmpty {
             routePlan.clear()
+            routeOwnerDestinationID = ""
             activeRouteDestinationIDs = []
             refreshRoutePresentationDerivedState(allTrails: allTrails)
 
@@ -1300,11 +1312,17 @@ final class BrowseViewModel: ObservableObject {
         }
 
         if anchorEdgeIDs.isEmpty {
+            let storeKey = routeOwnerDestinationID.isEmpty ? selectedDestinationID : routeOwnerDestinationID
+            routeOwnerDestinationID = ""
             activeRouteDestinationIDs = []
             routeElevation = nil
-            routePlanStore.clearRoutePlan(for: selectedDestinationID)
+            routePlanStore.clearRoutePlan(for: storeKey)
             schedulePreviewEvaluation()
             return
+        }
+
+        if routeOwnerDestinationID.isEmpty {
+            routeOwnerDestinationID = selectedDestinationID
         }
 
         activeRouteDestinationIDs = routeDestinationIDs(for: anchorEdgeIDs, allTrails: allTrails)
@@ -1322,7 +1340,6 @@ final class BrowseViewModel: ObservableObject {
         }
 
         resetWatchTransferLifecycle()
-        let previousDestinationID = selectedDestinationID
         let existingAnchorEdgeIDs = routePlan.anchorEdgeIDs
         let existingRouteDestinationIDs = activeRouteDestinationIDs
         let repartitionedPrimaryTrails = allTrails.filter { $0.destinationId == destinationID }
@@ -1344,16 +1361,13 @@ final class BrowseViewModel: ObservableObject {
         trailsPhase = repartitionedPrimaryTrails.isEmpty ? .loading : .success
         requestError = nil
 
-        if !previousDestinationID.isEmpty {
-            routePlanStore.clearRoutePlan(for: previousDestinationID)
-        }
-
         if existingAnchorEdgeIDs.isEmpty {
             activeRouteDestinationIDs = []
             routeElevation = nil
         } else {
+            // routeOwnerDestinationID is kept stable; only browse focus (selectedDestinationID) changes.
             activeRouteDestinationIDs = CanonicalRoutePlan(
-                destinationId: destinationID,
+                destinationId: routeOwnerDestinationID,
                 anchorEdgeIds: existingAnchorEdgeIDs,
                 destinationIds: existingRouteDestinationIDs
             ).destinationIds
@@ -1369,7 +1383,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func routeDestinationIDs(for anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
-        guard !selectedDestinationID.isEmpty else {
+        guard !routeOwnerDestinationID.isEmpty else {
             return []
         }
 
@@ -1378,7 +1392,7 @@ final class BrowseViewModel: ObservableObject {
             trailsByID[section.trailID]?.destinationId
         }
 
-        return ([selectedDestinationID] + sectionDestinationIDs).reduce(into: [String]()) { result, destinationID in
+        return ([routeOwnerDestinationID] + sectionDestinationIDs).reduce(into: [String]()) { result, destinationID in
             guard !destinationID.isEmpty, !result.contains(destinationID) else {
                 return
             }
@@ -1396,13 +1410,13 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func persistCurrentRoutePlan() {
-        guard !selectedDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
+        guard !routeOwnerDestinationID.isEmpty, !routePlan.anchorEdgeIDs.isEmpty else {
             return
         }
 
         routePlanStore.writeRoutePlan(
             CanonicalRoutePlan(
-                destinationId: selectedDestinationID,
+                destinationId: routeOwnerDestinationID,
                 anchorEdgeIds: routePlan.anchorEdgeIDs,
                 destinationIds: activeRouteDestinationIDs
             )

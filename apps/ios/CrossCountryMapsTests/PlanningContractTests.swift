@@ -1000,8 +1000,8 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
-    func testPlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute() async throws {
-        let suiteName = "PlanningContractTests.PlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute"
+    func testBrowseFocusChangePreservesCanonicalRouteOwnerDuringMultiDestinationRoute() async throws {
+        let suiteName = "PlanningContractTests.BrowseFocusChangePreservesCanonicalRouteOwnerDuringMultiDestinationRoute"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
         let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
         let apiClient = BrowseAPISpy(
@@ -1033,22 +1033,26 @@ final class PlanningContractTests: XCTestCase {
         await waitUntil { viewModel.primaryTrails.count == 2 }
         await waitUntil { viewModel.previewTrails.count == 1 }
 
+        // Build a two-destination route starting from destination "100".
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "3", anchorEdgeID: Self.edgeC, segment: nil))
 
+        // Browse focus switches to "200" (the tapped trail's destination), but canonical owner stays "100".
         await waitUntil {
             viewModel.selectedDestinationID == "200" &&
-                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
-                viewModel.activeRouteDestinationIDs == ["200", "100"]
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC]
         }
 
-        XCTAssertNil(routePlanStore.readRoutePlan(for: "100"))
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"], "Owner-first invariant: owner 100 must remain first even after focus switches to 200")
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "200"), "Route must never be stored under the browse-focus destination")
         XCTAssertEqual(
-            routePlanStore.readRoutePlan(for: "200"),
-            CanonicalRoutePlan(destinationId: "200", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["200", "100"])
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"]),
+            "Route must be stored under the stable canonical owner"
         )
 
+        // Adding a trail from the original owner destination should keep canonical owner stable.
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "2", anchorEdgeID: Self.edgeB, segment: nil))
 
         await waitUntil {
@@ -1106,7 +1110,7 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeC])
         XCTAssertEqual(viewModel.selectedDestinationID, "200")
-        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["200", "100"])
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"], "Owner-first invariant: owner 100 must remain first even when browse focus is on 200")
     }
 
     @MainActor
@@ -1163,6 +1167,88 @@ final class PlanningContractTests: XCTestCase {
         XCTAssertEqual(
             routePlanStore.readRoutePlan(for: "100"),
             CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"])
+        )
+    }
+
+    @MainActor
+    func testBrowseFocusChangeDoesNotMutateCanonicalRouteOwner() async throws {
+        let fixture: FocusChangeStableOwnerFixture = try FixtureLoader.decode("route-plan/focus-change-stable-owner.v2.json")
+
+        let userDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        // Trail setup mirrors the fixture: edgeA belongs to dest 100, edgeB belongs to dest 200.
+        // This produces destinationIds ["100", "200"] with owner "100" once both anchors are added.
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.77),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 2, destinationId: 200, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 1 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        // Build the two-anchor route from the fixture (edgeA from dest 100, edgeB from dest 200).
+        // Adding edgeB triggers a browse-focus switch to dest "200" (the tapped trail's destination).
+        viewModel.enterPlanningMode()
+        fixture.canonicalOwner.anchorEdgeIds.forEach { anchorEdgeID in
+            let trailID = apiClient.trailID(for: anchorEdgeID)
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: anchorEdgeID, segment: nil))
+        }
+
+        // Browse focus is now on dest "200" (fixture.browseFocusDestinationId).
+        await waitUntil {
+            viewModel.routePlan.anchorEdgeIDs == fixture.canonicalOwner.anchorEdgeIds &&
+                viewModel.selectedDestinationID == fixture.browseFocusDestinationId
+        }
+
+        // Canonical route owner must be unchanged after the browse-focus switch.
+        let canonicalAfterFocusChange = try XCTUnwrap(viewModel.canonicalRoutePlan)
+        XCTAssertEqual(
+            canonicalAfterFocusChange,
+            fixture.expectedCanonicalAfterFocusChange,
+            "Canonical route plan must remain unchanged after browse-focus changes"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.destinationId,
+            fixture.canonicalOwner.destinationId,
+            "destinationId must remain the stable route owner, not the browse-focus destination"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.destinationIds.first,
+            fixture.canonicalOwner.destinationId,
+            "destinationIds must remain owner-first after browse-focus change"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.encodedForURL,
+            fixture.expectedUrlAfterFocusChange,
+            "URL encoding must reflect stable owner and owner-first destinationIds"
+        )
+        XCTAssertNil(
+            routePlanStore.readRoutePlan(for: fixture.browseFocusDestinationId),
+            "Route must never be persisted under a browse-focus destination"
+        )
+        XCTAssertNotNil(
+            routePlanStore.readRoutePlan(for: fixture.canonicalOwner.destinationId),
+            "Route must remain persisted under the stable canonical owner"
         )
     }
 
@@ -1990,10 +2076,8 @@ final class PlanningContractTests: XCTestCase {
         let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
         XCTAssertEqual(queuedEnvelope.version, fixture.version)
         XCTAssertEqual(queuedEnvelope.canonical, try XCTUnwrap(viewModel.canonicalRoutePlan))
-        XCTAssertEqual(
-            queuedEnvelope.derived?.routeLabel,
-            viewModel.selectedDestination.map { "\($0.name) route" }
-        )
+        // routeLabel uses the stable canonical owner destination name, not the current browse-focus destination.
+        XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
         XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
         XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry?.coordinates)
         XCTAssertTrue(
@@ -2200,6 +2284,13 @@ private struct WatchTransferEnvelopeFixture: Decodable {
     let version: Int
     let canonical: CanonicalRoutePlan
     let derived: WatchRouteTransferDerivedPayload
+}
+
+private struct FocusChangeStableOwnerFixture: Decodable {
+    let canonicalOwner: CanonicalRoutePlan
+    let browseFocusDestinationId: String
+    let expectedCanonicalAfterFocusChange: CanonicalRoutePlan
+    let expectedUrlAfterFocusChange: String
 }
 
 // MARK: - Test helpers (mirror BrowseContractTests helpers)
