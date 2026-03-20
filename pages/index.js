@@ -23,12 +23,14 @@ import {
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
 import {
+  getPersistedRoutePlanSources,
   readCachedTrailGeoJson,
   isPlanningModeQueryValue,
   writeCachedTrailGeoJson,
 } from '../lib/map-persistence';
 import {
   appendRoutePlanAnchor,
+  areRequiredPreviewDestinationIdsLoaded,
   createRoutePlanGeoJson,
   findNearestRouteGraphEdgeId,
   findNearestRouteTraversalFeature,
@@ -36,14 +38,15 @@ import {
   reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
+  shouldMergePreviewTrailsIntoRouteGraph,
 } from '../lib/planning-mode';
 import {
   clearStoredRoutePlan,
+  createClearedRoutePlan,
   createRoutePlan,
   decodeRoutePlanFromUrl,
   encodeRoutePlanToUrl,
   hydrateRoutePlan,
-  readStoredRoutePlan,
   shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
 } from '../lib/route-plan';
@@ -447,12 +450,12 @@ export default function Home() {
     [trailsGeoJson, suggestedTrailsGeoJson]
   );
   const routeGraphTrailsGeoJson = useMemo(() => {
-    if (!isPlanning) {
+    if (!shouldMergePreviewTrailsIntoRouteGraph(isPlanning, plannedDestinationIds)) {
       return trailsGeoJson;
     }
 
     return mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]);
-  }, [isPlanning, trailsGeoJson, suggestedTrailsGeoJson]);
+  }, [isPlanning, plannedDestinationIds, trailsGeoJson, suggestedTrailsGeoJson]);
   const routeTraversalGeoJson = useMemo(
     () => createRoutePlanGeoJson(routePlan, routeGraph).traversal,
     [routeGraph, routePlan]
@@ -690,6 +693,10 @@ export default function Home() {
 
   function updateSelectedDestination(destinationId, options = {}) {
     const { manual = false, prefetchedTrailsGeoJson = null } = options;
+    const nextRequiredPreviewDestinationIds = getPreviewDestinationIds(
+      plannedDestinationIds,
+      destinationId
+    );
 
     if (manual) {
       hasManualDestinationSelectionRef.current = true;
@@ -702,11 +709,19 @@ export default function Home() {
     setSelectedDestinationId(destinationId);
     clearSelectedTrail();
     setNearbyDestinationIds([]);
-    setPlannedDestinationIds([]);
-    setLoadedPreviewDestinationIds([]);
-    setSuggestedTrailsGeoJson(null);
-    setIsPlanning(false);
-    setRoutePlan(null);
+
+    if (
+      !areRequiredPreviewDestinationIdsLoaded(
+        nextRequiredPreviewDestinationIds,
+        loadedPreviewDestinationIds
+      )
+    ) {
+      setSuggestedTrailsGeoJson(null);
+    }
+
+    // routePlan, isPlanning, plannedDestinationIds, and loadedPreviewDestinationIds are
+    // intentionally preserved so that browse-focus changes do not clear an active route.
+    // Effects keyed to routePlan and selectedDestinationId will reconcile those states.
   }
 
   function handleExitPlanning() {
@@ -727,45 +742,48 @@ export default function Home() {
     setIsInfoPanelOpen(false);
     setIsPlanning(true);
     setRoutePlan((currentPlan) =>
-      currentPlan?.destinationId === selectedDestinationId
-        ? currentPlan
-        : createRoutePlan(selectedDestinationId, [])
+      currentPlan ?? createRoutePlan(selectedDestinationId, [])
     );
   }
 
   function handleClearPlan() {
-    if (!selectedDestinationId) {
+    const previousOwnerDestinationId = routePlan?.destinationId || selectedDestinationId;
+    const clearedRoutePlan = createClearedRoutePlan(routePlan, selectedDestinationId);
+
+    if (!previousOwnerDestinationId || !clearedRoutePlan) {
       return;
     }
 
     if (
-      routePlan?.destinationId === selectedDestinationId &&
-      routePlan.anchorEdgeIds.length &&
+      routePlan?.anchorEdgeIds.length &&
       typeof window !== 'undefined' &&
       !window.confirm('Clear the current planned route?')
     ) {
       return;
     }
 
-    setRoutePlan(createRoutePlan(selectedDestinationId, []));
+    clearStoredRoutePlan(previousOwnerDestinationId, MAP_SETTINGS_STORAGE_KEY);
+    setRoutePlan(clearedRoutePlan);
   }
 
   function handleReverseRoute() {
-    if (!selectedDestinationId) {
-      return;
-    }
+    setRoutePlan((currentPlan) => {
+      if (!currentPlan) {
+        return null;
+      }
 
-    setRoutePlan((currentPlan) => reverseRoutePlan(currentPlan, selectedDestinationId));
+      return reverseRoutePlan(currentPlan, currentPlan.destinationId);
+    });
   }
 
   function handleRemoveAnchor(index) {
-    if (!selectedDestinationId) {
-      return;
-    }
+    setRoutePlan((currentPlan) => {
+      if (!currentPlan) {
+        return null;
+      }
 
-    setRoutePlan((currentPlan) =>
-      removeRoutePlanAnchor(currentPlan, selectedDestinationId, index, routeGraphRef.current)
-    );
+      return removeRoutePlanAnchor(currentPlan, currentPlan.destinationId, index, routeGraphRef.current);
+    });
   }
 
   function handleExportGpx() {
@@ -842,21 +860,30 @@ export default function Home() {
   }
 
   function handlePlanningAnchorSelection(feature, clickedCoordinates) {
-    const destinationId = selectedDestinationIdRef.current;
     const edgeId = findNearestRouteGraphEdgeId(
       routeGraphRef.current,
       feature?.properties?.id,
       clickedCoordinates
     );
 
-    if (!destinationId || !edgeId) {
+    if (!edgeId) {
       return false;
     }
 
     clearSelectedTrail();
-    setRoutePlan((currentPlan) =>
-      appendRoutePlanAnchor(currentPlan, destinationId, edgeId, routeGraphRef.current)
-    );
+    setRoutePlan((currentPlan) => {
+      // Canonical owner is the existing plan's destinationId. The browse-focus
+      // destination (selectedDestinationIdRef) is only used when entering
+      // planning mode from scratch (currentPlan is null), i.e. the very first
+      // anchor click starts a new plan owned by the currently selected destination.
+      const ownerDestinationId = currentPlan?.destinationId || selectedDestinationIdRef.current;
+
+      if (!ownerDestinationId) {
+        return currentPlan;
+      }
+
+      return appendRoutePlanAnchor(currentPlan, ownerDestinationId, edgeId, routeGraphRef.current);
+    });
     return true;
   }
 
@@ -932,11 +959,7 @@ export default function Home() {
     }
 
     setIsPlanning(true);
-    setRoutePlan((currentPlan) =>
-      currentPlan?.destinationId === selectedDestinationId
-        ? currentPlan
-        : createRoutePlan(selectedDestinationId, [])
-    );
+    setRoutePlan((currentPlan) => currentPlan ?? createRoutePlan(selectedDestinationId, []));
     shouldOpenPlanningFromUrlRef.current = false;
   }, [hasInitializedFromUrlRef, isPlanning, selectedDestinationId]);
 
@@ -946,33 +969,32 @@ export default function Home() {
       return;
     }
 
-    if (routePlan?.destinationId === selectedDestinationId) {
+    if (routePlan) {
+      // Always populate from the active route plan regardless of browse focus.
+      // getPreviewDestinationIds filters out the currently selected destination so
+      // the owner is only included when the user is browsing a different destination.
       setPlannedDestinationIds(getPreviewDestinationIds(routePlan.destinationIds || [], selectedDestinationId));
       return;
     }
 
-    if (!routePlan) {
-      setPlannedDestinationIds([]);
-    }
+    setPlannedDestinationIds([]);
   }, [routePlan, selectedDestinationId]);
 
   useEffect(() => {
-    if (!router.isReady || !selectedDestinationId || routePlan?.destinationId === selectedDestinationId) {
+    // Pre-populate plannedDestinationIds from URL/storage before the route is
+    // hydrated so that required preview sectors can start loading immediately.
+    // Once a routePlan is in state the effect above takes over.
+    if (!router.isReady || !selectedDestinationId || routePlan) {
       return;
     }
 
     const searchParams =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const routeFromUrl = decodeRoutePlanFromUrl(
-      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    const { persistedRoutePlan } = getPersistedRoutePlanSources(
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route),
+      selectedDestinationId,
+      MAP_SETTINGS_STORAGE_KEY
     );
-    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
-    const persistedRoutePlan =
-      routeFromUrl?.destinationId === selectedDestinationId
-        ? routeFromUrl
-        : routeFromStorage?.destinationId === selectedDestinationId
-          ? routeFromStorage
-          : null;
 
     setPlannedDestinationIds(
       getPreviewDestinationIds(persistedRoutePlan?.destinationIds || [], selectedDestinationId)
@@ -986,24 +1008,22 @@ export default function Home() {
 
     const searchParams =
       typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    const routeFromUrl = decodeRoutePlanFromUrl(
-      searchParams?.get('route') ?? getSingleQueryValue(router.query.route)
+    const routeQueryValue =
+      searchParams?.get('route') ?? getSingleQueryValue(router.query.route);
+    const { routeFromUrl, persistedRoutePlan: nextRoutePlan } = getPersistedRoutePlanSources(
+      routeQueryValue,
+      selectedDestinationId,
+      MAP_SETTINGS_STORAGE_KEY
     );
-    const routeFromStorage = readStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
-    const nextRoutePlan =
-      routeFromUrl?.destinationId === selectedDestinationId
-        ? routeFromUrl
-        : routeFromStorage?.destinationId === selectedDestinationId
-          ? routeFromStorage
-          : null;
     const requiredPreviewDestinationIds = getPreviewDestinationIds(
       nextRoutePlan?.destinationIds || [],
       selectedDestinationId
     );
 
     if (
-      requiredPreviewDestinationIds.some(
-        (destinationId) => !loadedPreviewDestinationIds.includes(destinationId)
+      !areRequiredPreviewDestinationIdsLoaded(
+        requiredPreviewDestinationIds,
+        loadedPreviewDestinationIds
       )
     ) {
       return;
@@ -1075,16 +1095,24 @@ export default function Home() {
 
     const nextUrl = new URL(window.location.href);
     const routeFromCurrentUrl = decodeRoutePlanFromUrl(nextUrl.searchParams.get('route'));
+    // Write the route based on the active plan regardless of which destination
+    // the user is currently browsing. The canonical owner is routePlan.destinationId.
     const encodedRoutePlan =
-      routePlan && routePlan.destinationId === selectedDestinationId && routePlan.anchorEdgeIds.length
+      routePlan && routePlan.anchorEdgeIds.length
         ? encodeRoutePlanToUrl(routePlan)
         : '';
 
-    if (
-      !encodedRoutePlan &&
-      routePlan === null &&
-      routeFromCurrentUrl?.destinationId === selectedDestinationId
-    ) {
+    // Guard: the URL route must not be cleared before the hydration effect has
+    // had a chance to load and set the route plan in state. Three conditions
+    // must all be true for this to be a pre-hydration no-op:
+    //   1. encodedRoutePlan is empty – no active plan with anchors to write.
+    //   2. routePlan === null    – hydration has not run yet (null is the initial
+    //                             state; after hydration it becomes an object).
+    //   3. routeFromCurrentUrl  – the URL already carries a route that would be
+    //                             wiped if we proceeded to the delete branch below.
+    // When all three hold we skip writing so the URL route survives until the
+    // hydration effect sets routePlan and this effect re-runs with the real value.
+    if (!encodedRoutePlan && routePlan === null && routeFromCurrentUrl) {
       return;
     }
 
@@ -1102,7 +1130,7 @@ export default function Home() {
     }
 
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [hasInitializedFromUrlRef, routePlan, router, selectedDestinationId]);
+  }, [hasInitializedFromUrlRef, routePlan, router]);
 
   useEffect(() => {
     if (
@@ -1131,17 +1159,21 @@ export default function Home() {
   }, [hasInitializedFromUrlRef, isPlanning, router.isReady]);
 
   useEffect(() => {
-    if (!hasInitializedFromUrlRef.current || !selectedDestinationId) {
+    if (!hasInitializedFromUrlRef.current) {
       return;
     }
 
-    if (routePlan && routePlan.destinationId === selectedDestinationId && routePlan.anchorEdgeIds.length) {
+    // Persist route keyed by the canonical owner (routePlan.destinationId), not
+    // by the currently focused destination.
+    if (routePlan && routePlan.anchorEdgeIds.length) {
       writeStoredRoutePlan(routePlan, MAP_SETTINGS_STORAGE_KEY);
       return;
     }
 
-    clearStoredRoutePlan(selectedDestinationId, MAP_SETTINGS_STORAGE_KEY);
-  }, [hasInitializedFromUrlRef, routePlan, selectedDestinationId]);
+    if (routePlan) {
+      clearStoredRoutePlan(routePlan.destinationId, MAP_SETTINGS_STORAGE_KEY);
+    }
+  }, [hasInitializedFromUrlRef, routePlan]);
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -1405,7 +1437,7 @@ export default function Home() {
     wasCurrentLocationOnRouteRef.current = false;
     lastRouteProgressDistanceKmRef.current = null;
     setIsRouteTravelingReverse(false);
-  }, [isPlanning, routePlan, selectedDestinationId]);
+  }, [isPlanning, routePlan]);
 
   useEffect(() => {
     if (isPlanning || !routePlan?.anchorEdgeIds?.length || !currentRouteProgress || !isCurrentLocationOnRoute) {
@@ -1827,9 +1859,7 @@ export default function Home() {
     }
 
     const activeTrailFeatureIds =
-      !isPlanning &&
-      routePlan?.destinationId === selectedDestinationId &&
-      routePlan.anchorEdgeIds.length
+      !isPlanning && routePlan?.anchorEdgeIds?.length
         ? [...new Set(
             routeTraversalGeoJson.features
               .map((feature) => feature?.properties?.trailFeatureId)
@@ -1843,7 +1873,7 @@ export default function Home() {
       'line-opacity',
       getTrailOpacityExpression(activeTrailFeatureIds)
     );
-  }, [isPlanning, mapReady, routePlan, routeTraversalGeoJson, selectedDestinationId]);
+  }, [isPlanning, mapReady, routePlan, routeTraversalGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -2063,7 +2093,7 @@ export default function Home() {
   useEffect(() => {
     const map = mapRef.current;
 
-    if (!mapReady || !map || !routePlan || routePlan.destinationId !== selectedDestinationId) {
+    if (!mapReady || !map || !routePlan) {
       return;
     }
 
@@ -2085,7 +2115,7 @@ export default function Home() {
 
     fitMapToGeoJson(map, featureCollection, selectedDestination?.coordinates || DEFAULT_CENTER);
     pendingRouteViewportFitRef.current = '';
-  }, [mapReady, routeGraph, routePlan, selectedDestination, selectedDestinationId]);
+  }, [mapReady, routeGraph, routePlan, selectedDestination]);
 
   useEffect(() => {
     const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
@@ -2358,9 +2388,7 @@ export default function Home() {
     }
 
     const activeTraversalGeoJson =
-      !isPlanning &&
-      routePlan?.destinationId === selectedDestinationId &&
-      routePlan.anchorEdgeIds.length
+      !isPlanning && routePlan?.anchorEdgeIds?.length
         ? routeTraversalGeoJson
         : null;
 
@@ -2423,7 +2451,6 @@ export default function Home() {
     mapReady,
     routeGraph,
     routePlan,
-    selectedDestinationId,
     trailsGeoJson,
   ]);
 

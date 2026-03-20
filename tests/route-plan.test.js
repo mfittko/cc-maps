@@ -6,8 +6,10 @@ import {
   createRoutePlan,
   decodeRoutePlanFromUrl,
   encodeRoutePlanToUrl,
+  getActiveRoutePlanStorageKey,
   getRoutePlanStorageKey,
   hydrateRoutePlan,
+  readActiveStoredRoutePlan,
   readStoredRoutePlan,
   shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
@@ -217,6 +219,19 @@ describe('route-plan', () => {
       writeStoredRoutePlan(plan, storageKey);
       clearStoredRoutePlan('4', storageKey);
       expect(readStoredRoutePlan('4', storageKey)).toBeNull();
+    });
+
+    it('clears the active route pointer when removing the active canonical owner', () => {
+      const plan = createRoutePlan('4', ['edgeA']);
+
+      writeStoredRoutePlan(plan, storageKey);
+      expect(window.localStorage.getItem(getActiveRoutePlanStorageKey(storageKey))).toBe('4');
+      expect(readActiveStoredRoutePlan(storageKey)).toEqual(plan);
+
+      clearStoredRoutePlan('4', storageKey);
+
+      expect(window.localStorage.getItem(getActiveRoutePlanStorageKey(storageKey))).toBeNull();
+      expect(readActiveStoredRoutePlan(storageKey)).toBeNull();
     });
 
     it('is a no-op when nothing is stored', () => {
