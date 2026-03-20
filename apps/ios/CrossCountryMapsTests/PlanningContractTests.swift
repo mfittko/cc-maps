@@ -1045,6 +1045,8 @@ final class PlanningContractTests: XCTestCase {
         }
 
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"], "Owner-first invariant: owner 100 must remain first even after focus switches to 200")
+        XCTAssertEqual(Set(viewModel.primaryTrails.map(\.id)), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
         XCTAssertNil(routePlanStore.readRoutePlan(for: "200"), "Route must never be stored under the browse-focus destination")
         XCTAssertEqual(
             routePlanStore.readRoutePlan(for: "100"),
@@ -1164,6 +1166,12 @@ final class PlanningContractTests: XCTestCase {
         }
 
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"])
+        XCTAssertEqual(Set(viewModel.primaryTrails.map(\.id)), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(
+            GeoMath.planningSections(for: viewModel.routePlan.anchorEdgeIDs, allTrails: viewModel.primaryTrails + viewModel.previewTrails).map(\.edgeID),
+            [Self.edgeA, Self.edgeC]
+        )
         XCTAssertEqual(
             routePlanStore.readRoutePlan(for: "100"),
             CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"])
@@ -1288,6 +1296,66 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertEqual(viewModel.routeHydrationNotice, .partial(staleAnchorEdgeIDs: ["missing-edge"]))
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1"])
+    }
+
+    @MainActor
+    func testStoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let storedRoutePlan = CanonicalRoutePlan(
+            destinationId: "100",
+            anchorEdgeIds: [Self.edgeA, Self.edgeC],
+            destinationIds: ["100", "200"]
+        )
+        routePlanStore.writeRoutePlan(storedRoutePlan)
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(
+                    destinationID: "200",
+                    mapRegion: nil,
+                    isPlanningModeActive: true,
+                    activeRouteOwnerDestinationID: "100"
+                )
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "200" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200"] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.canonicalRoutePlan, storedRoutePlan)
+        XCTAssertEqual(viewModel.selectedDestinationID, "200")
+        XCTAssertNil(viewModel.routeHydrationNotice)
+        XCTAssertEqual(Set(viewModel.primaryTrails.map { $0.id }), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(routePlanStore.readRoutePlan(for: "100"), storedRoutePlan)
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "200"))
     }
 
     @MainActor
