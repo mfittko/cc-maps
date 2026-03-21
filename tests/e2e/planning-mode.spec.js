@@ -106,7 +106,9 @@ const trailsFixtureByDestinationId = {
   },
 };
 
-async function stubAppApi(page) {
+async function stubAppApi(page, options = {}) {
+  const { trailResponseDelayMsByDestinationId = {} } = options;
+
   await page.route('**/api/destinations', async (route) => {
     await route.fulfill({ json: destinationsFixture });
   });
@@ -115,6 +117,12 @@ async function stubAppApi(page) {
     const url = new URL(route.request().url());
     const destinationId = url.searchParams.get('destinationid');
     const payload = destinationId ? trailsFixtureByDestinationId[destinationId] : { type: 'FeatureCollection', features: [] };
+
+    const responseDelayMs = destinationId ? trailResponseDelayMsByDestinationId[destinationId] || 0 : 0;
+
+    if (responseDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, responseDelayMs));
+    }
 
     await route.fulfill({ json: payload || { type: 'FeatureCollection', features: [] } });
   });
@@ -411,6 +419,77 @@ test.describe('planning mode interactions', () => {
     await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
     await expect(page.getByText(/^2 sections/)).toBeVisible();
 
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+  test('manually selecting an adjacent preview promotes it into the stable primary trail set', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitMapLayerClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 },
+      {}
+    );
+
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+    await expectDestinationInPrimaryTrails(page, '1');
+    await expectDestinationInPrimaryTrails(page, '2');
+    await expectDestinationNotInSuggestedTrails(page, '2');
+  });
+
+  test('multi-destination restore waits for delayed required participants before hydrating', async ({ page }) => {
+    const trailResponseDelayMsByDestinationId = { '2': 0 };
+
+    await stubAppApi(page, { trailResponseDelayMsByDestinationId });
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+    await waitForPersistedRoutePlan(page, '1', 2);
+
+    trailResponseDelayMsByDestinationId['2'] = 250;
+    await page.reload();
+
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
     await expectDestinationInPrimaryTrails(page, '2');
     await expectDestinationNotInSuggestedTrails(page, '2');
   });

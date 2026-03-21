@@ -879,7 +879,7 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
-    func testDestinationChangeExitsPlanningModeAndClearsRoute() async throws {
+    func testSelectingUnrelatedDestinationExitsPlanningModeAndClearsRoute() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
@@ -909,13 +909,13 @@ final class PlanningContractTests: XCTestCase {
 
         viewModel.selectDestination(id: "2", manual: true)
 
-        XCTAssertFalse(viewModel.isInPlanningMode, "Planning mode must exit on destination change")
-        XCTAssertTrue(viewModel.routePlan.isEmpty, "Route must clear on destination change (destination-scoped)")
+        XCTAssertFalse(viewModel.isInPlanningMode, "Planning mode must exit when switching to an unrelated destination")
+        XCTAssertTrue(viewModel.routePlan.isEmpty, "Route must clear when the user switches to an unrelated destination")
     }
 
     @MainActor
-    func testStoredRouteRestoresAndLoadsRequiredPreviewDestination() async throws {
-        let suiteName = "PlanningContractTests.StoredRouteRestoresAndLoadsRequiredPreviewDestination"
+    func testStoredRouteRestoresAndPromotesRequiredPrimaryParticipants() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresAndPromotesRequiredPrimaryParticipants"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
         let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
         routePlanStore.writeRoutePlan(
@@ -951,9 +951,64 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertTrue(apiClient.requestedDestinationIDs.contains("2"))
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1", "2"])
+        XCTAssertEqual(Set(viewModel.primaryTrails.compactMap(\.destinationId)), Set(["1", "2"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
         XCTAssertFalse(viewModel.isInPlanningMode)
         XCTAssertNil(viewModel.routeHydrationNotice)
         XCTAssertEqual(viewModel.fitRequestID, 1)
+    }
+
+    @MainActor
+    func testStoredRouteHydratesOnlyAfterAllRequiredPrimaryParticipantsFinishLoading() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteHydratesOnlyAfterAllRequiredPrimaryParticipantsFinishLoading"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        routePlanStore.writeRoutePlan(
+            CanonicalRoutePlan(destinationId: "1", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["1", "2"])
+        )
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91)],
+                "2": [try makeTrailSegment(id: 303, destinationId: 2, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91)],
+            ]
+        )
+        apiClient.suspendedTrailDestinationIDs = ["2"]
+
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: false)
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            apiClient.requestedDestinationIDs == ["1", "2"]
+        }
+
+        XCTAssertEqual(viewModel.trailsPhase, .loading)
+        XCTAssertTrue(viewModel.routePlan.isEmpty)
+        XCTAssertTrue(viewModel.activeRouteDestinationIDs.isEmpty)
+
+        apiClient.resumeTrails(for: "2")
+
+        await waitUntil {
+            viewModel.trailsPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC]
+        }
+
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1", "2"])
+        XCTAssertEqual(Set(viewModel.primaryTrails.compactMap(\.destinationId)), Set(["1", "2"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
     }
 
     @MainActor
@@ -1542,6 +1597,70 @@ final class PlanningContractTests: XCTestCase {
         }
 
         XCTAssertEqual(routePlanStore.readRoutePlan(for: "1")?.anchorEdgeIds, [Self.edgeA, Self.edgeB])
+    }
+
+    @MainActor
+    func testIncomingUrlWaitsForRequiredPrimaryParticipantsWhenDestinationAlreadyLoaded() async throws {
+        let suiteName = "PlanningContractTests.IncomingUrlWaitsForRequiredPrimaryParticipantsWhenDestinationAlreadyLoaded"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "2": [
+                    try makeTrailSegment(id: 303, destinationId: 2, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: true)
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { viewModel.trailsPhase == .success }
+
+        apiClient.suspendedTrailDestinationIDs = ["2"]
+
+        let encodedRoute = CanonicalRoutePlan(
+            destinationId: "1",
+            anchorEdgeIds: [Self.edgeA, Self.edgeC],
+            destinationIds: ["1", "2"]
+        ).encodedForURL
+        viewModel.handleIncomingURL(URL(string: "ccmaps://open?route=\(encodedRoute!)")!)
+
+        await waitUntil {
+            apiClient.requestedDestinationIDs.filter { $0 == "2" }.count == 1 &&
+                viewModel.trailsPhase == .loading
+        }
+
+        XCTAssertTrue(viewModel.routePlan.isEmpty)
+        XCTAssertTrue(viewModel.activeRouteDestinationIDs.isEmpty)
+
+        apiClient.resumeTrails(for: "2")
+
+        await waitUntil {
+            viewModel.trailsPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["1", "2"]
+        }
+
+        XCTAssertEqual(Set(viewModel.primaryTrails.compactMap(\.destinationId)), Set(["1", "2"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
     }
 
     @MainActor
@@ -2654,7 +2773,10 @@ private final class BrowseAPISpy: BrowseAPIClient {
     private let destinationsFixture: DestinationFeatureCollection
     private let trailFixtures: [String: TrailFeatureCollection]
     private let trailIDsByEdgeID: [String: String]
+    private var trailContinuations: [String: CheckedContinuation<Void, Never>] = [:]
     private(set) var requestedDestinationIDs: [String] = []
+    private(set) var completedTrailDestinationIDs: [String] = []
+    var suspendedTrailDestinationIDs: Set<String> = []
     var elevationResponse: ElevationApiResponse?
     var queuedElevationResponses: [ElevationApiResponse] = []
     var queuedElevationResponseDelaysNanoseconds: [UInt64] = []
@@ -2678,6 +2800,14 @@ private final class BrowseAPISpy: BrowseAPIClient {
 
     func fetchTrails(destinationID: String) async throws -> TrailFeatureCollection {
         requestedDestinationIDs.append(destinationID)
+
+        if suspendedTrailDestinationIDs.contains(destinationID) {
+            await withCheckedContinuation { continuation in
+                trailContinuations[destinationID] = continuation
+            }
+        }
+
+        completedTrailDestinationIDs.append(destinationID)
         return trailFixtures[destinationID] ?? TrailFeatureCollection(features: [])
     }
 
@@ -2711,6 +2841,10 @@ private final class BrowseAPISpy: BrowseAPIClient {
 
     func trailID(for edgeID: String) -> String {
         trailIDsByEdgeID[edgeID] ?? ""
+    }
+
+    func resumeTrails(for destinationID: String) {
+        trailContinuations.removeValue(forKey: destinationID)?.resume()
     }
 }
 
