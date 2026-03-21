@@ -163,6 +163,9 @@ struct ContentView: View {
                 }
             } else {
                 HStack(spacing: 8) {
+                    if viewModel.canEnableAutoLocation {
+                        locationFollowButton
+                    }
                     manualDestinationMenu
                     Spacer(minLength: 0)
                 }
@@ -173,7 +176,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var mapOverlayControls: some View {
-        if viewModel.canEnableAutoLocation {
+        if viewModel.canEnableAutoLocation && viewModel.isManualDestinationSelection && isDestinationOverlayExpanded {
             HStack(spacing: 10) {
                 locationFollowButton
                 Spacer(minLength: 0)
