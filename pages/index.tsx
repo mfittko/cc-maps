@@ -233,8 +233,8 @@ export default function Home() {
     destinations,
   });
   const shouldIncludePreviewTrailsInRouteGraph = useMemo(
-    () => shouldMergePreviewTrailsIntoRouteGraph(pendingRouteDestinationIds),
-    [pendingRouteDestinationIdsKey]
+    () => shouldMergePreviewTrailsIntoRouteGraph(activeRouteDestinationIds),
+    [activeRouteDestinationIds]
   );
   const routeGraphTrailsGeoJson = useMemo(() => {
     if (!shouldIncludePreviewTrailsInRouteGraph) {

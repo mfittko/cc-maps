@@ -165,7 +165,7 @@ describe('planning-mode helpers', () => {
       expect(shouldMergePreviewTrailsIntoRouteGraph(['7'])).toBe(false);
     });
 
-    it('merges preview trails only when the pending route spans multiple destinations', () => {
+    it('merges preview trails only when the active route spans multiple destinations', () => {
       expect(shouldMergePreviewTrailsIntoRouteGraph(['7', '8'])).toBe(true);
       expect(shouldMergePreviewTrailsIntoRouteGraph(['7', '8', '7'])).toBe(true);
     });
