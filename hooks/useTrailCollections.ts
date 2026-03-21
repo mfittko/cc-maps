@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import {
   MAP_SETTINGS_STORAGE_KEY,
   TRAILS_CACHE_TTL_MS,
@@ -31,6 +31,40 @@ function areStringArraysEqual(left: string[], right: string[]) {
   return left.every((value, index) => value === right[index]);
 }
 
+interface PrimaryTrailCollectionScopeArgs {
+  mapReady: boolean;
+  selectedDestinationId: string;
+  primaryDestinationIdsKey: string;
+}
+
+interface PreviewTrailCollectionScopeArgs {
+  mapReady: boolean;
+  previewDestinationIdsKey: string;
+}
+
+export function getPrimaryTrailCollectionScopeKey({
+  mapReady,
+  selectedDestinationId,
+  primaryDestinationIdsKey,
+}: PrimaryTrailCollectionScopeArgs) {
+  if (!mapReady || !selectedDestinationId || !primaryDestinationIdsKey) {
+    return '';
+  }
+
+  return `${selectedDestinationId}:${primaryDestinationIdsKey}`;
+}
+
+export function getPreviewTrailCollectionScopeKey({
+  mapReady,
+  previewDestinationIdsKey,
+}: PreviewTrailCollectionScopeArgs) {
+  if (!mapReady || !previewDestinationIdsKey) {
+    return '';
+  }
+
+  return previewDestinationIdsKey;
+}
+
 export function useTrailCollections({
   mapReady,
   selectedDestinationId,
@@ -45,10 +79,29 @@ export function useTrailCollections({
   setSuggestedTrailsGeoJson,
   setLoadedPreviewDestinationIds,
 }: UseTrailCollectionsArgs) {
+  const lastPrimaryScopeKeyRef = useRef('');
+  const lastPreviewScopeKeyRef = useRef('');
+
   useEffect(() => {
+    const primaryScopeKey = getPrimaryTrailCollectionScopeKey({
+      mapReady,
+      selectedDestinationId,
+      primaryDestinationIdsKey,
+    });
+
+    if (!primaryScopeKey) {
+      lastPrimaryScopeKeyRef.current = '';
+    }
+
     if (!mapReady || !selectedDestinationId || !primaryDestinationIds.length) {
       return undefined;
     }
+
+    if (lastPrimaryScopeKeyRef.current === primaryScopeKey) {
+      return undefined;
+    }
+
+    lastPrimaryScopeKeyRef.current = primaryScopeKey;
 
     let isCancelled = false;
 
@@ -111,9 +164,9 @@ export function useTrailCollections({
     };
   }, [
     mapReady,
-    primaryDestinationIds,
     primaryDestinationIdsKey,
     selectedDestinationId,
+    primaryDestinationIds,
     setLoadedPrimaryDestinationIds,
     setRequestError,
     setTrailsGeoJson,
@@ -121,6 +174,15 @@ export function useTrailCollections({
   ]);
 
   useEffect(() => {
+    const previewScopeKey = getPreviewTrailCollectionScopeKey({
+      mapReady,
+      previewDestinationIdsKey,
+    });
+
+    if (!previewScopeKey) {
+      lastPreviewScopeKeyRef.current = '';
+    }
+
     if (!mapReady || !previewDestinationIds.length) {
       setSuggestedTrailsGeoJson((currentGeoJson) => (currentGeoJson ? null : currentGeoJson));
       setLoadedPreviewDestinationIds((currentDestinationIds) =>
@@ -128,6 +190,12 @@ export function useTrailCollections({
       );
       return undefined;
     }
+
+    if (lastPreviewScopeKeyRef.current === previewScopeKey) {
+      return undefined;
+    }
+
+    lastPreviewScopeKeyRef.current = previewScopeKey;
 
     let isCancelled = false;
 
@@ -192,8 +260,8 @@ export function useTrailCollections({
     };
   }, [
     mapReady,
-    previewDestinationIds,
     previewDestinationIdsKey,
+    previewDestinationIds,
     setLoadedPreviewDestinationIds,
     setSuggestedTrailsGeoJson,
   ]);

@@ -41,6 +41,30 @@ interface UseRoutePlanSyncArgs {
   setIsPlanning: Dispatch<SetStateAction<boolean>>;
 }
 
+interface EmptyPlanningInitializationArgs {
+  hasInitializedFromUrl: boolean;
+  shouldOpenPlanningFromUrl: boolean;
+  persistedRoutePlan: RoutePlan | null;
+  selectedDestinationId: string;
+  isPlanning: boolean;
+}
+
+export function shouldInitializeEmptyPlanningRoute({
+  hasInitializedFromUrl,
+  shouldOpenPlanningFromUrl,
+  persistedRoutePlan,
+  selectedDestinationId,
+  isPlanning,
+}: EmptyPlanningInitializationArgs) {
+  return Boolean(
+    hasInitializedFromUrl &&
+      shouldOpenPlanningFromUrl &&
+      persistedRoutePlan === null &&
+      selectedDestinationId &&
+      !isPlanning
+  );
+}
+
 export function useRoutePlanSync({
   router,
   hasInitializedFromUrlRef,
@@ -72,10 +96,13 @@ export function useRoutePlanSync({
 
   useEffect(() => {
     if (
-      !hasInitializedFromUrlRef.current ||
-      !shouldOpenPlanningFromUrlRef.current ||
-      !selectedDestinationId ||
-      isPlanning
+      !shouldInitializeEmptyPlanningRoute({
+        hasInitializedFromUrl: hasInitializedFromUrlRef.current,
+        shouldOpenPlanningFromUrl: shouldOpenPlanningFromUrlRef.current,
+        persistedRoutePlan: persistedRouteSelection.persistedRoutePlan,
+        selectedDestinationId,
+        isPlanning,
+      })
     ) {
       return;
     }
@@ -86,6 +113,7 @@ export function useRoutePlanSync({
   }, [
     hasInitializedFromUrlRef,
     isPlanning,
+    persistedRouteSelection.persistedRoutePlan,
     selectedDestinationId,
     setIsPlanning,
     setRoutePlan,

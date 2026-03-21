@@ -120,6 +120,7 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - Read the relevant phase docs before changing scope-sensitive behavior.
 - If you change runtime behavior, update `README.md`, `docs/spec.md`, and any affected phase docs.
 - Treat test design as part of implementation, not a follow-up task: add or adjust the relevant tests early enough that they define the intended behavior before the code settles.
+- Treat regressions as TDD work by default: reproduce them in a failing automated test first or alongside the fix, then land the code change with that regression coverage in place.
 - Prefer focused changes over broad rewrites.
 - Prefer the built-in file edit tool for code changes instead of shell redirection, ad hoc scripting, or Python wrappers that write files indirectly.
 - Never configure a local working branch to track a different branch such as `origin/main`. A feature branch must track its same-named remote branch or have no upstream until that remote branch exists.
