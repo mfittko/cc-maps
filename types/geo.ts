@@ -60,6 +60,13 @@ export interface MapView {
   zoom: number;
 }
 
+export interface GeoBounds {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+}
+
 export interface LegendItem {
   code: number;
   label: string;

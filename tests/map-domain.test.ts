@@ -494,6 +494,62 @@ describe('map-domain', () => {
     expect(labelsGeoJson.features).toHaveLength(1);
     expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
     expect(labelsGeoJson.features[0].properties.trailFeatureId).toBe(1);
+    expect(labelsGeoJson.features[0].properties.isPlanned).toBe(true);
+  });
+
+  it('filters segment labels to the viewport bounds when provided', () => {
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      null,
+      {
+        west: 10.0,
+        south: 58.999,
+        east: 10.011,
+        north: 59.001,
+      }
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(1);
+    expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
+    expect(labelsGeoJson.features[0].properties.isPlanned).toBe(false);
+  });
+
+  it('supports wrapped viewport bounds when filtering segment labels', () => {
+    const wrappedViewportTrails = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 91 },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [179.6, 59.0],
+              [179.8, 59.0],
+            ],
+          },
+        },
+      ],
+    };
+
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      wrappedViewportTrails,
+      destinations,
+      1.25,
+      0.05,
+      null,
+      {
+        west: 179.5,
+        south: 58.5,
+        east: -179.5,
+        north: 59.5,
+      }
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(1);
   });
 
   it('computes route progress metrics for the nearest traversal feature', () => {

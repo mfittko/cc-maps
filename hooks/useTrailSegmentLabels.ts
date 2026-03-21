@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type MutableRefObject } from 'react';
+import { useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import {
   DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
   MIN_SEGMENT_DISTANCE_KM,
@@ -9,7 +9,7 @@ import {
 } from '../lib/home-page';
 import { getAllTrailSegmentLabelsGeoJson } from '../lib/map-domain';
 import { measureRoutePerf } from '../lib/route-perf';
-import type { DestinationSummary, TrailFeatureCollection } from '../types/geo';
+import type { DestinationSummary, GeoBounds, TrailFeatureCollection } from '../types/geo';
 
 interface UseTrailSegmentLabelsArgs {
   mapReady: boolean;
@@ -26,6 +26,38 @@ export function useTrailSegmentLabels({
   destinations,
   activeTraversalGeoJson,
 }: UseTrailSegmentLabelsArgs) {
+  const [viewportBounds, setViewportBounds] = useState<GeoBounds | null>(null);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
+    if (!mapReady || !map) {
+      return undefined;
+    }
+
+    const updateViewportBounds = () => {
+      const bounds = map.getBounds?.();
+
+      if (!bounds) {
+        return;
+      }
+
+      setViewportBounds({
+        west: bounds.getWest(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        north: bounds.getNorth(),
+      });
+    };
+
+    updateViewportBounds();
+    map.on('moveend', updateViewportBounds);
+
+    return () => {
+      map.off?.('moveend', updateViewportBounds);
+    };
+  }, [mapReady, mapRef]);
+
   const labelsGeoJson = useMemo(
     () =>
       measureRoutePerf('trail segment labels', () =>
@@ -34,10 +66,11 @@ export function useTrailSegmentLabels({
           destinations,
           DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
           MIN_SEGMENT_DISTANCE_KM,
-          activeTraversalGeoJson
+          activeTraversalGeoJson,
+          viewportBounds
         )
       ),
-    [activeTraversalGeoJson, destinations, trailsGeoJson]
+    [activeTraversalGeoJson, destinations, trailsGeoJson, viewportBounds]
   );
 
   useEffect(() => {
@@ -56,6 +89,10 @@ export function useTrailSegmentLabels({
       });
     }
 
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
+      map.removeLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);
+    }
+
     if (map.getLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID)) {
       map.removeLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
     }
@@ -64,7 +101,6 @@ export function useTrailSegmentLabels({
       id: TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID,
       type: 'symbol',
       source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
-      minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
       layout: {
         'text-field': ['get', 'label'],
         'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 13],
@@ -82,35 +118,44 @@ export function useTrailSegmentLabels({
         'text-halo-color': 'rgba(250, 252, 250, 0.98)',
         'text-halo-width': 4,
         'text-halo-blur': 2,
+        'text-opacity': [
+          'case',
+          ['coalesce', ['get', 'isPlanned'], false],
+          1,
+          ['interpolate', ['linear'], ['zoom'], TRAIL_SEGMENT_LABELS_MIN_ZOOM - 0.25, 0, TRAIL_SEGMENT_LABELS_MIN_ZOOM, 1],
+        ],
       },
     });
 
-    if (!map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
-      map.addLayer({
-        id: TRAIL_SEGMENT_LABELS_LAYER_ID,
-        type: 'symbol',
-        source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
-        minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
-        layout: {
-          'text-field': ['get', 'label'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 13],
-          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
-          'text-offset': [0, 0],
-          'text-anchor': 'center',
-          'text-padding': 2,
-          'text-allow-overlap': false,
-          'text-ignore-placement': false,
-          'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'distanceKm'], 0]],
-          'symbol-placement': 'point',
-        },
-        paint: {
-          'text-color': '#173127',
-          'text-halo-color': 'rgba(250, 252, 250, 0.98)',
-          'text-halo-width': 2.75,
-          'text-halo-blur': 1,
-        },
-      });
-    }
+    map.addLayer({
+      id: TRAIL_SEGMENT_LABELS_LAYER_ID,
+      type: 'symbol',
+      source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 13],
+        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+        'text-offset': [0, 0],
+        'text-anchor': 'center',
+        'text-padding': 2,
+        'text-allow-overlap': false,
+        'text-ignore-placement': false,
+        'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'distanceKm'], 0]],
+        'symbol-placement': 'point',
+      },
+      paint: {
+        'text-color': '#173127',
+        'text-halo-color': 'rgba(250, 252, 250, 0.98)',
+        'text-halo-width': 2.75,
+        'text-halo-blur': 1,
+        'text-opacity': [
+          'case',
+          ['coalesce', ['get', 'isPlanned'], false],
+          1,
+          ['interpolate', ['linear'], ['zoom'], TRAIL_SEGMENT_LABELS_MIN_ZOOM - 0.25, 0, TRAIL_SEGMENT_LABELS_MIN_ZOOM, 1],
+        ],
+      },
+    });
 
     if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
       map.moveLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);

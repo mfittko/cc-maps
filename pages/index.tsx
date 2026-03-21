@@ -223,8 +223,8 @@ export default function Home() {
     [routeGraph, routePlan]
   );
   const activeTraversalLabelsGeoJson = useMemo(
-    () => (!isPlanning && routePlan?.anchorEdgeIds?.length ? routePlanGeoJson.traversal : null),
-    [isPlanning, routePlan, routePlanGeoJson]
+    () => (routePlan?.anchorEdgeIds?.length ? routePlanGeoJson.traversal : null),
+    [routePlan, routePlanGeoJson]
   );
   const {
     currentRouteProgress,

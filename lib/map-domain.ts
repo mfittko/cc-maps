@@ -1,3 +1,5 @@
+import type { GeoBounds } from '../types/geo';
+
 export function getDestinationSummary(feature, fallbackCenter) {
   return {
     id: String(feature.properties.id),
@@ -620,12 +622,27 @@ function getTrailSegmentLabelsGeoJson(segments) {
         properties: {
           id: String(index),
           distanceKm: segment.distanceKm,
+          isPlanned: Boolean(segment.isPlanned),
           label: formatDistance(segment.distanceKm),
           route: `${segment.fromLabel} to ${segment.toLabel}`,
           trailFeatureId: segment.trailFeatureId ?? null,
         },
       })),
   };
+}
+
+function isCoordinateWithinBounds(coordinates, bounds: GeoBounds | null) {
+  if (!Array.isArray(coordinates) || !bounds) {
+    return true;
+  }
+
+  const [longitude, latitude] = coordinates;
+  const isWithinLongitudeRange =
+    bounds.west <= bounds.east
+      ? longitude >= bounds.west && longitude <= bounds.east
+      : longitude >= bounds.west || longitude <= bounds.east;
+
+  return isWithinLongitudeRange && latitude >= bounds.south && latitude <= bounds.north;
 }
 
 function getDistanceFromPointToGeometryKm(referenceCoordinates, geometry) {
@@ -676,7 +693,8 @@ export function getAllTrailSegmentLabelsGeoJson(
   destinations,
   endpointMatchThresholdKm,
   minSegmentDistanceKm,
-  traversalGeoJson = null
+  traversalGeoJson = null,
+  viewportBounds: GeoBounds | null = null
 ) {
   if (!trailsGeoJson?.features?.length) {
     return getTrailSegmentLabelsGeoJson([]);
@@ -697,9 +715,19 @@ export function getAllTrailSegmentLabelsGeoJson(
     }));
   }).filter((segment) => Array.isArray(segment.midpointCoordinates));
 
-  const visibleSegments = traversalGeoJson
-    ? filterSegmentsByTraversal(allSegments, traversalGeoJson)
-    : allSegments;
+  const plannedSegments = traversalGeoJson
+    ? filterSegmentsByTraversal(allSegments, traversalGeoJson).map((segment) => ({
+        ...segment,
+        isPlanned: true,
+      }))
+    : allSegments.map((segment) => ({
+        ...segment,
+        isPlanned: false,
+      }));
+
+  const visibleSegments = plannedSegments.filter((segment) =>
+    isCoordinateWithinBounds(segment.midpointCoordinates, viewportBounds)
+  );
 
   return getTrailSegmentLabelsGeoJson(visibleSegments);
 }
