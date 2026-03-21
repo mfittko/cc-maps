@@ -6,6 +6,8 @@ import {
   SELECTED_TRAIL_SOURCE_ID,
   TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID,
   TRAIL_SEGMENT_LABELS_LAYER_ID,
+  TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID,
+  TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID,
   getFeatureCollectionGeoJson,
   getTrailColorExpression,
   preventOverlayDoubleClickZoom,
@@ -121,6 +123,14 @@ export function useSelectedTrailLayers({
 
     if (map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
       map.moveLayer(TRAIL_SEGMENT_LABELS_LAYER_ID);
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID);
+    }
+
+    if (map.getLayer(TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID)) {
+      map.moveLayer(TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID);
     }
 
     return undefined;

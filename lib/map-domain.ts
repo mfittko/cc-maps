@@ -1,3 +1,5 @@
+import type { GeoBounds } from '../types/geo';
+
 export function getDestinationSummary(feature, fallbackCenter) {
   return {
     id: String(feature.properties.id),
@@ -606,6 +608,34 @@ function buildTrailSegments(
     .filter((segment) => segment.distanceKm >= minSegmentDistanceKm);
 }
 
+export function getAllTrailSegments(
+  trailsGeoJson,
+  destinations,
+  endpointMatchThresholdKm,
+  minSegmentDistanceKm
+) {
+  if (!trailsGeoJson?.features?.length) {
+    return [];
+  }
+
+  return trailsGeoJson.features
+    .flatMap((feature) => {
+      const crossingMetrics = getCrossingMetrics(
+        feature,
+        trailsGeoJson,
+        destinations,
+        endpointMatchThresholdKm,
+        minSegmentDistanceKm
+      );
+
+      return (crossingMetrics?.segments || []).map((segment) => ({
+        ...segment,
+        trailFeatureId: feature?.properties?.id ?? null,
+      }));
+    })
+    .filter((segment) => Array.isArray(segment.midpointCoordinates));
+}
+
 function getTrailSegmentLabelsGeoJson(segments) {
   return {
     type: 'FeatureCollection',
@@ -620,12 +650,27 @@ function getTrailSegmentLabelsGeoJson(segments) {
         properties: {
           id: String(index),
           distanceKm: segment.distanceKm,
+          isPlanned: Boolean(segment.isPlanned),
           label: formatDistance(segment.distanceKm),
           route: `${segment.fromLabel} to ${segment.toLabel}`,
           trailFeatureId: segment.trailFeatureId ?? null,
         },
       })),
   };
+}
+
+function isCoordinateWithinBounds(coordinates, bounds: GeoBounds | null) {
+  if (!Array.isArray(coordinates) || !bounds) {
+    return true;
+  }
+
+  const [longitude, latitude] = coordinates;
+  const isWithinLongitudeRange =
+    bounds.west <= bounds.east
+      ? longitude >= bounds.west && longitude <= bounds.east
+      : longitude >= bounds.west || longitude <= bounds.east;
+
+  return isWithinLongitudeRange && latitude >= bounds.south && latitude <= bounds.north;
 }
 
 function getDistanceFromPointToGeometryKm(referenceCoordinates, geometry) {
@@ -671,37 +716,50 @@ function filterSegmentsByTraversal(segments, traversalGeoJson, matchThresholdKm 
   );
 }
 
+export function getTrailSegmentLabelsGeoJsonForSegments(
+  allSegments,
+  traversalGeoJson = null,
+  viewportBounds: GeoBounds | null = null
+) {
+  if (!Array.isArray(allSegments) || !allSegments.length) {
+    return getTrailSegmentLabelsGeoJson([]);
+  }
+
+  const matchedPlannedSegments = traversalGeoJson
+    ? filterSegmentsByTraversal(allSegments, traversalGeoJson)
+    : [];
+  const plannedSegmentSet = new Set(matchedPlannedSegments);
+
+  const plannedSegments = allSegments.map((segment) => ({
+    ...segment,
+    isPlanned: plannedSegmentSet.has(segment),
+  }));
+
+  const visibleSegments = plannedSegments.filter((segment) =>
+    isCoordinateWithinBounds(segment.midpointCoordinates, viewportBounds)
+  );
+
+  return getTrailSegmentLabelsGeoJson(visibleSegments);
+}
+
 export function getAllTrailSegmentLabelsGeoJson(
   trailsGeoJson,
   destinations,
   endpointMatchThresholdKm,
   minSegmentDistanceKm,
-  traversalGeoJson = null
+  traversalGeoJson = null,
+  viewportBounds: GeoBounds | null = null
 ) {
-  if (!trailsGeoJson?.features?.length) {
-    return getTrailSegmentLabelsGeoJson([]);
-  }
-
-  const allSegments = trailsGeoJson.features.flatMap((feature) => {
-    const crossingMetrics = getCrossingMetrics(
-      feature,
+  return getTrailSegmentLabelsGeoJsonForSegments(
+    getAllTrailSegments(
       trailsGeoJson,
       destinations,
       endpointMatchThresholdKm,
       minSegmentDistanceKm
-    );
-
-    return (crossingMetrics?.segments || []).map((segment) => ({
-      ...segment,
-      trailFeatureId: feature?.properties?.id ?? null,
-    }));
-  }).filter((segment) => Array.isArray(segment.midpointCoordinates));
-
-  const visibleSegments = traversalGeoJson
-    ? filterSegmentsByTraversal(allSegments, traversalGeoJson)
-    : allSegments;
-
-  return getTrailSegmentLabelsGeoJson(visibleSegments);
+    ),
+    traversalGeoJson,
+    viewportBounds
+  );
 }
 
 export function getSegmentIntersection(firstStart, firstEnd, secondStart, secondEnd) {

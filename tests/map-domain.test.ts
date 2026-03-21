@@ -6,7 +6,9 @@ import {
   findClosestDestinationByTrailProximity,
   findClosestDestination,
   formatDistance,
+  getAllTrailSegments,
   getAllTrailSegmentLabelsGeoJson,
+  getTrailSegmentLabelsGeoJsonForSegments,
   getClickedTrailSection,
   getCrossingMetrics,
   getDestinationSummary,
@@ -478,7 +480,7 @@ describe('map-domain', () => {
     expect(labelsGeoJson.features[0].properties.distanceKm).toBeGreaterThan(0);
   });
 
-  it('filters segment labels to the active traversal when provided', () => {
+  it('marks only the active traversal labels as planned when provided', () => {
     const graph = buildRouteGraph(clickedSectionGeoJson);
     const edgeIds = [...graph.edges.keys()];
     const traversalGeoJson = createRoutePlanGeoJson(createRoutePlan('1', [edgeIds[0]]), graph).traversal;
@@ -491,9 +493,93 @@ describe('map-domain', () => {
       traversalGeoJson
     );
 
+    expect(labelsGeoJson.features).toHaveLength(4);
+    expect(
+      labelsGeoJson.features.filter((feature) => feature.properties.isPlanned)
+    ).toHaveLength(1);
+    expect(
+      labelsGeoJson.features.find((feature) => feature.properties.isPlanned)?.properties.route
+    ).toBe('Trail start to Crossing 1');
+    expect(
+      labelsGeoJson.features.find((feature) => feature.properties.isPlanned)?.properties.trailFeatureId
+    ).toBe(1);
+    expect(
+      labelsGeoJson.features.some(
+        (feature) => !feature.properties.isPlanned && feature.properties.route === 'Crossing 1 to Trail end'
+      )
+    ).toBe(true);
+  });
+
+  it('reuses precomputed trail segments when generating label geojson', () => {
+    const precomputedSegments = getAllTrailSegments(clickedSectionGeoJson, destinations, 1.25, 0.05);
+    const labelsGeoJson = getTrailSegmentLabelsGeoJsonForSegments(
+      precomputedSegments,
+      null,
+      {
+        west: 10.0,
+        south: 58.999,
+        east: 10.011,
+        north: 59.001,
+      }
+    );
+
     expect(labelsGeoJson.features).toHaveLength(1);
     expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
-    expect(labelsGeoJson.features[0].properties.trailFeatureId).toBe(1);
+  });
+
+  it('filters segment labels to the viewport bounds when provided', () => {
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      null,
+      {
+        west: 10.0,
+        south: 58.999,
+        east: 10.011,
+        north: 59.001,
+      }
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(1);
+    expect(labelsGeoJson.features[0].properties.route).toBe('Trail start to Crossing 1');
+    expect(labelsGeoJson.features[0].properties.isPlanned).toBe(false);
+  });
+
+  it('supports wrapped viewport bounds when filtering segment labels', () => {
+    const wrappedViewportTrails = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { id: 91 },
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [179.6, 59.0],
+              [179.8, 59.0],
+            ],
+          },
+        },
+      ],
+    };
+
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      wrappedViewportTrails,
+      destinations,
+      1.25,
+      0.05,
+      null,
+      {
+        west: 179.5,
+        south: 58.5,
+        east: -179.5,
+        north: 59.5,
+      }
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(1);
   });
 
   it('computes route progress metrics for the nearest traversal feature', () => {
@@ -535,22 +621,20 @@ describe('map-domain', () => {
     ).toBeNull();
   });
 
-  it('returns no labels when traversal filtering has no active features', () => {
-    expect(
-      getAllTrailSegmentLabelsGeoJson(
-        clickedSectionGeoJson,
-        destinations,
-        1.25,
-        0.05,
-        { type: 'FeatureCollection', features: [] }
-      )
-    ).toEqual({
-      type: 'FeatureCollection',
-      features: [],
-    });
+  it('keeps non-planned labels when traversal filtering has no active features', () => {
+    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+      clickedSectionGeoJson,
+      destinations,
+      1.25,
+      0.05,
+      { type: 'FeatureCollection', features: [] }
+    );
+
+    expect(labelsGeoJson.features).toHaveLength(4);
+    expect(labelsGeoJson.features.every((feature) => feature.properties.isPlanned === false)).toBe(true);
   });
 
-  it('ignores degenerate traversal geometry when filtering segment labels', () => {
+  it('ignores degenerate traversal geometry when marking planned segment labels', () => {
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
       clickedSectionGeoJson,
       destinations,
@@ -571,13 +655,11 @@ describe('map-domain', () => {
       }
     );
 
-    expect(labelsGeoJson).toEqual({
-      type: 'FeatureCollection',
-      features: [],
-    });
+    expect(labelsGeoJson.features).toHaveLength(4);
+    expect(labelsGeoJson.features.every((feature) => feature.properties.isPlanned === false)).toBe(true);
   });
 
-  it('ignores traversal features from a different trail when filtering segment labels', () => {
+  it('ignores traversal features from a different trail when marking planned segment labels', () => {
     const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
       clickedSectionGeoJson,
       destinations,
@@ -601,10 +683,8 @@ describe('map-domain', () => {
       }
     );
 
-    expect(labelsGeoJson).toEqual({
-      type: 'FeatureCollection',
-      features: [],
-    });
+    expect(labelsGeoJson.features).toHaveLength(4);
+    expect(labelsGeoJson.features.every((feature) => feature.properties.isPlanned === false)).toBe(true);
   });
 
   it('handles empty and no-crossing trail cases', () => {

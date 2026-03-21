@@ -31,13 +31,16 @@ export const SUGGESTED_TRAILS_HIT_LAYER_ID = 'suggested-trails-hit-layer';
 export const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
 export const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 export const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
+export const TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID =
+  'trail-segment-labels-planned-glow-layer';
+export const TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID = 'trail-segment-labels-planned-layer';
 export const ROUTE_PLAN_ANCHORS_SOURCE_ID = 'route-plan-anchors';
 export const ROUTE_PLAN_ANCHORS_LAYER_ID = 'route-plan-anchors-layer';
 export const ROUTE_PLAN_DIRECTIONS_SOURCE_ID = 'route-plan-directions';
 export const ROUTE_PLAN_DIRECTIONS_LAYER_ID = 'route-plan-directions-layer';
 export const DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM = 1.25;
 export const MIN_SEGMENT_DISTANCE_KM = 0.05;
-export const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 10.5;
+export const TRAIL_SEGMENT_LABELS_MIN_ZOOM = 13.5;
 export const DEFAULT_TRAIL_COLOR_MODE = 'freshness';
 export const MAP_SETTINGS_STORAGE_KEY = 'cc-maps:settings';
 export const DESTINATION_SUGGESTION_DEBOUNCE_MS = 700;
@@ -157,6 +160,18 @@ function getTrailFeatureCollectionKey(feature) {
     feature?.geometry?.type || '',
     feature?.geometry?.coordinates || [],
   ]);
+}
+
+export function getTrailFeatureCollectionSignature(
+  geojson: TrailFeatureCollection | null | undefined
+): string {
+  const features = geojson?.features;
+
+  if (!Array.isArray(features) || !features.length) {
+    return '';
+  }
+
+  return features.map((feature) => getTrailFeatureCollectionKey(feature)).join('|');
 }
 
 function supportsPaintOverride(layer: MapStyleLayer, property: string) {
