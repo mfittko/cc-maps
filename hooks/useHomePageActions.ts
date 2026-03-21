@@ -16,6 +16,7 @@ import {
   removeRoutePlanAnchor,
   reverseRoutePlan,
 } from '../lib/planning-mode';
+import { buildRouteGraph } from '../lib/route-graph';
 import {
   clearStoredRoutePlan,
   createClearedRoutePlan,
@@ -33,6 +34,48 @@ import type {
 import type { GraphEdge, RouteGraph, RoutePlan } from '../types/route';
 
 type StateSetter<T> = Dispatch<SetStateAction<T>>;
+
+export function resolvePlanningAnchorSelection(
+  routeGraph: RouteGraph | null,
+  availableTrailsGeoJson: TrailFeatureCollection,
+  feature: TrailFeature | null,
+  clickedCoordinates: Coordinates | null
+) {
+  const trailFeatureId = feature?.properties?.id;
+
+  if (trailFeatureId == null || !clickedCoordinates) {
+    return null;
+  }
+
+  const primaryEdgeId = findNearestRouteGraphEdgeId(routeGraph, trailFeatureId, clickedCoordinates);
+
+  if (primaryEdgeId) {
+    return {
+      edgeId: primaryEdgeId,
+      graph: routeGraph,
+    };
+  }
+
+  if (!availableTrailsGeoJson?.features?.length) {
+    return null;
+  }
+
+  const availableRouteGraph = buildRouteGraph(availableTrailsGeoJson);
+  const availableEdgeId = findNearestRouteGraphEdgeId(
+    availableRouteGraph,
+    trailFeatureId,
+    clickedCoordinates
+  );
+
+  if (!availableEdgeId) {
+    return null;
+  }
+
+  return {
+    edgeId: availableEdgeId,
+    graph: availableRouteGraph,
+  };
+}
 
 interface CreateHomePageActionsArgs {
   availableTrailsGeoJson: TrailFeatureCollection;
@@ -259,6 +302,7 @@ export function createHomePageActions({
   function handleClearPlan() {
     const previousOwnerDestinationId = routePlan?.destinationId || selectedDestinationId;
     const clearedRoutePlan = createClearedRoutePlan(routePlan, selectedDestinationId);
+    const dismissedRoutePlanKey = encodeRoutePlanToUrl(routePlan) || '';
 
     if (!previousOwnerDestinationId || !clearedRoutePlan) {
       return;
@@ -272,6 +316,7 @@ export function createHomePageActions({
       return;
     }
 
+    dismissedPlanningRouteKeyRef.current = dismissedRoutePlanKey;
     clearStoredRoutePlan(previousOwnerDestinationId, MAP_SETTINGS_STORAGE_KEY);
     setPromotedPrimaryDestinationIds([]);
     setRoutePlan(clearedRoutePlan);
@@ -372,13 +417,14 @@ export function createHomePageActions({
   }
 
   function handlePlanningAnchorSelection(feature: TrailFeature | null, clickedCoordinates: Coordinates | null) {
-    const edgeId = findNearestRouteGraphEdgeId(
+    const selection = resolvePlanningAnchorSelection(
       routeGraphRef.current,
-      feature?.properties?.id,
+      availableTrailsGeoJson,
+      feature,
       clickedCoordinates
     );
 
-    if (!edgeId) {
+    if (!selection) {
       return false;
     }
 
@@ -390,7 +436,7 @@ export function createHomePageActions({
         return currentPlan;
       }
 
-      return appendRoutePlanAnchor(currentPlan, ownerDestinationId, edgeId, routeGraphRef.current);
+      return appendRoutePlanAnchor(currentPlan, ownerDestinationId, selection.edgeId, selection.graph);
     });
     return true;
   }

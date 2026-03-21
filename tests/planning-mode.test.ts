@@ -160,16 +160,18 @@ describe('planning-mode helpers', () => {
   });
 
   describe('route-graph preview merging', () => {
-    it('merges preview trails while planning is active', () => {
-      expect(shouldMergePreviewTrailsIntoRouteGraph(true, [])).toBe(true);
+    it('keeps single-destination planning bounded', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph([])).toBe(false);
+      expect(shouldMergePreviewTrailsIntoRouteGraph(['7'])).toBe(false);
     });
 
-    it('merges preview trails during reload pre-hydration when planned destinations exist', () => {
-      expect(shouldMergePreviewTrailsIntoRouteGraph(false, ['8'])).toBe(true);
+    it('merges preview trails only when the active route spans multiple destinations', () => {
+      expect(shouldMergePreviewTrailsIntoRouteGraph(['7', '8'])).toBe(true);
+      expect(shouldMergePreviewTrailsIntoRouteGraph(['7', '8', '7'])).toBe(true);
     });
 
     it('keeps browse mode bounded when no route is active or pending hydration', () => {
-      expect(shouldMergePreviewTrailsIntoRouteGraph(false, [])).toBe(false);
+      expect(shouldMergePreviewTrailsIntoRouteGraph([])).toBe(false);
     });
 
     it('derives primary participants from selected, route, and promoted destinations', () => {

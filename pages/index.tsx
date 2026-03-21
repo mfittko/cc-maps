@@ -38,6 +38,7 @@ import {
   trailLegendItems,
 } from '../lib/home-page';
 import { getSingleQueryValue } from '../lib/map-persistence';
+import { getLoadPerfTimestamp, logLoadPerf, logLoadPerfSince } from '../lib/load-perf';
 import { measureRoutePerf } from '../lib/route-perf';
 import {
   formatDistance,
@@ -61,6 +62,26 @@ import type {
 } from '../types/geo';
 import type { RouteGraph, RoutePlan } from '../types/route';
 
+const ROUTE_GRAPH_CACHE_LIMIT = 6;
+const routeGraphCache = new Map<string, RouteGraph>();
+
+function rememberRouteGraph(signature: string, graph: RouteGraph) {
+  routeGraphCache.delete(signature);
+  routeGraphCache.set(signature, graph);
+
+  if (routeGraphCache.size <= ROUTE_GRAPH_CACHE_LIMIT) {
+    return graph;
+  }
+
+  const oldestKey = routeGraphCache.keys().next().value;
+
+  if (oldestKey) {
+    routeGraphCache.delete(oldestKey);
+  }
+
+  return graph;
+}
+
 export default function Home() {
   const router = useRouter();
   const mapContainer = useRef<HTMLDivElement | null>(null);
@@ -79,6 +100,15 @@ export default function Home() {
   const lastAutoLocationRef = useRef<Coordinates | null>(null);
   const wasCurrentLocationOnRouteRef = useRef(false);
   const lastRouteProgressDistanceKmRef = useRef<number | null>(null);
+  const initialLoadStartedAtRef = useRef<number | null>(getLoadPerfTimestamp());
+  const loggedInitialLoadMilestonesRef = useRef({
+    mounted: false,
+    mapReady: false,
+    destinationsReady: false,
+    destinationSelected: false,
+    trailsReady: false,
+    complete: false,
+  });
   const [trailsStatus, setTrailsStatus] = useState('idle');
   const [requestError, setRequestError] = useState('');
   const [trailsGeoJson, setTrailsGeoJson] = useState<TrailFeatureCollection | null>(null);
@@ -111,7 +141,6 @@ export default function Home() {
     setMapView,
   });
   const { destinations, destinationsGeoJson, destinationsStatus } = useDestinationsData({
-    mapReady,
     setRequestError,
   });
   const { isMacOS, isMobileInteraction } = useInteractionEnvironment();
@@ -204,8 +233,8 @@ export default function Home() {
     destinations,
   });
   const shouldIncludePreviewTrailsInRouteGraph = useMemo(
-    () => shouldMergePreviewTrailsIntoRouteGraph(isPlanning, pendingRouteDestinationIds),
-    [isPlanning, pendingRouteDestinationIdsKey]
+    () => shouldMergePreviewTrailsIntoRouteGraph(activeRouteDestinationIds),
+    [activeRouteDestinationIds]
   );
   const routeGraphTrailsGeoJson = useMemo(() => {
     if (!shouldIncludePreviewTrailsInRouteGraph) {
@@ -223,8 +252,17 @@ export default function Home() {
       return null;
     }
 
-    return measureRoutePerf('build route graph', () => buildRouteGraph(routeGraphTrailsGeoJson));
-  }, [routeGraphTrailsSignature]);
+    const cachedRouteGraph = routeGraphCache.get(routeGraphTrailsSignature);
+
+    if (cachedRouteGraph) {
+      return cachedRouteGraph;
+    }
+
+    return rememberRouteGraph(
+      routeGraphTrailsSignature,
+      measureRoutePerf('build route graph', () => buildRouteGraph(routeGraphTrailsGeoJson))
+    );
+  }, [routeGraphTrailsGeoJson, routeGraphTrailsSignature]);
   const routeGraphRef = useLatestValue(routeGraph);
   const routePlanGeoJson = useMemo(
     () =>
@@ -459,6 +497,83 @@ export default function Home() {
       return;
     }
   }, [selectedDestinationId]);
+
+  useEffect(() => {
+    if (loggedInitialLoadMilestonesRef.current.mounted) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.mounted = true;
+    logLoadPerf('home render mounted');
+  }, []);
+
+  useEffect(() => {
+    if (!mapReady || loggedInitialLoadMilestonesRef.current.mapReady) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.mapReady = true;
+    logLoadPerfSince('home initial map ready', initialLoadStartedAtRef.current);
+  }, [mapReady]);
+
+  useEffect(() => {
+    if (
+      destinationsStatus !== 'success' ||
+      loggedInitialLoadMilestonesRef.current.destinationsReady
+    ) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.destinationsReady = true;
+    logLoadPerfSince('home destinations ready', initialLoadStartedAtRef.current);
+  }, [destinationsStatus]);
+
+  useEffect(() => {
+    if (!selectedDestinationId || loggedInitialLoadMilestonesRef.current.destinationSelected) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.destinationSelected = true;
+    logLoadPerfSince(
+      `home destination selected (${selectedDestinationId})`,
+      initialLoadStartedAtRef.current
+    );
+  }, [selectedDestinationId]);
+
+  useEffect(() => {
+    if (
+      trailsStatus !== 'success' ||
+      !loadedPrimaryDestinationIds.length ||
+      loggedInitialLoadMilestonesRef.current.trailsReady
+    ) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.trailsReady = true;
+    logLoadPerfSince('home primary trails ready', initialLoadStartedAtRef.current);
+  }, [loadedPrimaryDestinationIds.length, trailsStatus]);
+
+  useEffect(() => {
+    if (
+      !mapReady ||
+      destinationsStatus !== 'success' ||
+      !selectedDestinationId ||
+      trailsStatus !== 'success' ||
+      !loadedPrimaryDestinationIds.includes(selectedDestinationId) ||
+      loggedInitialLoadMilestonesRef.current.complete
+    ) {
+      return;
+    }
+
+    loggedInitialLoadMilestonesRef.current.complete = true;
+    logLoadPerfSince('home initial load complete', initialLoadStartedAtRef.current);
+  }, [
+    destinationsStatus,
+    loadedPrimaryDestinationIds,
+    mapReady,
+    selectedDestinationId,
+    trailsStatus,
+  ]);
 
   return (
     <div className="page-shell">

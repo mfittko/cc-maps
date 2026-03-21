@@ -310,18 +310,23 @@ export function useTrailMapLayers({
       map.on('click', SUGGESTED_TRAILS_HIT_LAYER_ID, (event: any) => {
         const feature = (event.features?.[0] as TrailFeature | undefined) || null;
         const clickedCoordinates: Coordinates = [event.lngLat.lng, event.lngLat.lat];
+        const isPlanningSelection = isPlanningSelectionInteraction({
+          isPlanning: isPlanningRef.current,
+          isMobileInteraction: isMobileInteractionRef.current,
+          isMacOS: isMacOSRef.current,
+          originalEvent: event.originalEvent,
+        });
 
         if (
-          isPlanningSelectionInteraction({
-            isPlanning: isPlanningRef.current,
-            isMobileInteraction: isMobileInteractionRef.current,
-            isMacOS: isMacOSRef.current,
-            originalEvent: event.originalEvent,
-          }) &&
+          isPlanningSelection &&
           handlePlanningAnchorSelectionRef.current(feature, clickedCoordinates)
         ) {
           setIsSettingsPanelOpen(false);
           setIsInfoPanelOpen(false);
+          return;
+        }
+
+        if (isPlanningSelection) {
           return;
         }
 
