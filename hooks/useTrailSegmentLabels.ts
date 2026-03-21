@@ -7,7 +7,7 @@ import {
   TRAIL_SEGMENT_LABELS_MIN_ZOOM,
   TRAIL_SEGMENT_LABELS_SOURCE_ID,
 } from '../lib/home-page';
-import { getAllTrailSegmentLabelsGeoJson } from '../lib/map-domain';
+import { getAllTrailSegmentLabelsGeoJson, getAllTrailSegments } from '../lib/map-domain';
 import { measureRoutePerf } from '../lib/route-perf';
 import type { DestinationSummary, GeoBounds, TrailFeatureCollection } from '../types/geo';
 
@@ -66,19 +66,32 @@ export function useTrailSegmentLabels({
     };
   }, [mapReady, mapRef]);
 
+  const allSegments = useMemo(
+    () =>
+      measureRoutePerf('trail segment labels source', () =>
+        getAllTrailSegments(
+          trailsGeoJson,
+          destinations,
+          DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
+          MIN_SEGMENT_DISTANCE_KM
+        )
+      ),
+    [destinations, trailsGeoJson]
+  );
+
   const labelsGeoJson = useMemo(
     () =>
       measureRoutePerf('trail segment labels', () =>
         getAllTrailSegmentLabelsGeoJson(
-          trailsGeoJson,
-          destinations,
+          allSegments,
+          null,
           DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
           MIN_SEGMENT_DISTANCE_KM,
           activeTraversalGeoJson,
           viewportBounds
         )
       ),
-    [activeTraversalGeoJson, destinations, trailsGeoJson, viewportBounds]
+    [activeTraversalGeoJson, allSegments, viewportBounds]
   );
 
   useEffect(() => {

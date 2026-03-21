@@ -14,6 +14,7 @@ import {
   getFeatureCollectionGeoJson,
   getPreviewDestinationIds,
   getRouteDestinationIds,
+  getTrailFeatureCollectionSignature,
   getTrailColorExpression,
   getTrailOpacityExpression,
   getUniqueDestinationIds,
@@ -145,6 +146,30 @@ describe('home-page helpers', () => {
 
     expect(merged.features).toHaveLength(2);
     expect(merged.features).toEqual([duplicateFeature, uniqueFeature]);
+  });
+
+  it('produces a stable trail collection signature for content-identical collections', () => {
+    const featureA = baseFeature(1, '10', [
+      [10.0, 59.0],
+      [10.1, 59.1],
+    ]);
+    const featureB = baseFeature(2, '20', [
+      [11.0, 60.0],
+      [11.1, 60.1],
+    ]);
+
+    const signatureA = getTrailFeatureCollectionSignature({
+      type: 'FeatureCollection',
+      features: [featureA, featureB],
+    });
+    const signatureB = getTrailFeatureCollectionSignature(
+      mergeTrailFeatureCollections([
+        { type: 'FeatureCollection', features: [featureA] },
+        { type: 'FeatureCollection', features: [featureB] },
+      ])
+    );
+
+    expect(signatureA).toBe(signatureB);
   });
 
   it('normalizes unique destination ids and removes empty values', () => {

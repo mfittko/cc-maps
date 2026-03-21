@@ -30,6 +30,7 @@ import {
   freshnessLegendItems,
   getPreviewDestinationIds,
   getRouteDestinationIds,
+  getTrailFeatureCollectionSignature,
   getUniqueDestinationIds,
   mergeTrailFeatureCollections,
   resolvePersistedRoutePlanForDestination,
@@ -135,6 +136,7 @@ export default function Home() {
     selectedDestinationId,
     selectedDestination,
     destinations,
+    isPlanning,
   });
   const nearbyDestinations = useMemo(
     () => destinations.filter((destination) => nearbyDestinationIds.includes(destination.id)),
@@ -163,12 +165,13 @@ export default function Home() {
     () => getRouteDestinationIds(persistedRouteSelection.persistedRoutePlan),
     [persistedRouteSelection.persistedRoutePlan]
   );
+  const pendingRouteDestinationIdsKey = pendingRouteDestinationIds.join(',');
   const activeRouteDestinationIds = useMemo(
     () =>
       getUniqueDestinationIds(
         routePlan?.anchorEdgeIds?.length ? routePlan.destinationIds : pendingRouteDestinationIds
       ),
-    [pendingRouteDestinationIds, routePlan]
+    [pendingRouteDestinationIdsKey, routePlan]
   );
   const primaryDestinationIds = useMemo(
     () =>
@@ -200,20 +203,28 @@ export default function Home() {
     availableTrailsGeoJson,
     destinations,
   });
+  const shouldIncludePreviewTrailsInRouteGraph = useMemo(
+    () => shouldMergePreviewTrailsIntoRouteGraph(isPlanning, pendingRouteDestinationIds),
+    [isPlanning, pendingRouteDestinationIdsKey]
+  );
   const routeGraphTrailsGeoJson = useMemo(() => {
-    if (!shouldMergePreviewTrailsIntoRouteGraph(isPlanning, pendingRouteDestinationIds)) {
+    if (!shouldIncludePreviewTrailsInRouteGraph) {
       return trailsGeoJson;
     }
 
     return mergeTrailFeatureCollections([trailsGeoJson, suggestedTrailsGeoJson]);
-  }, [isPlanning, pendingRouteDestinationIds, trailsGeoJson, suggestedTrailsGeoJson]);
+  }, [shouldIncludePreviewTrailsInRouteGraph, trailsGeoJson, suggestedTrailsGeoJson]);
+  const routeGraphTrailsSignature = useMemo(
+    () => getTrailFeatureCollectionSignature(routeGraphTrailsGeoJson),
+    [routeGraphTrailsGeoJson]
+  );
   const routeGraph: RouteGraph | null = useMemo(() => {
-    if (!routeGraphTrailsGeoJson?.features?.length) {
+    if (!routeGraphTrailsSignature || !routeGraphTrailsGeoJson?.features?.length) {
       return null;
     }
 
     return measureRoutePerf('build route graph', () => buildRouteGraph(routeGraphTrailsGeoJson));
-  }, [routeGraphTrailsGeoJson]);
+  }, [routeGraphTrailsSignature]);
   const routeGraphRef = useLatestValue(routeGraph);
   const routePlanGeoJson = useMemo(
     () =>

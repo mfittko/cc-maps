@@ -12,6 +12,27 @@ interface UseNearbyDestinationIdsArgs {
   selectedDestinationId: string;
   selectedDestination: DestinationSummary | null;
   destinations: DestinationSummary[];
+  isPlanning?: boolean;
+}
+
+export function getNearbyDestinationReferenceCoordinates({
+  mapView,
+  selectedDestination,
+  isPlanning = false,
+}: {
+  mapView: MapView | null;
+  selectedDestination: DestinationSummary | null;
+  isPlanning?: boolean;
+}) {
+  if (!selectedDestination) {
+    return null;
+  }
+
+  if (isPlanning || !mapView) {
+    return selectedDestination.coordinates;
+  }
+
+  return [mapView.longitude, mapView.latitude] as const;
 }
 
 export function useNearbyDestinationIds({
@@ -19,6 +40,7 @@ export function useNearbyDestinationIds({
   selectedDestinationId,
   selectedDestination,
   destinations,
+  isPlanning = false,
 }: UseNearbyDestinationIdsArgs) {
   const [nearbyDestinationIds, setNearbyDestinationIds] = useState<string[]>([]);
 
@@ -29,9 +51,16 @@ export function useNearbyDestinationIds({
     }
 
     const timeoutId = window.setTimeout(() => {
-      const referenceCoordinates = mapView
-        ? [mapView.longitude, mapView.latitude]
-        : selectedDestination.coordinates;
+      const referenceCoordinates = getNearbyDestinationReferenceCoordinates({
+        mapView,
+        selectedDestination,
+        isPlanning,
+      });
+
+      if (!referenceCoordinates) {
+        setNearbyDestinationIds([]);
+        return;
+      }
 
       const nearbyAlternatives = getDestinationsWithinRadius(
         destinations,
@@ -61,7 +90,7 @@ export function useNearbyDestinationIds({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [destinations, mapView, selectedDestination, selectedDestinationId]);
+  }, [destinations, isPlanning, mapView, selectedDestination, selectedDestinationId]);
 
   return nearbyDestinationIds;
 }

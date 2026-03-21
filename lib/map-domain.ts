@@ -608,6 +608,34 @@ function buildTrailSegments(
     .filter((segment) => segment.distanceKm >= minSegmentDistanceKm);
 }
 
+export function getAllTrailSegments(
+  trailsGeoJson,
+  destinations,
+  endpointMatchThresholdKm,
+  minSegmentDistanceKm
+) {
+  if (!trailsGeoJson?.features?.length) {
+    return [];
+  }
+
+  return trailsGeoJson.features
+    .flatMap((feature) => {
+      const crossingMetrics = getCrossingMetrics(
+        feature,
+        trailsGeoJson,
+        destinations,
+        endpointMatchThresholdKm,
+        minSegmentDistanceKm
+      );
+
+      return (crossingMetrics?.segments || []).map((segment) => ({
+        ...segment,
+        trailFeatureId: feature?.properties?.id ?? null,
+      }));
+    })
+    .filter((segment) => Array.isArray(segment.midpointCoordinates));
+}
+
 function getTrailSegmentLabelsGeoJson(segments) {
   return {
     type: 'FeatureCollection',
@@ -689,41 +717,35 @@ function filterSegmentsByTraversal(segments, traversalGeoJson, matchThresholdKm 
 }
 
 export function getAllTrailSegmentLabelsGeoJson(
-  trailsGeoJson,
-  destinations,
+  trailsGeoJsonOrSegments,
+  destinationsOrTraversalGeoJson,
   endpointMatchThresholdKm,
   minSegmentDistanceKm,
   traversalGeoJson = null,
   viewportBounds: GeoBounds | null = null
 ) {
-  if (!trailsGeoJson?.features?.length) {
+  const allSegments = Array.isArray(trailsGeoJsonOrSegments)
+    ? trailsGeoJsonOrSegments
+    : getAllTrailSegments(
+        trailsGeoJsonOrSegments,
+        destinationsOrTraversalGeoJson,
+        endpointMatchThresholdKm,
+        minSegmentDistanceKm
+      );
+
+  if (!allSegments.length) {
     return getTrailSegmentLabelsGeoJson([]);
   }
 
-  const allSegments = trailsGeoJson.features.flatMap((feature) => {
-    const crossingMetrics = getCrossingMetrics(
-      feature,
-      trailsGeoJson,
-      destinations,
-      endpointMatchThresholdKm,
-      minSegmentDistanceKm
-    );
+  const matchedPlannedSegments = traversalGeoJson
+    ? filterSegmentsByTraversal(allSegments, traversalGeoJson)
+    : [];
+  const plannedSegmentSet = new Set(matchedPlannedSegments);
 
-    return (crossingMetrics?.segments || []).map((segment) => ({
-      ...segment,
-      trailFeatureId: feature?.properties?.id ?? null,
-    }));
-  }).filter((segment) => Array.isArray(segment.midpointCoordinates));
-
-  const plannedSegments = traversalGeoJson
-    ? filterSegmentsByTraversal(allSegments, traversalGeoJson).map((segment) => ({
-        ...segment,
-        isPlanned: true,
-      }))
-    : allSegments.map((segment) => ({
-        ...segment,
-        isPlanned: false,
-      }));
+  const plannedSegments = allSegments.map((segment) => ({
+    ...segment,
+    isPlanned: plannedSegmentSet.has(segment),
+  }));
 
   const visibleSegments = plannedSegments.filter((segment) =>
     isCoordinateWithinBounds(segment.midpointCoordinates, viewportBounds)

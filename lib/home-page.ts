@@ -159,6 +159,18 @@ function getTrailFeatureCollectionKey(feature) {
   ]);
 }
 
+export function getTrailFeatureCollectionSignature(
+  geojson: TrailFeatureCollection | null | undefined
+): string {
+  const features = geojson?.features;
+
+  if (!Array.isArray(features) || !features.length) {
+    return '';
+  }
+
+  return features.map((feature) => getTrailFeatureCollectionKey(feature)).join('|');
+}
+
 function supportsPaintOverride(layer: MapStyleLayer, property: string) {
   return (
     layer.type in WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE &&
