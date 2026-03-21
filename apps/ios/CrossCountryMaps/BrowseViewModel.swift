@@ -940,8 +940,19 @@ final class BrowseViewModel: ObservableObject {
             pendingRestoreContext = resolvePendingRestoreContext(for: routePlan.destinationId)
 
             if trailsPhase == .success {
-                applyPendingRouteHydrationIfNeeded()
-                schedulePreviewEvaluation()
+                if hasLoadedAllRequiredPrimaryParticipants(
+                    for: routePlan,
+                    allTrails: primaryTrails + previewTrails
+                ) {
+                    applyPendingRouteHydrationIfNeeded()
+                    schedulePreviewEvaluation()
+                } else {
+                    primaryLoadToken = UUID()
+                    previewLoadToken = UUID()
+                    trailsPhase = .loading
+                    requestError = nil
+                    loadPrimaryTrails(for: routePlan.destinationId, token: primaryLoadToken)
+                }
             }
 
             return
@@ -1464,6 +1475,15 @@ final class BrowseViewModel: ObservableObject {
         }
 
         return combinedTrails
+    }
+
+    private func hasLoadedAllRequiredPrimaryParticipants(
+        for routePlan: CanonicalRoutePlan,
+        allTrails: [TrailFeature]
+    ) -> Bool {
+        let loadedDestinationIDs = Set(allTrails.compactMap(\.destinationId))
+
+        return routePlan.destinationIds.allSatisfy { loadedDestinationIDs.contains($0) }
     }
 
     private func promotePrimaryParticipants(_ destinationIDs: [String]) {

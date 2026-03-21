@@ -883,9 +883,16 @@ export default function Home() {
     if (shouldKeepCurrentPrimaryParticipants) {
       setPromotedPrimaryDestinationIds(nextPrimaryParticipantIds);
 
+      const loadedFeatureDestinationIds = getUniqueDestinationIds(
+        promotedTrailGeoJson.features.map((feature) => feature?.properties?.destinationid)
+      );
+      const nextLoadedPrimaryDestinationIds = nextPrimaryParticipantIds.filter((nextDestinationId) =>
+        loadedFeatureDestinationIds.includes(nextDestinationId)
+      );
+
       if (promotedTrailGeoJson.features.length) {
         applyTrailGeoJsonToPrimaryLayer(promotedTrailGeoJson);
-        setLoadedPrimaryDestinationIds(nextPrimaryParticipantIds);
+        setLoadedPrimaryDestinationIds(nextLoadedPrimaryDestinationIds);
       } else {
         setLoadedPrimaryDestinationIds([]);
       }

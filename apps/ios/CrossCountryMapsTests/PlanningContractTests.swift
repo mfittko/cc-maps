@@ -1600,6 +1600,70 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testIncomingUrlWaitsForRequiredPrimaryParticipantsWhenDestinationAlreadyLoaded() async throws {
+        let suiteName = "PlanningContractTests.IncomingUrlWaitsForRequiredPrimaryParticipantsWhenDestinationAlreadyLoaded"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Lillehammer", latitude: 61.1153, longitude: 10.4662),
+            ],
+            trailsByDestination: [
+                "1": [
+                    try makeTrailSegment(id: 101, destinationId: 1, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "2": [
+                    try makeTrailSegment(id: 303, destinationId: 2, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "1", mapRegion: nil, isPlanningModeActive: true)
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+        await waitUntil { viewModel.trailsPhase == .success }
+
+        apiClient.suspendedTrailDestinationIDs = ["2"]
+
+        let encodedRoute = CanonicalRoutePlan(
+            destinationId: "1",
+            anchorEdgeIds: [Self.edgeA, Self.edgeC],
+            destinationIds: ["1", "2"]
+        ).encodedForURL
+        viewModel.handleIncomingURL(URL(string: "ccmaps://open?route=\(encodedRoute!)")!)
+
+        await waitUntil {
+            apiClient.requestedDestinationIDs.filter { $0 == "2" }.count == 1 &&
+                viewModel.trailsPhase == .loading
+        }
+
+        XCTAssertTrue(viewModel.routePlan.isEmpty)
+        XCTAssertTrue(viewModel.activeRouteDestinationIDs.isEmpty)
+
+        apiClient.resumeTrails(for: "2")
+
+        await waitUntil {
+            viewModel.trailsPhase == .success &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["1", "2"]
+        }
+
+        XCTAssertEqual(Set(viewModel.primaryTrails.compactMap(\.destinationId)), Set(["1", "2"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+    }
+
+    @MainActor
     func testIncomingEmptySharedLinkDoesNotClearStoredRoute() async throws {
         let suiteName = "PlanningContractTests.IncomingEmptySharedLinkDoesNotClearStoredRoute"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
