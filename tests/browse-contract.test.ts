@@ -10,8 +10,8 @@ import {
   getDestinationsWithinRadius,
   getDistanceInKilometers,
   getTrailSelectionLengthInKilometers,
-} from '../lib/map-domain.js';
-import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet.js';
+} from '../lib/map-domain';
+import { DESTINATION_PREP_STYLES, TRAIL_TYPE_STYLES } from '../lib/sporet';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

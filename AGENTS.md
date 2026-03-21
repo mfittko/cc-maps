@@ -24,15 +24,24 @@ This file gives future coding agents the minimum project context needed to work 
 
 ## Current architecture
 
-- `pages/index.js` composes the map shell, map lifecycle effects, and page-level orchestration.
-- `components/ControlPanel.js` and `components/InfoPanel.js` own the extracted panel presentation.
-- `hooks/useMapPersistence.js` owns URL and local-storage synchronization for destination, terrain, color mode, and map view.
-- `lib/map-domain.js` contains extracted pure map-domain helpers such as distance, destination matching, crossing analysis, and segment label shaping.
-- `lib/map-persistence.js` contains extracted storage and query-parsing helpers plus trail-cache shaping.
-- `pages/api/destinations.js` proxies active destination data from Sporet layer 4.
-- `pages/api/trails.js` validates `destinationid` and proxies trail data from Sporet layer 6.
-- `lib/sporet.js` contains shared layer IDs, integer parsing, the Sporet fetch helper, and style mappings.
-- `pages/_app.js` wires in global styles, Mapbox CSS, and manifest metadata.
+- `pages/index.tsx` composes the homepage orchestration, derived state, and panel rendering.
+- `lib/home-page.ts` contains extracted page-scoped constants and pure helper logic for map styling, trail collection shaping, and route-selection utilities.
+- `components/ControlPanel.tsx`, `components/InfoPanel.tsx`, `components/PlanningPanel.tsx`, and `components/TrailDetailsPanel.tsx` own the extracted panel presentation.
+- `hooks/useMapLifecycle.ts` owns map creation, initial view restoration, and ready/error lifecycle state.
+- `hooks/useDestinationsData.ts` owns destination bootstrap and shaping.
+- `hooks/useAutoDestinationSelection.ts` owns geolocation-driven destination auto-selection.
+- `hooks/useNearbyDestinationIds.ts` owns debounced nearby destination suggestion derivation.
+- `hooks/useRoutePlanSync.ts` owns route hydration plus route/planning URL and storage synchronization.
+- `hooks/useRouteDirectionTracking.ts` owns route-travel direction detection from live progress.
+- `hooks/useInteractionEnvironment.ts` owns the device and pointer-environment detection used by planning and overlay UX.
+- `hooks/useLatestValue.ts` owns the repeated latest-value ref synchronization pattern for async map handlers.
+- `hooks/useMapPersistence.ts` owns URL and local-storage synchronization for destination, terrain, color mode, and map view.
+- `lib/map-domain.ts` contains extracted pure map-domain helpers such as distance, destination matching, crossing analysis, and segment label shaping.
+- `lib/map-persistence.ts` contains extracted storage and query-parsing helpers plus trail-cache shaping.
+- `pages/api/destinations.ts` proxies active destination data from Sporet layer 4.
+- `pages/api/trails.ts` validates `destinationid` and proxies trail data from Sporet layer 6.
+- `lib/sporet.ts` contains shared layer IDs, integer parsing, the Sporet fetch helper, and style mappings.
+- `pages/_app.tsx` wires in global styles, Mapbox CSS, and manifest metadata.
 
 ## Source of truth
 
@@ -111,6 +120,7 @@ Phase 6 is the next major engineering phase. If a task involves cleanup or refac
 - Read the relevant phase docs before changing scope-sensitive behavior.
 - If you change runtime behavior, update `README.md`, `docs/spec.md`, and any affected phase docs.
 - Treat test design as part of implementation, not a follow-up task: add or adjust the relevant tests early enough that they define the intended behavior before the code settles.
+- Treat regressions as TDD work by default: reproduce them in a failing automated test first or alongside the fix, then land the code change with that regression coverage in place.
 - Prefer focused changes over broad rewrites.
 - Prefer the built-in file edit tool for code changes instead of shell redirection, ad hoc scripting, or Python wrappers that write files indirectly.
 - Never configure a local working branch to track a different branch such as `origin/main`. A feature branch must track its same-named remote branch or have no upstream until that remote branch exists.

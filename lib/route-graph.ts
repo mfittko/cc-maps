@@ -29,7 +29,7 @@
  * references.
  */
 
-import { getDistanceInKilometers, getLineStrings, getSegmentIntersection } from './map-domain.js';
+import { getDistanceInKilometers, getLineStrings, getSegmentIntersection } from './map-domain';
 
 /** Node ID precision: 6 decimal places ≈ 0.1 m at typical latitudes. */
 const COORD_PRECISION = 6;

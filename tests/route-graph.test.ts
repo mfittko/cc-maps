@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteGraph } from '../lib/route-graph.js';
+import { buildRouteGraph } from '../lib/route-graph';
 
 // ---------------------------------------------------------------------------
 // Shared test fixtures

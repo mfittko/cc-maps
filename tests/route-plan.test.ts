@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRouteGraph } from '../lib/route-graph.js';
+import { buildRouteGraph } from '../lib/route-graph';
 import {
   ROUTE_PLAN_VERSION,
   clearStoredRoutePlan,
@@ -13,7 +13,7 @@ import {
   readStoredRoutePlan,
   shouldRestoreHydratedRoutePlan,
   writeStoredRoutePlan,
-} from '../lib/route-plan.js';
+} from '../lib/route-plan';
 
 // ---------------------------------------------------------------------------
 // Storage helper

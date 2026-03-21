@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildRouteGraph } from '../lib/route-graph.js';
-import { createClearedRoutePlan, createRoutePlan } from '../lib/route-plan.js';
+import { buildRouteGraph } from '../lib/route-graph';
+import { createClearedRoutePlan, createRoutePlan } from '../lib/route-plan';
 import {
   appendRoutePlanAnchor,
   createRoutePlanGeoJson,
@@ -13,7 +13,7 @@ import {
   removeRoutePlanAnchor,
   reverseRoutePlan,
   shouldMergePreviewTrailsIntoRouteGraph,
-} from '../lib/planning-mode.js';
+} from '../lib/planning-mode';
 
 const graphGeoJson = {
   type: 'FeatureCollection',

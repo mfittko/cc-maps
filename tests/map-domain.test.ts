@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createRoutePlanGeoJson } from '../lib/planning-mode.js';
-import { buildRouteGraph } from '../lib/route-graph.js';
-import { createRoutePlan } from '../lib/route-plan.js';
+import { createRoutePlanGeoJson } from '../lib/planning-mode';
+import { buildRouteGraph } from '../lib/route-graph';
+import { createRoutePlan } from '../lib/route-plan';
 import {
   findClosestDestinationByTrailProximity,
   findClosestDestination,

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck:test": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
@@ -21,7 +23,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@types/geojson": "^7946.0.16",
+    "@types/mapbox-gl": "^3.4.1",
+    "@types/node": "^25.5.0",
+    "@types/pngjs": "^6.0.5",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitest/coverage-v8": "^4.1.0",
+    "typescript": "^5.9.3",
     "vitest": "^4.1.0"
   }
 }
