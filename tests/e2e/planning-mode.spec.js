@@ -19,6 +19,14 @@ const destinationsFixture = {
         coordinates: [10.9, 59.89],
       },
     },
+    {
+      type: 'Feature',
+      properties: { id: '3', name: 'Lillomarka', prepsymbol: 20 },
+      geometry: {
+        type: 'Point',
+        coordinates: [10.81, 59.98],
+      },
+    },
   ],
 };
 
@@ -281,6 +289,12 @@ async function waitForRouteUrl(page, anchorCount) {
   ).toBe(true);
 }
 
+async function waitForClearedRouteUrl(page) {
+  await expect.poll(async () =>
+    page.evaluate(() => new URLSearchParams(window.location.search).get('route') || '')
+  ).toBe('');
+}
+
 async function getMockMapView(page) {
   return page.evaluate(() => {
     const mockMap = window.__ccMapsMockMap;
@@ -297,13 +311,14 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await emitPrimaryTrailClick(page);
 
     await expect(page.getByRole('heading', { name: 'Machine groomed' })).toBeVisible();
-    await expect(page.getByText('Classic: Yes · Skating: Yes')).toBeVisible();
+    await expect(page.getByText('Prepared within 6 hours')).toBeVisible();
+    await expect(page.getByText('0.6 km')).toBeVisible();
   });
 
   test('desktop quick action opens and closes planning mode with desktop hint text', async ({
@@ -312,8 +327,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
 
@@ -336,8 +351,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
@@ -355,11 +370,8 @@ test.describe('planning mode interactions', () => {
     await page.getByRole('button', { name: 'Exit planning mode' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('2');
-    await expect(page.getByRole('heading', { name: 'Østmarka' })).toBeVisible();
-
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '2');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('2');
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
   });
 
@@ -367,8 +379,8 @@ test.describe('planning mode interactions', () => {
     await stubAppApi(page);
     await page.goto('/');
 
-    await page.locator('.control-panel-desktop .select-input').selectOption('1');
-    await expect(page.getByRole('heading', { name: 'Nordmarka' })).toBeVisible();
+    await selectDesktopDestination(page, '1');
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
 
     await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
@@ -394,21 +406,12 @@ test.describe('planning mode interactions', () => {
 
     await page.reload();
 
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
     await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
-    await expect.poll(async () =>
-      page.locator('.planning-anchor-list li').count()
-    ).toBe(2);
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
     await expect(page.getByText(/^2 sections/)).toBeVisible();
 
-    await expect.poll(async () =>
-      page.evaluate(() => {
-        const mockMap = window.__ccMapsMockMap;
-        const source = mockMap?.getSource('suggested-trails');
-        const features = source?.data?.features || [];
-
-        return features.some((feature) => String(feature?.properties?.destinationid) === '2');
-      })
-    ).toBe(true);
+    await expectDestinationInPrimaryTrails(page, '2');
     await expectDestinationNotInSuggestedTrails(page, '2');
   });
 
@@ -459,6 +462,119 @@ test.describe('planning mode interactions', () => {
     await expectDestinationNotInSuggestedTrails(page, '2');
   });
 
+  test('manual destination changes clear a locked route when the destination is not participating', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await waitForRouteUrl(page, 2);
+    await expect(page.getByText(/^2 sections/)).toBeVisible();
+
+    await selectDesktopDestination(page, '3');
+
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('3');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeHidden();
+    await waitForClearedRouteUrl(page);
+  });
+
+  test('shared route URLs restore the canonical owner even when destination query points at a participant', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await selectDesktopDestination(page, '1');
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await waitForRouteUrl(page, 2);
+
+    const routeParam = await page.evaluate(
+      () => new URLSearchParams(window.location.search).get('route') || ''
+    );
+
+    await page.goto(`/?destination=2&planning=1&route=${encodeURIComponent(routeParam)}`);
+
+    await expect(page.locator('.control-panel-desktop .select-input')).toHaveValue('1');
+    await expect(page.getByRole('heading', { name: 'Route plan' })).toBeVisible();
+    await expect.poll(async () => page.locator('.planning-anchor-list li').count()).toBe(2);
+  });
+
+  test('sharing a multi-destination route uses the canonical owner label', async ({ page }) => {
+    await stubAppApi(page);
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async (data) => {
+          window.__sharedRouteData = data;
+        },
+      });
+    });
+
+    await selectDesktopDestination(page, '1');
+    await page.locator('.control-panel-desktop').getByRole('button', { name: 'Plan route' }).click();
+
+    await emitPlanningTrailClick(
+      page,
+      'trails-hit-layer',
+      trailsFixtureByDestinationId['1'].features[0],
+      { lng: 10.755, lat: 59.95 }
+    );
+
+    await waitForSuggestedTrailPreview(page, '2');
+
+    await emitPlanningTrailClick(
+      page,
+      'suggested-trails-hit-layer',
+      trailsFixtureByDestinationId['2'].features[0],
+      { lng: 10.775, lat: 59.95 }
+    );
+
+    await selectDesktopDestination(page, '2');
+    await page.locator('.planning-panel').getByRole('button', { name: 'Share route' }).click();
+
+    await expect.poll(async () =>
+      page.evaluate(() => window.__sharedRouteData || null)
+    ).toEqual(
+      expect.objectContaining({
+        title: 'Nordmarka route',
+        text: 'Planned route for Nordmarka',
+      })
+    );
+  });
 
   test('clicking a destination center keeps an active multi-destination route intact', async ({ page }) => {
     await stubAppApi(page);

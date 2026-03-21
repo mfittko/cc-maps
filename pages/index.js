@@ -474,6 +474,10 @@ export default function Home() {
 
   const selectedDestination =
     destinations.find((destination) => destination.id === selectedDestinationId) || null;
+  const routeOwnerDestination =
+    destinations.find((destination) => destination.id === routePlan?.destinationId) ||
+    selectedDestination ||
+    null;
   const nearbyDestinations = destinations.filter((destination) =>
     nearbyDestinationIds.includes(destination.id)
   );
@@ -753,6 +757,8 @@ export default function Home() {
   function updateSelectedDestination(destinationId, options = {}) {
     const { manual = false, prefetchedTrailsGeoJson = null } = options;
     const hasLockedRoute = Boolean(routePlanRef.current?.anchorEdgeIds?.length);
+    const shouldPreserveLockedRoute =
+      hasLockedRoute && manual && routeIncludesDestination(routePlanRef.current, destinationId);
 
     if (manual) {
       hasManualDestinationSelectionRef.current = true;
@@ -773,7 +779,7 @@ export default function Home() {
     setLoadedPreviewDestinationIds([]);
     setSuggestedTrailsGeoJson(null);
 
-    if (hasLockedRoute) {
+    if (shouldPreserveLockedRoute) {
       return;
     }
 
@@ -845,12 +851,12 @@ export default function Home() {
   }
 
   function handleExportGpx() {
-    if (!selectedDestination || typeof window === 'undefined') {
+    if (!routeOwnerDestination || typeof window === 'undefined') {
       return;
     }
 
     const routeFeatures = createRoutePlanGeoJson(routePlan, routeGraph).traversal.features;
-    const routeName = `${selectedDestination.name} route`;
+    const routeName = `${routeOwnerDestination.name} route`;
     const gpxContent = createGpxFromRouteFeatures(routeFeatures, { name: routeName });
 
     if (!gpxContent) {
@@ -872,14 +878,15 @@ export default function Home() {
   }
 
   async function handleShareRoute() {
-    if (!selectedDestination || typeof window === 'undefined') {
+    if (!routeOwnerDestination || typeof window === 'undefined') {
       return;
     }
 
     const shareUrl = window.location.href;
+    const routeName = `${routeOwnerDestination.name} route`;
     const shareData = {
-      title: `${selectedDestination.name} route`,
-      text: `Planned route for ${selectedDestination.name}`,
+      title: routeName,
+      text: `Planned route for ${routeOwnerDestination.name}`,
       url: shareUrl,
     };
 
