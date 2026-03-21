@@ -31,6 +31,9 @@ export const SUGGESTED_TRAILS_HIT_LAYER_ID = 'suggested-trails-hit-layer';
 export const TRAIL_SEGMENT_LABELS_SOURCE_ID = 'trail-segment-labels';
 export const TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID = 'trail-segment-labels-glow-layer';
 export const TRAIL_SEGMENT_LABELS_LAYER_ID = 'trail-segment-labels-layer';
+export const TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID =
+  'trail-segment-labels-planned-glow-layer';
+export const TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID = 'trail-segment-labels-planned-layer';
 export const ROUTE_PLAN_ANCHORS_SOURCE_ID = 'route-plan-anchors';
 export const ROUTE_PLAN_ANCHORS_LAYER_ID = 'route-plan-anchors-layer';
 export const ROUTE_PLAN_DIRECTIONS_SOURCE_ID = 'route-plan-directions';
