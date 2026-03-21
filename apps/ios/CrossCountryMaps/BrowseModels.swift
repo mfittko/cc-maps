@@ -1198,6 +1198,7 @@ enum GeoMath {
                 edgeCandidates.append(
                     PlanningEdgeCandidate(
                         trailID: trail.id,
+                        destinationID: trail.destinationId,
                         baseID: baseID,
                         start: start,
                         end: end,
@@ -1221,6 +1222,7 @@ enum GeoMath {
 
                 let section = PlanningSection(
                     trailID: candidate.trailID,
+                    destinationID: candidate.destinationID,
                     edgeID: edgeID,
                     start: candidate.start,
                     end: candidate.end,
@@ -1566,6 +1568,7 @@ struct PlanningEdgeDescriptor {
 
 private struct PlanningEdgeCandidate {
     let trailID: String
+    let destinationID: String?
     let baseID: String
     let start: CLLocationCoordinate2D
     let end: CLLocationCoordinate2D
@@ -1578,6 +1581,7 @@ private struct PlanningEdgeCandidate {
 
 struct PlanningSection: Equatable {
     let trailID: String
+    let destinationID: String?
     let edgeID: String
     let start: CLLocationCoordinate2D
     let end: CLLocationCoordinate2D
@@ -1587,8 +1591,33 @@ struct PlanningSection: Equatable {
     let startDistanceKm: Double
     let endDistanceKm: Double
 
+    init(
+        trailID: String,
+        destinationID: String? = nil,
+        edgeID: String,
+        start: CLLocationCoordinate2D,
+        end: CLLocationCoordinate2D,
+        distanceKm: Double,
+        coordinates: [CLLocationCoordinate2D],
+        midpoint: CLLocationCoordinate2D?,
+        startDistanceKm: Double,
+        endDistanceKm: Double
+    ) {
+        self.trailID = trailID
+        self.destinationID = destinationID
+        self.edgeID = edgeID
+        self.start = start
+        self.end = end
+        self.distanceKm = distanceKm
+        self.coordinates = coordinates
+        self.midpoint = midpoint
+        self.startDistanceKm = startDistanceKm
+        self.endDistanceKm = endDistanceKm
+    }
+
     static func == (lhs: PlanningSection, rhs: PlanningSection) -> Bool {
         lhs.trailID == rhs.trailID &&
+        lhs.destinationID == rhs.destinationID &&
         lhs.edgeID == rhs.edgeID &&
         lhs.start.latitude == rhs.start.latitude &&
         lhs.start.longitude == rhs.start.longitude &&
@@ -1604,6 +1633,7 @@ struct PlanningSection: Equatable {
     func reversed() -> PlanningSection {
         PlanningSection(
             trailID: trailID,
+            destinationID: destinationID,
             edgeID: edgeID,
             start: end,
             end: start,

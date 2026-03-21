@@ -6,6 +6,7 @@ import {
   persistMapSettings,
   readStoredMapSettings,
 } from '../lib/map-persistence';
+import { decodeRoutePlanFromUrl } from '../lib/route-plan';
 
 export function useMapPersistence({
   router,
@@ -29,6 +30,7 @@ export function useMapPersistence({
 
     const storedSettings = readStoredMapSettings(storageKey);
     const destinationFromUrl = getSingleQueryValue(router.query.destination);
+    const routeFromUrl = decodeRoutePlanFromUrl(getSingleQueryValue(router.query.route));
     const colorModeFromUrl = getSingleQueryValue(router.query.colors);
     const longitudeFromUrl = getSingleQueryValue(router.query.lng);
     const latitudeFromUrl = getSingleQueryValue(router.query.lat);
@@ -42,7 +44,7 @@ export function useMapPersistence({
       storedSettings?.zoom
     );
 
-    const initialDestination = destinationFromUrl || destinationFromStorage;
+    const initialDestination = routeFromUrl?.destinationId || destinationFromUrl || destinationFromStorage;
     const initialColorMode = colorModeFromUrl || colorModeFromStorage;
     const initialMapView = mapViewFromUrl || mapViewFromStorage;
 
@@ -69,6 +71,7 @@ export function useMapPersistence({
     router.isReady,
     router.query.colors,
     router.query.destination,
+    router.query.route,
     router.query.lat,
     router.query.lng,
     router.query.zoom,
@@ -89,7 +92,7 @@ export function useMapPersistence({
     }
 
     const nextUrl = new URL(window.location.href);
-  const currentQuery = Object.fromEntries(nextUrl.searchParams.entries());
+    const currentQuery = Object.fromEntries(nextUrl.searchParams.entries());
     const nextQuery = Object.fromEntries(nextUrl.searchParams.entries());
 
     if (selectedDestinationId) {

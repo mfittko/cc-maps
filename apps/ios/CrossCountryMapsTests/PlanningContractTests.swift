@@ -1000,8 +1000,8 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
-    func testPlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute() async throws {
-        let suiteName = "PlanningContractTests.PlanningSelectionPromotesTappedDestinationWithoutClearingMultiDestinationRoute"
+    func testBrowseFocusChangePreservesCanonicalRouteOwnerDuringMultiDestinationRoute() async throws {
+        let suiteName = "PlanningContractTests.BrowseFocusChangePreservesCanonicalRouteOwnerDuringMultiDestinationRoute"
         let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
         let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
         let apiClient = BrowseAPISpy(
@@ -1024,31 +1024,43 @@ final class PlanningContractTests: XCTestCase {
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
             routePlanStore: routePlanStore,
-            browseSettingsStore: InMemoryBrowseSettingsStore()
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "100", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
         await waitUntil { !viewModel.destinations.isEmpty }
         viewModel.selectDestination(id: "100", manual: true)
-        await waitUntil { viewModel.primaryTrails.count == 2 }
-        await waitUntil { viewModel.previewTrails.count == 1 }
+        await waitUntil {
+            Set(viewModel.allTrails.compactMap(\.destinationId)) == Set(["100", "200"])
+        }
 
+        // Build a two-destination route starting from destination "100".
+        let fitRequestIDBeforePlanningEdits = viewModel.fitRequestID
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "3", anchorEdgeID: Self.edgeC, segment: nil))
 
+        // Adding a section from another destination must not switch the current primary destination or refit the map.
         await waitUntil {
-            viewModel.selectedDestinationID == "200" &&
-                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
-                viewModel.activeRouteDestinationIDs == ["200", "100"]
+            viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200"]
         }
 
-        XCTAssertNil(routePlanStore.readRoutePlan(for: "100"))
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        XCTAssertEqual(viewModel.fitRequestID, fitRequestIDBeforePlanningEdits)
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"], "Owner-first invariant: owner 100 must remain first even when planning spans destination 200")
+        XCTAssertEqual(Set(viewModel.primaryTrails.map(\.id)), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "200"), "Route must never be stored under the browse-focus destination")
         XCTAssertEqual(
-            routePlanStore.readRoutePlan(for: "200"),
-            CanonicalRoutePlan(destinationId: "200", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["200", "100"])
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"]),
+            "Route must be stored under the stable canonical owner"
         )
 
+        // Adding a trail from the original owner destination should keep canonical owner stable without changing browse focus.
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "2", anchorEdgeID: Self.edgeB, segment: nil))
 
         await waitUntil {
@@ -1064,7 +1076,72 @@ final class PlanningContractTests: XCTestCase {
     }
 
     @MainActor
+    func testPlanningModeExitPreservesCrossDestinationRouteWhenTrailIDsOverlap() async throws {
+        let suiteName = "PlanningContractTests.PlanningModeExitPreservesCrossDestinationRouteWhenTrailIDsOverlap"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Owner sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "300", name: "Joined sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 500, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "300": [
+                    try makeTrailSegment(id: 500, destinationId: 300, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "100", mapRegion: nil, isPlanningModeActive: false)
+            )
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil {
+            Set(viewModel.allTrails.compactMap(\.destinationId)) == Set(["100", "300"])
+        }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "500", anchorEdgeID: Self.edgeA, segment: nil))
+        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "500", anchorEdgeID: Self.edgeC, segment: nil))
+
+        await waitUntil {
+            viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "300"]
+        }
+
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        viewModel.exitPlanningMode()
+
+        XCTAssertFalse(viewModel.isInPlanningMode)
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "300"])
+        XCTAssertEqual(
+            Set(viewModel.primaryTrails.compactMap(\.destinationId)),
+            Set(["100", "300"]),
+            "Planning-mode exit must keep route-participating destinations glued into the primary trail source even when trail IDs overlap"
+        )
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(
+            routePlanStore.readRoutePlan(for: "100"),
+            CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "300"])
+        )
+    }
+
+    @MainActor
     func testManualReselectingCurrentDestinationDoesNotClearActiveRoute() async throws {
+        let suiteName = "PlanningContractTests.ManualReselectingCurrentDestinationDoesNotClearActiveRoute"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
                 makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
@@ -1084,14 +1161,18 @@ final class PlanningContractTests: XCTestCase {
             apiClient: apiClient,
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
-            browseSettingsStore: InMemoryBrowseSettingsStore()
+            routePlanStore: UserDefaultsRoutePlanStore(userDefaults: userDefaults),
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "100", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
         await waitUntil { !viewModel.destinations.isEmpty }
         viewModel.selectDestination(id: "100", manual: true)
-        await waitUntil { viewModel.primaryTrails.count == 2 }
-        await waitUntil { viewModel.previewTrails.count == 1 }
+        await waitUntil {
+            Set(viewModel.allTrails.compactMap(\.destinationId)) == Set(["100", "200"])
+        }
 
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
@@ -1099,14 +1180,15 @@ final class PlanningContractTests: XCTestCase {
 
         await waitUntil {
             viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
-                viewModel.selectedDestinationID == "200"
+                viewModel.activeRouteDestinationIDs == ["100", "200"]
         }
 
-        viewModel.selectDestination(id: "200", manual: true)
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        viewModel.selectDestination(id: "100", manual: true)
 
         XCTAssertEqual(viewModel.routePlan.anchorEdgeIDs, [Self.edgeA, Self.edgeC])
-        XCTAssertEqual(viewModel.selectedDestinationID, "200")
-        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["200", "100"])
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"], "Owner-first invariant: owner 100 must remain first even when the route spans destination 200")
     }
 
     @MainActor
@@ -1134,14 +1216,17 @@ final class PlanningContractTests: XCTestCase {
             locationService: LocationServiceSpy(),
             timingConfig: .immediate,
             routePlanStore: routePlanStore,
-            browseSettingsStore: InMemoryBrowseSettingsStore()
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(destinationID: "100", mapRegion: nil, isPlanningModeActive: false)
+            )
         )
 
         viewModel.start()
         await waitUntil { !viewModel.destinations.isEmpty }
         viewModel.selectDestination(id: "100", manual: true)
-        await waitUntil { viewModel.primaryTrails.count == 2 }
-        await waitUntil { viewModel.previewTrails.count == 1 }
+        await waitUntil {
+            Set(viewModel.allTrails.compactMap(\.destinationId)) == Set(["100", "200"])
+        }
 
         viewModel.enterPlanningMode()
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "1", anchorEdgeID: Self.edgeA, segment: nil))
@@ -1149,20 +1234,108 @@ final class PlanningContractTests: XCTestCase {
 
         await waitUntil {
             viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
-                viewModel.selectedDestinationID == "200"
+                viewModel.activeRouteDestinationIDs == ["100", "200"]
         }
 
-        viewModel.selectDestination(id: "100", manual: true)
+        XCTAssertEqual(viewModel.selectedDestinationID, "100")
+        viewModel.selectDestination(id: "200", manual: true)
 
         await waitUntil {
-            viewModel.selectedDestinationID == "100" &&
+            viewModel.selectedDestinationID == "200" &&
                 viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC]
         }
 
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["100", "200"])
+        XCTAssertEqual(Set(viewModel.primaryTrails.map(\.id)), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(
+            GeoMath.planningSections(for: viewModel.routePlan.anchorEdgeIDs, allTrails: viewModel.primaryTrails + viewModel.previewTrails).map(\.edgeID),
+            [Self.edgeA, Self.edgeC]
+        )
         XCTAssertEqual(
             routePlanStore.readRoutePlan(for: "100"),
             CanonicalRoutePlan(destinationId: "100", anchorEdgeIds: [Self.edgeA, Self.edgeC], destinationIds: ["100", "200"])
+        )
+    }
+
+    @MainActor
+    func testBrowseFocusChangeDoesNotMutateCanonicalRouteOwner() async throws {
+        let fixture: FocusChangeStableOwnerFixture = try FixtureLoader.decode("route-plan/focus-change-stable-owner.v2.json")
+
+        let userDefaults = try makeCleanUserDefaultsSuite(named: "PlanningContractTests.\(#function)")
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        // Trail setup mirrors the fixture: edgeA belongs to dest 100, edgeB belongs to dest 200.
+        // This produces destinationIds ["100", "200"] with owner "100" once both anchors are added.
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.77),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 2, destinationId: 200, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore()
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "100", manual: true)
+        await waitUntil { viewModel.primaryTrails.count == 1 }
+        await waitUntil { viewModel.previewTrails.count == 1 }
+
+        // Build the two-anchor route from the fixture (edgeA from dest 100, edgeB from dest 200).
+        // Adding edgeB must keep browse focus on the current primary destination while the canonical owner stays stable.
+        viewModel.enterPlanningMode()
+        fixture.canonicalOwner.anchorEdgeIds.forEach { anchorEdgeID in
+            let trailID = apiClient.trailID(for: anchorEdgeID)
+            viewModel.selectTrail(selection: TrailInspectionSelection(trailID: trailID, anchorEdgeID: anchorEdgeID, segment: nil))
+        }
+
+        await waitUntil {
+            viewModel.routePlan.anchorEdgeIDs == fixture.canonicalOwner.anchorEdgeIds &&
+                viewModel.selectedDestinationID == fixture.canonicalOwner.destinationId
+        }
+
+        // Canonical route owner must remain unchanged even though planning spans another destination.
+        let canonicalAfterFocusChange = try XCTUnwrap(viewModel.canonicalRoutePlan)
+        XCTAssertEqual(
+            canonicalAfterFocusChange,
+            fixture.expectedCanonicalAfterFocusChange,
+            "Canonical route plan must remain unchanged after browse-focus changes"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.destinationId,
+            fixture.canonicalOwner.destinationId,
+            "destinationId must remain the stable route owner, not the browse-focus destination"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.destinationIds.first,
+            fixture.canonicalOwner.destinationId,
+            "destinationIds must remain owner-first after browse-focus change"
+        )
+        XCTAssertEqual(
+            canonicalAfterFocusChange.encodedForURL,
+            fixture.expectedUrlAfterFocusChange,
+            "URL encoding must reflect stable owner and owner-first destinationIds"
+        )
+        XCTAssertNil(
+            routePlanStore.readRoutePlan(for: fixture.browseFocusDestinationId),
+            "Route must never be persisted under a browse-focus destination"
+        )
+        XCTAssertNotNil(
+            routePlanStore.readRoutePlan(for: fixture.canonicalOwner.destinationId),
+            "Route must remain persisted under the stable canonical owner"
         )
     }
 
@@ -1202,6 +1375,132 @@ final class PlanningContractTests: XCTestCase {
 
         XCTAssertEqual(viewModel.routeHydrationNotice, .partial(staleAnchorEdgeIDs: ["missing-edge"]))
         XCTAssertEqual(viewModel.activeRouteDestinationIDs, ["1"])
+    }
+
+    @MainActor
+    func testStoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresWhenBrowseFocusIsParticipatingNonOwnerDestination"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let storedRoutePlan = CanonicalRoutePlan(
+            destinationId: "100",
+            anchorEdgeIds: [Self.edgeA, Self.edgeC],
+            destinationIds: ["100", "200"]
+        )
+        routePlanStore.writeRoutePlan(storedRoutePlan)
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Primary sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Preview sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                    try makeTrailSegment(id: 2, destinationId: 100, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 3, destinationId: 200, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(
+                    destinationID: "200",
+                    mapRegion: nil,
+                    isPlanningModeActive: true,
+                    activeRouteOwnerDestinationID: "100"
+                )
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "200" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200"] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.canonicalRoutePlan, storedRoutePlan)
+        XCTAssertEqual(viewModel.selectedDestinationID, "200")
+        XCTAssertNil(viewModel.routeHydrationNotice)
+        XCTAssertEqual(Set(viewModel.primaryTrails.map { $0.id }), Set(["1", "2", "3"]))
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertEqual(routePlanStore.readRoutePlan(for: "100"), storedRoutePlan)
+        XCTAssertNil(routePlanStore.readRoutePlan(for: "200"))
+    }
+
+    @MainActor
+    func testStoredRouteRestoresAllParticipatingDestinationsWhenSectionTrailIDsOverlap() async throws {
+        let suiteName = "PlanningContractTests.StoredRouteRestoresAllParticipatingDestinationsWhenSectionTrailIDsOverlap"
+        let userDefaults = try makeCleanUserDefaultsSuite(named: suiteName)
+        let routePlanStore = UserDefaultsRoutePlanStore(userDefaults: userDefaults)
+        let storedRoutePlan = CanonicalRoutePlan(
+            destinationId: "100",
+            anchorEdgeIds: [Self.edgeA, Self.edgeB, Self.edgeC],
+            destinationIds: ["100", "200", "300"]
+        )
+        routePlanStore.writeRoutePlan(storedRoutePlan)
+
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "100", name: "Owner sector", latitude: 59.91, longitude: 10.75),
+                makeDestination(id: "200", name: "Middle sector", latitude: 59.91, longitude: 10.77),
+                makeDestination(id: "300", name: "Focused sector", latitude: 59.91, longitude: 10.78),
+            ],
+            trailsByDestination: [
+                "100": [
+                    try makeTrailSegment(id: 1, destinationId: 100, startLongitude: 10.75, startLatitude: 59.91, endLongitude: 10.76, endLatitude: 59.91),
+                ],
+                "200": [
+                    try makeTrailSegment(id: 500, destinationId: 200, startLongitude: 10.76, startLatitude: 59.91, endLongitude: 10.77, endLatitude: 59.91),
+                ],
+                "300": [
+                    try makeTrailSegment(id: 500, destinationId: 300, startLongitude: 10.77, startLatitude: 59.91, endLongitude: 10.78, endLatitude: 59.91),
+                ],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate,
+            routePlanStore: routePlanStore,
+            browseSettingsStore: InMemoryBrowseSettingsStore(
+                settings: BrowseSettings(
+                    destinationID: "300",
+                    mapRegion: nil,
+                    isPlanningModeActive: true,
+                    activeRouteOwnerDestinationID: "100"
+                )
+            )
+        )
+
+        viewModel.start()
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "300" &&
+                viewModel.routePlan.anchorEdgeIDs == [Self.edgeA, Self.edgeB, Self.edgeC] &&
+                viewModel.activeRouteDestinationIDs == ["100", "200", "300"] &&
+                viewModel.isInPlanningMode
+        }
+
+        XCTAssertEqual(viewModel.canonicalRoutePlan, storedRoutePlan)
+        XCTAssertTrue(apiClient.requestedDestinationIDs.contains("100"))
+        XCTAssertTrue(apiClient.requestedDestinationIDs.contains("200"))
+        XCTAssertEqual(
+            Set(viewModel.primaryTrails.compactMap(\.destinationId)),
+            Set(["100", "200", "300"]),
+            "Primary sectors must be reconstructed from restored planned sections, not first-match trail IDs"
+        )
+        XCTAssertTrue(viewModel.previewTrails.isEmpty)
+        XCTAssertNil(viewModel.routeHydrationNotice)
     }
 
     @MainActor
@@ -1990,10 +2289,8 @@ final class PlanningContractTests: XCTestCase {
         let queuedEnvelope = try XCTUnwrap(watchTransferService.lastQueuedEnvelope)
         XCTAssertEqual(queuedEnvelope.version, fixture.version)
         XCTAssertEqual(queuedEnvelope.canonical, try XCTUnwrap(viewModel.canonicalRoutePlan))
-        XCTAssertEqual(
-            queuedEnvelope.derived?.routeLabel,
-            viewModel.selectedDestination.map { "\($0.name) route" }
-        )
+        // routeLabel uses the stable canonical owner destination name, not the current browse-focus destination.
+        XCTAssertEqual(queuedEnvelope.derived?.routeLabel, fixture.derived.routeLabel)
         XCTAssertEqual(queuedEnvelope.derived?.sectionSummaries, fixture.derived.sectionSummaries)
         XCTAssertEqual(queuedEnvelope.derived?.routeGeometry?.coordinates, fixture.derived.routeGeometry?.coordinates)
         XCTAssertTrue(
@@ -2029,7 +2326,6 @@ final class PlanningContractTests: XCTestCase {
         viewModel.selectDestination(id: "1", manual: true)
         await waitUntil { !viewModel.primaryTrails.isEmpty }
         viewModel.enterPlanningMode()
-        viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "101", anchorEdgeID: Self.edgeA, segment: nil))
         viewModel.selectTrail(selection: TrailInspectionSelection(trailID: "102", anchorEdgeID: Self.edgeB, segment: nil))
 
         XCTAssertEqual(viewModel.watchTransferAvailability, .unavailableNoActiveRoute)
@@ -2200,6 +2496,13 @@ private struct WatchTransferEnvelopeFixture: Decodable {
     let version: Int
     let canonical: CanonicalRoutePlan
     let derived: WatchRouteTransferDerivedPayload
+}
+
+private struct FocusChangeStableOwnerFixture: Decodable {
+    let canonicalOwner: CanonicalRoutePlan
+    let browseFocusDestinationId: String
+    let expectedCanonicalAfterFocusChange: CanonicalRoutePlan
+    let expectedUrlAfterFocusChange: String
 }
 
 // MARK: - Test helpers (mirror BrowseContractTests helpers)
