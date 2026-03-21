@@ -175,11 +175,11 @@ struct ContentView: View {
     private var mapOverlayControls: some View {
         if viewModel.canEnableAutoLocation {
             HStack(spacing: 10) {
-                Spacer(minLength: 0)
                 locationFollowButton
+                Spacer(minLength: 0)
             }
-            .padding(.top, 108)
-            .padding(.trailing, 86)
+            .padding(.top, 12)
+            .padding(.leading, 4)
         }
     }
 
