@@ -296,7 +296,7 @@ struct ContentView: View {
         } label: {
             Image(systemName: viewModel.locationFollowMode.systemImageName)
                 .font(.body.weight(.semibold))
-                .frame(width: 50, height: 50)
+                .frame(width: 44, height: 44)
                 .background(.thinMaterial, in: Circle())
                 .foregroundStyle(viewModel.isLocationFollowActive ? Color.blue : Color.secondary)
                 .contentShape(Circle())
