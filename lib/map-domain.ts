@@ -716,24 +716,12 @@ function filterSegmentsByTraversal(segments, traversalGeoJson, matchThresholdKm 
   );
 }
 
-export function getAllTrailSegmentLabelsGeoJson(
-  trailsGeoJsonOrSegments,
-  destinationsOrTraversalGeoJson,
-  endpointMatchThresholdKm,
-  minSegmentDistanceKm,
+export function getTrailSegmentLabelsGeoJsonForSegments(
+  allSegments,
   traversalGeoJson = null,
   viewportBounds: GeoBounds | null = null
 ) {
-  const allSegments = Array.isArray(trailsGeoJsonOrSegments)
-    ? trailsGeoJsonOrSegments
-    : getAllTrailSegments(
-        trailsGeoJsonOrSegments,
-        destinationsOrTraversalGeoJson,
-        endpointMatchThresholdKm,
-        minSegmentDistanceKm
-      );
-
-  if (!allSegments.length) {
+  if (!Array.isArray(allSegments) || !allSegments.length) {
     return getTrailSegmentLabelsGeoJson([]);
   }
 
@@ -752,6 +740,26 @@ export function getAllTrailSegmentLabelsGeoJson(
   );
 
   return getTrailSegmentLabelsGeoJson(visibleSegments);
+}
+
+export function getAllTrailSegmentLabelsGeoJson(
+  trailsGeoJson,
+  destinations,
+  endpointMatchThresholdKm,
+  minSegmentDistanceKm,
+  traversalGeoJson = null,
+  viewportBounds: GeoBounds | null = null
+) {
+  return getTrailSegmentLabelsGeoJsonForSegments(
+    getAllTrailSegments(
+      trailsGeoJson,
+      destinations,
+      endpointMatchThresholdKm,
+      minSegmentDistanceKm
+    ),
+    traversalGeoJson,
+    viewportBounds
+  );
 }
 
 export function getSegmentIntersection(firstStart, firstEnd, secondStart, secondEnd) {

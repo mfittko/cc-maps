@@ -8,6 +8,7 @@ import {
   formatDistance,
   getAllTrailSegments,
   getAllTrailSegmentLabelsGeoJson,
+  getTrailSegmentLabelsGeoJsonForSegments,
   getClickedTrailSection,
   getCrossingMetrics,
   getDestinationSummary,
@@ -479,7 +480,7 @@ describe('map-domain', () => {
     expect(labelsGeoJson.features[0].properties.distanceKm).toBeGreaterThan(0);
   });
 
-  it('filters segment labels to the active traversal when provided', () => {
+  it('marks only the active traversal labels as planned when provided', () => {
     const graph = buildRouteGraph(clickedSectionGeoJson);
     const edgeIds = [...graph.edges.keys()];
     const traversalGeoJson = createRoutePlanGeoJson(createRoutePlan('1', [edgeIds[0]]), graph).traversal;
@@ -511,11 +512,8 @@ describe('map-domain', () => {
 
   it('reuses precomputed trail segments when generating label geojson', () => {
     const precomputedSegments = getAllTrailSegments(clickedSectionGeoJson, destinations, 1.25, 0.05);
-    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
+    const labelsGeoJson = getTrailSegmentLabelsGeoJsonForSegments(
       precomputedSegments,
-      null,
-      1.25,
-      0.05,
       null,
       {
         west: 10.0,
