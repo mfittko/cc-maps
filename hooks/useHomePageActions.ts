@@ -259,6 +259,7 @@ export function createHomePageActions({
   function handleClearPlan() {
     const previousOwnerDestinationId = routePlan?.destinationId || selectedDestinationId;
     const clearedRoutePlan = createClearedRoutePlan(routePlan, selectedDestinationId);
+    const dismissedRoutePlanKey = encodeRoutePlanToUrl(routePlan) || '';
 
     if (!previousOwnerDestinationId || !clearedRoutePlan) {
       return;
@@ -272,6 +273,7 @@ export function createHomePageActions({
       return;
     }
 
+    dismissedPlanningRouteKeyRef.current = dismissedRoutePlanKey;
     clearStoredRoutePlan(previousOwnerDestinationId, MAP_SETTINGS_STORAGE_KEY);
     setPromotedPrimaryDestinationIds([]);
     setRoutePlan(clearedRoutePlan);

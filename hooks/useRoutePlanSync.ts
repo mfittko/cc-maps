@@ -49,6 +49,13 @@ interface EmptyPlanningInitializationArgs {
   isPlanning: boolean;
 }
 
+interface PreserveRouteQueryArgs {
+  encodedRoutePlan: string;
+  routeFromCurrentUrl: RoutePlan | null;
+  selectedDestinationId: string;
+  dismissedRoutePlanKey?: string;
+}
+
 export function shouldInitializeEmptyPlanningRoute({
   hasInitializedFromUrl,
   shouldOpenPlanningFromUrl,
@@ -63,6 +70,34 @@ export function shouldInitializeEmptyPlanningRoute({
       selectedDestinationId &&
       !isPlanning
   );
+}
+
+export function shouldHydratePersistedRoutePlan(
+  routePlan: RoutePlan | null | undefined,
+  dismissedRoutePlanKey = ''
+) {
+  if (!routePlan) {
+    return false;
+  }
+
+  const routePlanKey = encodeRoutePlanToUrl(routePlan) || '';
+
+  return routePlanKey === '' || routePlanKey !== dismissedRoutePlanKey;
+}
+
+export function shouldPreserveRouteQueryWhenClearingPlan({
+  encodedRoutePlan,
+  routeFromCurrentUrl,
+  selectedDestinationId,
+  dismissedRoutePlanKey = '',
+}: PreserveRouteQueryArgs) {
+  if (encodedRoutePlan || !routeIncludesDestination(routeFromCurrentUrl, selectedDestinationId)) {
+    return false;
+  }
+
+  const currentRouteKey = encodeRoutePlanToUrl(routeFromCurrentUrl) || '';
+
+  return currentRouteKey === '' || currentRouteKey !== dismissedRoutePlanKey;
 }
 
 export function useRoutePlanSync({
@@ -143,6 +178,10 @@ export function useRoutePlanSync({
     const isPlanningRequestedFromUrl = isPlanningModeQueryValue(
       searchParams?.get('planning') ?? getSingleQueryValue(router.query.planning)
     );
+    const shouldHydrateRoutePlan = shouldHydratePersistedRoutePlan(
+      nextRoutePlan,
+      dismissedPlanningRouteKeyRef.current
+    );
     const shouldRestorePlanningMode = routeFromUrl
       ? isPlanningRequestedFromUrl
       : shouldRestoreHydratedRoutePlan(nextRoutePlan, dismissedPlanningRouteKeyRef.current);
@@ -153,7 +192,7 @@ export function useRoutePlanSync({
 
     hydratedRoutePlanKeyRef.current = hydrationScopeKey;
 
-    if (!nextRoutePlan) {
+    if (!shouldHydrateRoutePlan) {
       return;
     }
 
@@ -218,9 +257,12 @@ export function useRoutePlanSync({
       routePlan && routePlan.anchorEdgeIds.length ? encodeRoutePlanToUrl(routePlan) : '';
 
     if (
-      !encodedRoutePlan &&
-      routePlan === null &&
-      routeIncludesDestination(routeFromCurrentUrl, selectedDestinationId)
+      shouldPreserveRouteQueryWhenClearingPlan({
+        encodedRoutePlan,
+        routeFromCurrentUrl,
+        selectedDestinationId,
+        dismissedRoutePlanKey: dismissedPlanningRouteKeyRef.current,
+      })
     ) {
       return;
     }
@@ -239,7 +281,7 @@ export function useRoutePlanSync({
     }
 
     window.history.replaceState(window.history.state, '', nextUrl);
-  }, [hasInitializedFromUrlRef, routePlan, router, selectedDestinationId]);
+  }, [dismissedPlanningRouteKeyRef, hasInitializedFromUrlRef, routePlan, router, selectedDestinationId]);
 
   useEffect(() => {
     if (!router.isReady || !hasInitializedFromUrlRef.current || typeof window === 'undefined') {
