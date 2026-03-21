@@ -178,8 +178,8 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 locationFollowButton
             }
-            .padding(.top, 12)
-            .padding(.horizontal, 4)
+            .padding(.top, 30)
+            .padding(.trailing, 16)
         }
     }
 
@@ -296,10 +296,10 @@ struct ContentView: View {
         } label: {
             Image(systemName: viewModel.locationFollowMode.systemImageName)
                 .font(.body.weight(.semibold))
-                .frame(width: 40, height: 40)
-                .background(.thinMaterial, in: Capsule())
+                .frame(width: 50, height: 50)
+                .background(.thinMaterial, in: Circle())
                 .foregroundStyle(viewModel.isLocationFollowActive ? Color.blue : Color.secondary)
-                .contentShape(Capsule())
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(viewModel.locationFollowMode.accessibilityLabel)
