@@ -3,11 +3,12 @@ import { buildRouteGraph } from '../lib/route-graph.js';
 import { createClearedRoutePlan, createRoutePlan } from '../lib/route-plan.js';
 import {
   appendRoutePlanAnchor,
-  areRequiredPreviewDestinationIdsLoaded,
   createRoutePlanGeoJson,
   findNearestRouteTraversalFeature,
   findNearestRouteGraphEdgeId,
+  getPrimaryParticipantDestinationIds,
   isPlanningSelectionInteraction,
+  promotePrimaryParticipantDestinationIds,
   reorderAnchorEdgeIds,
   removeRoutePlanAnchor,
   reverseRoutePlan,
@@ -171,11 +172,17 @@ describe('planning-mode helpers', () => {
       expect(shouldMergePreviewTrailsIntoRouteGraph(false, [])).toBe(false);
     });
 
-    it('treats route-required previews as loaded when every required destination is already present', () => {
-      expect(areRequiredPreviewDestinationIdsLoaded(['8'], ['8', '9'])).toBe(true);
-      expect(areRequiredPreviewDestinationIdsLoaded([], ['8', '9'])).toBe(true);
-      expect(areRequiredPreviewDestinationIdsLoaded(['8', '10'], ['8', '9'])).toBe(false);
-      expect(areRequiredPreviewDestinationIdsLoaded(['8'], [])).toBe(false);
+    it('derives primary participants from selected, route, and promoted destinations', () => {
+      expect(getPrimaryParticipantDestinationIds('7', ['8'], ['7', '9', '8'])).toEqual([
+        '7',
+        '8',
+        '9',
+      ]);
+    });
+
+    it('keeps promoted primary participants stable across ordinary focus flips', () => {
+      expect(promotePrimaryParticipantDestinationIds(['7', '8'], '7')).toEqual(['7', '8']);
+      expect(promotePrimaryParticipantDestinationIds(['7', '8'], '9')).toEqual(['7', '8', '9']);
     });
   });
 

@@ -332,6 +332,10 @@ final class BrowseViewModel: ObservableObject {
     /// Stable canonical route owner. Set when the first anchor is added or a route is hydrated.
     /// Never mutated by browse-focus (selectedDestinationID) changes.
     private var routeOwnerDestinationID = ""
+    /// Additive primary participants used for stable route rendering during restore and focus changes.
+    /// This is intentionally stickier than canonical destinationIds so promoted sectors do not flicker
+    /// back into preview rendering while the active route remains in play.
+    private var primaryParticipantDestinationIDs: [String] = []
 
     init(
         apiClient: BrowseAPIClient = APIClient(),
@@ -414,7 +418,7 @@ final class BrowseViewModel: ObservableObject {
             destinationIDs.insert(selectedDestinationID)
         }
 
-        for destinationID in activeRouteDestinationIDs where !destinationID.isEmpty {
+        for destinationID in primaryParticipantDestinationIDs where !destinationID.isEmpty {
             destinationIDs.insert(destinationID)
         }
 
@@ -701,11 +705,12 @@ final class BrowseViewModel: ObservableObject {
         let displayedTrails = primaryTrails + previewTrails
         if manual,
            !routePlan.isEmpty,
-           routeContainsDestination(
-               id,
-               anchorEdgeIDs: routePlan.anchorEdgeIDs,
-               allTrails: displayedTrails
-           ) {
+           (primaryParticipantDestinationIDs.contains(id) ||
+            routeContainsDestination(
+                id,
+                anchorEdgeIDs: routePlan.anchorEdgeIDs,
+                allTrails: displayedTrails
+            )) {
             isInPlanningMode = false
             selectedTrailID = nil
             selectedTrailSegment = nil
@@ -732,6 +737,7 @@ final class BrowseViewModel: ObservableObject {
         routeHydrationNotice = nil
         routePlan.clear()
         routeOwnerDestinationID = ""
+        primaryParticipantDestinationIDs = []
         refreshRoutePresentationDerivedState(allTrails: primaryTrails + previewTrails)
         activeRouteDestinationIDs = []
         clearSelectedPlannedSection()
@@ -934,6 +940,7 @@ final class BrowseViewModel: ObservableObject {
             pendingRestoreContext = resolvePendingRestoreContext(for: routePlan.destinationId)
 
             if trailsPhase == .success {
+                applyPendingRouteHydrationIfNeeded()
                 schedulePreviewEvaluation()
             }
 
@@ -1023,9 +1030,19 @@ final class BrowseViewModel: ObservableObject {
                         return false
                     }
 
-                    return activeRouteDestinationIDs.contains(trailDestinationID) && trailDestinationID != destinationID
+                    return primaryParticipantDestinationIDs.contains(trailDestinationID) && trailDestinationID != destinationID
                 }
-                replaceDisplayedTrails(with: response.features + retainedRouteTrails)
+                let primaryParticipantLoad = try await loadRequiredPrimaryParticipantTrailsIfNeeded(
+                    for: destinationID,
+                    baseTrails: response.features + retainedRouteTrails,
+                    token: token
+                )
+
+                guard token == primaryLoadToken, destinationID == selectedDestinationID else {
+                    return
+                }
+
+                replaceDisplayedTrails(with: primaryParticipantLoad)
                 trailsPhase = .success
 
                 if pendingMapRegionPreservationDestinationID == destinationID {
@@ -1035,9 +1052,10 @@ final class BrowseViewModel: ObservableObject {
                     fitRequestID += 1
                 }
 
+                applyPendingRouteHydrationIfNeeded()
                 schedulePreviewEvaluation()
 
-                let trails = response.features
+                let trails = primaryParticipantLoad
                 Task.detached(priority: .utility) {
                     GeoMath.warmPlanningGraph(for: trails)
                 }
@@ -1136,17 +1154,13 @@ final class BrowseViewModel: ObservableObject {
         }
 
         let referenceCenter = visibleRegionCenter ?? selectedDestination.coordinate
-        let nearbyCandidates = GeoMath.boundedNearbyPreviewDestinations(
+        let previewDestinations = GeoMath.boundedNearbyPreviewDestinations(
             destinations: destinations,
             reference: referenceCenter,
             radiusKilometers: AppConfig.suggestedDestinationRadiusKm,
             excludedID: selectedDestination.id,
             maxCount: AppConfig.maxNearbyDestinationPreviews
-        )
-        let previewDestinations = mergedPreviewDestinations(
-            nearbyPreviewDestinations: nearbyCandidates,
-            requiredPreviewDestinations: requiredPreviewDestinations(for: selectedDestination.id)
-        )
+        ).filter { !lockedPrimaryDestinationIDs.contains($0.id) }
 
         self.nearbyPreviewDestinations = previewDestinations
 
@@ -1157,7 +1171,6 @@ final class BrowseViewModel: ObservableObject {
             Task.detached(priority: .utility) {
                 GeoMath.warmPlanningGraph(for: trails)
             }
-            applyPendingRouteHydrationIfNeeded()
             return
         }
 
@@ -1184,7 +1197,6 @@ final class BrowseViewModel: ObservableObject {
             Task.detached(priority: .background) {
                 GeoMath.warmPlanningGraph(for: trails)
             }
-            applyPendingRouteHydrationIfNeeded()
         } catch {
             guard token == previewLoadToken else {
                 return
@@ -1192,7 +1204,6 @@ final class BrowseViewModel: ObservableObject {
 
             replaceDisplayedTrails(with: primaryTrails)
             previewPhase = .failure("Nearby previews unavailable")
-            applyPendingRouteHydrationIfNeeded()
         }
     }
 
@@ -1226,38 +1237,6 @@ final class BrowseViewModel: ObservableObject {
         return nil
     }
 
-    private func requiredPreviewDestinations(for destinationID: String) -> [Destination] {
-        let requiredIDs = [
-            pendingRestoreContext?.routePlan.previewDestinationIDs(excluding: destinationID) ?? [],
-            activeRouteDestinationIDs.filter { $0 != destinationID },
-        ]
-        .flatMap { $0 }
-        .reduce(into: [String]()) { result, nextID in
-            guard !result.contains(nextID) else {
-                return
-            }
-
-            result.append(nextID)
-        }
-
-        return requiredIDs.compactMap { requiredID in
-            destinations.first { $0.id == requiredID }
-        }
-    }
-
-    private func mergedPreviewDestinations(
-        nearbyPreviewDestinations: [Destination],
-        requiredPreviewDestinations: [Destination]
-    ) -> [Destination] {
-        (requiredPreviewDestinations + nearbyPreviewDestinations).reduce(into: [Destination]()) { result, destination in
-            guard !result.contains(where: { $0.id == destination.id }) else {
-                return
-            }
-
-            result.append(destination)
-        }
-    }
-
     private func applyPendingRouteHydrationIfNeeded() {
         guard let pendingRestoreContext,
               pendingRestoreContext.routePlan.destinationIds.contains(selectedDestinationID) else {
@@ -1285,6 +1264,7 @@ final class BrowseViewModel: ObservableObject {
         if hydrationResult.validAnchorEdgeIds.isEmpty {
             routePlan.clear()
             routeOwnerDestinationID = ""
+            primaryParticipantDestinationIDs = []
             activeRouteDestinationIDs = []
             refreshRoutePresentationDerivedState(allTrails: allTrails)
 
@@ -1300,6 +1280,7 @@ final class BrowseViewModel: ObservableObject {
             )
             routePlan.replaceAnchorEdges(with: reorderedAnchorEdgeIDs)
             activeRouteDestinationIDs = routeDestinationIDs(for: reorderedAnchorEdgeIDs, allTrails: allTrails)
+            promotePrimaryParticipants(activeRouteDestinationIDs)
             replaceDisplayedTrails(with: allTrails)
             persistCurrentRoutePlan()
             fitRequestID += 1
@@ -1336,6 +1317,7 @@ final class BrowseViewModel: ObservableObject {
         if anchorEdgeIDs.isEmpty {
             let storeKey = routeOwnerDestinationID.isEmpty ? selectedDestinationID : routeOwnerDestinationID
             routeOwnerDestinationID = ""
+            primaryParticipantDestinationIDs = []
             activeRouteDestinationIDs = []
             routeElevation = nil
             routePlanStore.clearRoutePlan(for: storeKey)
@@ -1349,6 +1331,7 @@ final class BrowseViewModel: ObservableObject {
         }
 
         activeRouteDestinationIDs = routeDestinationIDs(for: anchorEdgeIDs, allTrails: allTrails)
+        promotePrimaryParticipants(activeRouteDestinationIDs)
         replaceDisplayedTrails(with: allTrails)
         persistCurrentRoutePlan()
         schedulePreviewEvaluation()
@@ -1391,6 +1374,7 @@ final class BrowseViewModel: ObservableObject {
                 anchorEdgeIds: existingAnchorEdgeIDs,
                 destinationIds: existingRouteDestinationIDs
             ).destinationIds
+            promotePrimaryParticipants(activeRouteDestinationIDs)
             replaceDisplayedTrails(with: allTrails)
             persistCurrentRoutePlan()
 
@@ -1441,6 +1425,59 @@ final class BrowseViewModel: ObservableObject {
         }
 
         return ([routeOwnerDestinationID] + sectionDestinationIDs).reduce(into: [String]()) { result, destinationID in
+            guard !destinationID.isEmpty, !result.contains(destinationID) else {
+                return
+            }
+
+            result.append(destinationID)
+        }
+    }
+
+    private func loadRequiredPrimaryParticipantTrailsIfNeeded(
+        for destinationID: String,
+        baseTrails: [TrailFeature],
+        token: UUID
+    ) async throws -> [TrailFeature] {
+        guard let pendingRestoreContext,
+              pendingRestoreContext.routePlan.destinationIds.contains(destinationID) else {
+            return baseTrails
+        }
+
+        routeOwnerDestinationID = pendingRestoreContext.routePlan.destinationId
+        promotePrimaryParticipants(pendingRestoreContext.routePlan.destinationIds)
+
+        var combinedTrails = baseTrails
+        var loadedDestinationIDs = Set(combinedTrails.compactMap(\.destinationId))
+        let requiredDestinationIDs = pendingRestoreContext.routePlan.destinationIds.filter {
+            $0 != destinationID && !loadedDestinationIDs.contains($0)
+        }
+
+        for requiredDestinationID in requiredDestinationIDs {
+            let response = try await apiClient.fetchTrails(destinationID: requiredDestinationID)
+
+            guard token == primaryLoadToken, destinationID == selectedDestinationID else {
+                return combinedTrails
+            }
+
+            combinedTrails.append(contentsOf: response.features)
+            loadedDestinationIDs.insert(requiredDestinationID)
+        }
+
+        return combinedTrails
+    }
+
+    private func promotePrimaryParticipants(_ destinationIDs: [String]) {
+        primaryParticipantDestinationIDs = normalizedPrimaryParticipantDestinationIDs(
+            existingDestinationIDs: primaryParticipantDestinationIDs,
+            additionalDestinationIDs: destinationIDs
+        )
+    }
+
+    private func normalizedPrimaryParticipantDestinationIDs(
+        existingDestinationIDs: [String],
+        additionalDestinationIDs: [String]
+    ) -> [String] {
+        ([routeOwnerDestinationID] + existingDestinationIDs + additionalDestinationIDs).reduce(into: [String]()) { result, destinationID in
             guard !destinationID.isEmpty, !result.contains(destinationID) else {
                 return
             }
