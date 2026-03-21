@@ -1,3 +1,4 @@
+import { getLoadPerfTimestamp, logLoadPerfSince } from '../../lib/load-perf';
 import {
   SPORET_LAYER_IDS,
   fetchSporetGeoJson,
@@ -40,6 +41,8 @@ function parseCoordinateParam(value, min, max) {
 }
 
 export default async function handler(req, res) {
+  const requestStartedAt = getLoadPerfTimestamp();
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -86,10 +89,17 @@ export default async function handler(req, res) {
 
   try {
     const data = await fetchSporetGeoJson(SPORET_LAYER_IDS.trails, queryParams);
+    const requestScope = destinationId === undefined
+      ? longitude === undefined
+        ? 'unfiltered'
+        : 'proximity'
+      : `destination ${destinationId}`;
 
     res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=1800');
+    logLoadPerfSince(`api /trails success (${requestScope})`, requestStartedAt);
     return res.status(200).json(data);
   } catch (err) {
+    logLoadPerfSince('api /trails failed', requestStartedAt);
     return res.status(500).json({ error: err.message });
   }
 }

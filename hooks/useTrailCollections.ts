@@ -5,6 +5,7 @@ import {
   getFeatureCollectionGeoJson,
   mergeTrailFeatureCollections,
 } from '../lib/home-page';
+import { getLoadPerfTimestamp, logLoadPerfSince, measureAsyncLoadPerf } from '../lib/load-perf';
 import { readCachedTrailGeoJson, writeCachedTrailGeoJson } from '../lib/map-persistence';
 import type { TrailFeatureCollection } from '../types/geo';
 
@@ -110,6 +111,9 @@ export function useTrailCollections({
       setRequestError('');
 
       try {
+        const loadStartedAt = getLoadPerfTimestamp();
+        let cachedCollectionCount = 0;
+
         const primaryCollections = await Promise.all(
           primaryDestinationIds.map(async (destinationId) => {
             let geojson = readCachedTrailGeoJson(
@@ -119,14 +123,22 @@ export function useTrailCollections({
             );
 
             if (!geojson) {
-              const response = await fetch(`/api/trails?destinationid=${destinationId}`);
+              const response = await measureAsyncLoadPerf(
+                `fetch primary trails api (${destinationId})`,
+                () => fetch(`/api/trails?destinationid=${destinationId}`)
+              );
 
               if (!response.ok) {
                 throw new Error('Failed to fetch trails for the selected destination');
               }
 
-              geojson = (await response.json()) as TrailFeatureCollection;
+              geojson = (await measureAsyncLoadPerf(
+                `parse primary trails payload (${destinationId})`,
+                () => response.json()
+              )) as TrailFeatureCollection;
               writeCachedTrailGeoJson(destinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
+            } else {
+              cachedCollectionCount += 1;
             }
 
             return geojson as TrailFeatureCollection;
@@ -144,6 +156,10 @@ export function useTrailCollections({
             : primaryDestinationIds
         );
         setTrailsStatus('success');
+        logLoadPerfSince(
+          `primary trails ready (${primaryCollections.length} destinations, ${cachedCollectionCount} cache hits, ${primaryCollections.length - cachedCollectionCount} network)`,
+          loadStartedAt
+        );
       } catch (error) {
         if (isCancelled) {
           return;
@@ -201,6 +217,9 @@ export function useTrailCollections({
 
     async function loadSuggestedTrails() {
       try {
+        const loadStartedAt = getLoadPerfTimestamp();
+        let cachedCollectionCount = 0;
+
         const previewCollections = await Promise.all(
           previewDestinationIds.map(async (destinationId) => {
             try {
@@ -211,16 +230,23 @@ export function useTrailCollections({
               );
 
               if (cachedGeoJson) {
+                cachedCollectionCount += 1;
                 return cachedGeoJson;
               }
 
-              const response = await fetch(`/api/trails?destinationid=${destinationId}`);
+              const response = await measureAsyncLoadPerf(
+                `fetch preview trails api (${destinationId})`,
+                () => fetch(`/api/trails?destinationid=${destinationId}`)
+              );
 
               if (!response.ok) {
                 return getFeatureCollectionGeoJson([]);
               }
 
-              const geojson = (await response.json()) as TrailFeatureCollection;
+              const geojson = (await measureAsyncLoadPerf(
+                `parse preview trails payload (${destinationId})`,
+                () => response.json()
+              )) as TrailFeatureCollection;
               writeCachedTrailGeoJson(destinationId, geojson, MAP_SETTINGS_STORAGE_KEY);
               return geojson;
             } catch {
@@ -238,6 +264,10 @@ export function useTrailCollections({
           areStringArraysEqual(currentDestinationIds, previewDestinationIds)
             ? currentDestinationIds
             : previewDestinationIds
+        );
+        logLoadPerfSince(
+          `preview trails ready (${previewCollections.length} destinations, ${cachedCollectionCount} cache hits, ${previewCollections.length - cachedCollectionCount} network)`,
+          loadStartedAt
         );
       } catch {
         if (isCancelled) {

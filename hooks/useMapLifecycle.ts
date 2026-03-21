@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import mapboxgl from 'mapbox-gl';
 import mapboxglMock from '../lib/mapbox-gl-mock';
+import { getLoadPerfTimestamp, logLoadPerf, logLoadPerfSince } from '../lib/load-perf';
 import {
   DEFAULT_CENTER,
   GEOLOCATE_MAX_ZOOM,
@@ -42,6 +43,7 @@ export function useMapLifecycle({
   const [isInitialMapViewSettled, setIsInitialMapViewSettled] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [mapError, setMapError] = useState('');
+  const mapBootstrapStartedAtRef = useState(() => getLoadPerfTimestamp())[0];
 
   useEffect(() => {
     const accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
@@ -54,6 +56,8 @@ export function useMapLifecycle({
     if (!isMapboxMockEnabled) {
       mapboxApi.accessToken = accessToken;
     }
+
+    logLoadPerf('map bootstrap started');
 
     const map = new mapboxApi.Map({
       container: mapContainer.current,
@@ -81,6 +85,8 @@ export function useMapLifecycle({
       } catch (error) {
         console.error('Failed to apply winter basemap styling', error);
       }
+
+      logLoadPerfSince('mapbox load event', mapBootstrapStartedAtRef);
 
       setIsMapLoaded(true);
     });
@@ -131,6 +137,7 @@ export function useMapLifecycle({
 
     setIsInitialMapViewSettled(true);
     setMapReady(true);
+    logLoadPerfSince('initial map view settled', mapBootstrapStartedAtRef);
   }, [
     isInitialMapViewSettled,
     isMapLoaded,

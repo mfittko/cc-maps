@@ -5,6 +5,12 @@ import {
   DEFAULT_CENTER,
 } from '../lib/home-page';
 import {
+  getLoadPerfTimestamp,
+  logLoadPerf,
+  logLoadPerfSince,
+  measureAsyncLoadPerf,
+} from '../lib/load-perf';
+import {
   findClosestDestination,
   findClosestDestinationByTrailProximity,
   getDistanceInKilometers,
@@ -44,6 +50,8 @@ export function useAutoDestinationSelection({
       return undefined;
     }
 
+    const autoSelectionStartedAt = getLoadPerfTimestamp();
+
     async function maybeAutoSelectDestinationFromLocation(
       referenceCoordinates: Coordinates | null,
       options: { allowFallback?: boolean } = {}
@@ -71,10 +79,15 @@ export function useAutoDestinationSelection({
           lng: String(referenceCoordinates[0]),
           lat: String(referenceCoordinates[1]),
         });
-        const response = await fetch(`/api/trails?${searchParams.toString()}`);
+        const response = await measureAsyncLoadPerf('fetch nearby trails for auto-selection', () =>
+          fetch(`/api/trails?${searchParams.toString()}`)
+        );
 
         if (response.ok) {
-          const nearbyTrailsGeoJson = (await response.json()) as TrailFeatureCollection;
+          const nearbyTrailsGeoJson = (await measureAsyncLoadPerf(
+            'parse nearby trails for auto-selection',
+            () => response.json()
+          )) as TrailFeatureCollection;
           const nearbyDestination = findClosestDestinationByTrailProximity(
             destinations,
             nearbyTrailsGeoJson,
@@ -85,6 +98,10 @@ export function useAutoDestinationSelection({
           if (nearbyDestination && selectedDestinationId !== nearbyDestination.id) {
             hasAutoSelectedDestinationRef.current = true;
             updateSelectedDestinationRef.current(nearbyDestination.id);
+            logLoadPerfSince(
+              `auto-selected destination by trail proximity (${nearbyDestination.id})`,
+              autoSelectionStartedAt
+            );
             return;
           }
         }
@@ -101,6 +118,10 @@ export function useAutoDestinationSelection({
       if (fallbackDestination && !hasAutoSelectedDestinationRef.current) {
         hasAutoSelectedDestinationRef.current = true;
         updateSelectedDestinationRef.current(fallbackDestination.id);
+        logLoadPerfSince(
+          `auto-selected fallback destination (${fallbackDestination.id})`,
+          autoSelectionStartedAt
+        );
       }
     }
 
@@ -110,6 +131,7 @@ export function useAutoDestinationSelection({
       if (fallbackDestination && !selectedDestinationId && !hasAutoSelectedDestinationRef.current) {
         hasAutoSelectedDestinationRef.current = true;
         updateSelectedDestinationRef.current(fallbackDestination.id);
+        logLoadPerf('auto-selected fallback destination without geolocation support');
       }
 
       return undefined;
@@ -133,11 +155,16 @@ export function useAutoDestinationSelection({
       geolocateControl.on('geolocate', handleGeolocate);
     }
 
+    const geolocationRequestStartedAt = getLoadPerfTimestamp();
+    logLoadPerf('requesting initial geolocation');
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         if (isCancelled || hasManualDestinationSelectionRef.current) {
           return;
         }
+
+        logLoadPerfSince('initial geolocation resolved', geolocationRequestStartedAt);
 
         await maybeAutoSelectDestinationFromLocation(
           [position.coords.longitude, position.coords.latitude],
@@ -154,6 +181,10 @@ export function useAutoDestinationSelection({
         if (fallbackDestination && !selectedDestinationId && !hasAutoSelectedDestinationRef.current) {
           hasAutoSelectedDestinationRef.current = true;
           updateSelectedDestinationRef.current(fallbackDestination.id);
+          logLoadPerfSince(
+            `auto-selected geolocation fallback destination (${fallbackDestination.id})`,
+            geolocationRequestStartedAt
+          );
         }
       },
       {

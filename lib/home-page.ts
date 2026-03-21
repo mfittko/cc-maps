@@ -171,7 +171,10 @@ export function getTrailFeatureCollectionSignature(
     return '';
   }
 
-  return features.map((feature) => getTrailFeatureCollectionKey(feature)).join('|');
+  return features
+    .map((feature) => getTrailFeatureCollectionKey(feature))
+    .sort()
+    .join('|');
 }
 
 function supportsPaintOverride(layer: MapStyleLayer, property: string) {
