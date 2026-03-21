@@ -61,6 +61,31 @@ export function useTrailSegmentLabels({
       map.removeLayer(TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID);
     }
 
+    map.addLayer({
+      id: TRAIL_SEGMENT_LABELS_GLOW_LAYER_ID,
+      type: 'symbol',
+      source: TRAIL_SEGMENT_LABELS_SOURCE_ID,
+      minzoom: TRAIL_SEGMENT_LABELS_MIN_ZOOM,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-size': ['interpolate', ['linear'], ['zoom'], 11, 10, 14, 13],
+        'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+        'text-offset': [0, 0],
+        'text-anchor': 'center',
+        'text-padding': 2,
+        'text-allow-overlap': false,
+        'text-ignore-placement': false,
+        'symbol-sort-key': ['*', -1, ['coalesce', ['get', 'distanceKm'], 0]],
+        'symbol-placement': 'point',
+      },
+      paint: {
+        'text-color': 'rgba(0, 0, 0, 0)',
+        'text-halo-color': 'rgba(250, 252, 250, 0.98)',
+        'text-halo-width': 4,
+        'text-halo-blur': 2,
+      },
+    });
+
     if (!map.getLayer(TRAIL_SEGMENT_LABELS_LAYER_ID)) {
       map.addLayer({
         id: TRAIL_SEGMENT_LABELS_LAYER_ID,

@@ -36,6 +36,7 @@ import {
   routeIncludesDestination,
   trailLegendItems,
 } from '../lib/home-page';
+import { getSingleQueryValue } from '../lib/map-persistence';
 import {
   formatDistance,
   getTrailSelectionLengthInKilometers,
@@ -139,8 +140,8 @@ export default function Home() {
   );
   const routeQueryValue =
     typeof window !== 'undefined'
-      ? new URLSearchParams(window.location.search).get('route') ?? router.query.route?.[0] ?? router.query.route ?? null
-      : router.query.route?.[0] ?? router.query.route ?? null;
+      ? new URLSearchParams(window.location.search).get('route') ?? getSingleQueryValue(router.query.route) ?? null
+      : getSingleQueryValue(router.query.route) ?? null;
   const persistedRouteSelection = useMemo(() => {
     if (!router.isReady || !selectedDestinationId || routePlan !== null) {
       return {

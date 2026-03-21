@@ -67,7 +67,7 @@ export const destinationPrepColorExpression = buildMatchExpression(
 
 type MatchExpression = any[];
 
-type LayerType =
+type WinterPaintLayerType =
   | 'background'
   | 'fill'
   | 'fill-extrusion'
@@ -77,13 +77,13 @@ type LayerType =
 
 interface MapStyleLayer {
   id: string;
-  type: LayerType;
+  type: string;
   layout?: {
     'text-field'?: string;
   };
 }
 
-const WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE: Record<LayerType, string[]> = {
+const WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE: Record<WinterPaintLayerType, string[]> = {
   background: ['background-color'],
   fill: ['fill-color', 'fill-opacity'],
   'fill-extrusion': [],
@@ -160,7 +160,12 @@ function getTrailFeatureCollectionKey(feature) {
 }
 
 function supportsPaintOverride(layer: MapStyleLayer, property: string) {
-  return WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE[layer.type]?.includes(property) || false;
+  return (
+    layer.type in WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE &&
+    WINTER_PAINT_PROPERTIES_BY_LAYER_TYPE[
+      layer.type as WinterPaintLayerType
+    ]?.includes(property)
+  ) || false;
 }
 
 function setLayerPaintIfPresent(map: MapLike, layerId: string, property: string, value: unknown) {
