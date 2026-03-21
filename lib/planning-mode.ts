@@ -222,8 +222,7 @@ export function isPlanningSelectionInteraction({
   return isMacOS ? Boolean(originalEvent?.metaKey) : Boolean(originalEvent?.ctrlKey);
 }
 
-export function shouldMergePreviewTrailsIntoRouteGraph(isPlanning, plannedDestinationIds) {
-  void isPlanning;
+export function shouldMergePreviewTrailsIntoRouteGraph(plannedDestinationIds) {
   return normalizeDestinationIds(plannedDestinationIds).length > 1;
 }
 

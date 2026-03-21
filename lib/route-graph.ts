@@ -147,6 +147,20 @@ function getLineBounds(coordinates) {
   return coordinates.reduce((bounds, coordinatesPair) => expandBounds(bounds, coordinatesPair), createEmptyBounds());
 }
 
+function segmentBoundsOverlap(firstMinLng, firstMinLat, firstMaxLng, firstMaxLat, secondStart, secondEnd) {
+  const secondMinLng = Math.min(secondStart[0], secondEnd[0]);
+  const secondMinLat = Math.min(secondStart[1], secondEnd[1]);
+  const secondMaxLng = Math.max(secondStart[0], secondEnd[0]);
+  const secondMaxLat = Math.max(secondStart[1], secondEnd[1]);
+
+  return !(
+    firstMaxLng < secondMinLng ||
+    secondMaxLng < firstMinLng ||
+    firstMaxLat < secondMinLat ||
+    secondMaxLat < firstMinLat
+  );
+}
+
 function boundsOverlap(firstBounds, secondBounds) {
   if (!Number.isFinite(firstBounds?.minLng) || !Number.isFinite(secondBounds?.minLng)) {
     return false;
@@ -310,7 +324,10 @@ export function buildRouteGraph(trailsGeoJson) {
           const iStart = iCoords[si - 1];
           const iEnd = iCoords[si];
           const iSegLen = getDistanceInKilometers(iStart, iEnd);
-          const iSegmentBounds = getLineBounds([iStart, iEnd]);
+          const iSegmentMinLng = Math.min(iStart[0], iEnd[0]);
+          const iSegmentMinLat = Math.min(iStart[1], iEnd[1]);
+          const iSegmentMaxLng = Math.max(iStart[0], iEnd[0]);
+          const iSegmentMaxLat = Math.max(iStart[1], iEnd[1]);
           let jKm = 0;
 
           featureLines[j].forEach((jCoords) => {
@@ -326,7 +343,16 @@ export function buildRouteGraph(trailsGeoJson) {
               const jEnd = jCoords[sj];
               const jSegLen = getDistanceInKilometers(jStart, jEnd);
 
-              if (!boundsOverlap(iSegmentBounds, getLineBounds([jStart, jEnd]))) {
+              if (
+                !segmentBoundsOverlap(
+                  iSegmentMinLng,
+                  iSegmentMinLat,
+                  iSegmentMaxLng,
+                  iSegmentMaxLat,
+                  jStart,
+                  jEnd
+                )
+              ) {
                 jKm += jSegLen;
                 continue;
               }

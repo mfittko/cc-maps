@@ -43,11 +43,12 @@ export function logLoadPerfSince(label: string, startedAt: number | null) {
 
 export function measureLoadPerf<T>(label: string, compute: () => T): T {
   const startedAt = getLoadPerfTimestamp();
-  const result = compute();
 
-  logLoadPerfSince(label, startedAt);
-
-  return result;
+  try {
+    return compute();
+  } finally {
+    logLoadPerfSince(label, startedAt);
+  }
 }
 
 export async function measureAsyncLoadPerf<T>(label: string, compute: () => Promise<T>) {

@@ -112,6 +112,21 @@ describe('load-perf', () => {
     expect(debugSpy).toHaveBeenCalledWith('[load-perf] shape destinations: 5.5ms');
   });
 
+  it('measures sync work when it throws', () => {
+    process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF = '1';
+    vi.stubGlobal('performance', {
+      now: vi.fn().mockReturnValueOnce(3).mockReturnValueOnce(8.5),
+    });
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    expect(() =>
+      measureLoadPerf('shape destinations', () => {
+        throw new Error('boom');
+      })
+    ).toThrow('boom');
+    expect(debugSpy).toHaveBeenCalledWith('[load-perf] shape destinations: 5.5ms');
+  });
+
   it('measures async work when enabled', async () => {
     process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF = '1';
     vi.stubGlobal('performance', {
