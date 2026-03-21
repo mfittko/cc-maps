@@ -223,7 +223,8 @@ export function isPlanningSelectionInteraction({
 }
 
 export function shouldMergePreviewTrailsIntoRouteGraph(isPlanning, plannedDestinationIds) {
-  return Boolean(isPlanning || plannedDestinationIds?.length);
+  void isPlanning;
+  return normalizeDestinationIds(plannedDestinationIds).length > 1;
 }
 
 function normalizeDestinationIds(destinationIds = []) {

@@ -8,6 +8,7 @@ import {
   TRAIL_SEGMENT_LABELS_PLANNED_GLOW_LAYER_ID,
   TRAIL_SEGMENT_LABELS_PLANNED_LAYER_ID,
   TRAIL_SEGMENT_LABELS_SOURCE_ID,
+  getTrailFeatureCollectionSignature,
 } from '../lib/home-page';
 import {
   getAllTrailSegments,
@@ -42,6 +43,28 @@ const BASE_LABEL_PAINT = {
   'text-halo-width': 2.75,
   'text-halo-blur': 1,
 } as const;
+const TRAIL_SEGMENT_CACHE_LIMIT = 6;
+const trailSegmentSourceCache = new Map<string, ReturnType<typeof getAllTrailSegments>>();
+
+function rememberTrailSegments(
+  signature: string,
+  segments: ReturnType<typeof getAllTrailSegments>
+) {
+  trailSegmentSourceCache.delete(signature);
+  trailSegmentSourceCache.set(signature, segments);
+
+  if (trailSegmentSourceCache.size <= TRAIL_SEGMENT_CACHE_LIMIT) {
+    return segments;
+  }
+
+  const oldestKey = trailSegmentSourceCache.keys().next().value;
+
+  if (oldestKey) {
+    trailSegmentSourceCache.delete(oldestKey);
+  }
+
+  return segments;
+}
 
 interface UseTrailSegmentLabelsArgs {
   mapReady: boolean;
@@ -59,6 +82,22 @@ export function useTrailSegmentLabels({
   activeTraversalGeoJson,
 }: UseTrailSegmentLabelsArgs) {
   const [viewportBounds, setViewportBounds] = useState<GeoBounds | null>(null);
+  const trailCollectionSignature = useMemo(
+    () => getTrailFeatureCollectionSignature(trailsGeoJson),
+    [trailsGeoJson]
+  );
+  const destinationSignature = useMemo(
+    () =>
+      destinations
+        .map((destination) =>
+          [destination.id, destination.coordinates[0], destination.coordinates[1]].join(':')
+        )
+        .join('|'),
+    [destinations]
+  );
+  const trailSegmentCacheKey = trailCollectionSignature
+    ? `${trailCollectionSignature}::${destinationSignature}`
+    : '';
 
   useEffect(() => {
     const map = mapRef.current;
@@ -91,16 +130,30 @@ export function useTrailSegmentLabels({
   }, [mapReady, mapRef]);
 
   const allSegments = useMemo(
-    () =>
-      measureRoutePerf('trail segment labels source', () =>
-        getAllTrailSegments(
-          trailsGeoJson,
-          destinations,
-          DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
-          MIN_SEGMENT_DISTANCE_KM
+    () => {
+      if (!trailSegmentCacheKey) {
+        return [];
+      }
+
+      const cachedSegments = trailSegmentSourceCache.get(trailSegmentCacheKey);
+
+      if (cachedSegments) {
+        return cachedSegments;
+      }
+
+      return rememberTrailSegments(
+        trailSegmentCacheKey,
+        measureRoutePerf('trail segment labels source', () =>
+          getAllTrailSegments(
+            trailsGeoJson,
+            destinations,
+            DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
+            MIN_SEGMENT_DISTANCE_KM
+          )
         )
-      ),
-    [destinations, trailsGeoJson]
+      );
+    },
+    [destinations, trailSegmentCacheKey, trailsGeoJson]
   );
 
   const labelsGeoJson = useMemo(

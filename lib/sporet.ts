@@ -1,3 +1,5 @@
+import { measureAsyncLoadPerf } from './load-perf';
+
 export const SPORET_API_BASE_URL =
   'https://maps.sporet.no/arcgis/rest/services/Markadatabase_v2/Sporet_Simple/MapServer';
 
@@ -87,11 +89,13 @@ export async function fetchSporetGeoJson(layerId, queryParams) {
     ...queryParams,
   });
   const requestUrl = `${getSporetApiBaseUrl()}/${layerId}/query?${searchParams.toString()}`;
-  const response = await fetch(requestUrl);
+  const response = await measureAsyncLoadPerf(`sporet layer ${layerId} fetch`, () =>
+    fetch(requestUrl)
+  );
 
   if (!response.ok) {
     throw new Error(`Sporet API request failed: ${response.status}`);
   }
 
-  return response.json();
+  return measureAsyncLoadPerf(`sporet layer ${layerId} parse`, () => response.json());
 }

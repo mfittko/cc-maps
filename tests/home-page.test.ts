@@ -172,6 +172,28 @@ describe('home-page helpers', () => {
     expect(signatureA).toBe(signatureB);
   });
 
+  it('normalizes trail collection signatures when feature order differs', () => {
+    const featureA = baseFeature(1, '10', [
+      [10.0, 59.0],
+      [10.1, 59.1],
+    ]);
+    const featureB = baseFeature(2, '20', [
+      [11.0, 60.0],
+      [11.1, 60.1],
+    ]);
+
+    const signatureA = getTrailFeatureCollectionSignature({
+      type: 'FeatureCollection',
+      features: [featureA, featureB],
+    });
+    const signatureB = getTrailFeatureCollectionSignature({
+      type: 'FeatureCollection',
+      features: [featureB, featureA],
+    });
+
+    expect(signatureA).toBe(signatureB);
+  });
+
   it('normalizes unique destination ids and removes empty values', () => {
     expect(getUniqueDestinationIds([1, '1', '', null, undefined, '2', 2, '03'])).toEqual([
       '1',

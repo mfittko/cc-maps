@@ -121,6 +121,62 @@ function coordinateLengthKm(coordinates) {
   return total;
 }
 
+function createEmptyBounds() {
+  return {
+    minLng: Number.POSITIVE_INFINITY,
+    minLat: Number.POSITIVE_INFINITY,
+    maxLng: Number.NEGATIVE_INFINITY,
+    maxLat: Number.NEGATIVE_INFINITY,
+  };
+}
+
+function expandBounds(bounds, coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return bounds;
+  }
+
+  bounds.minLng = Math.min(bounds.minLng, coordinates[0]);
+  bounds.minLat = Math.min(bounds.minLat, coordinates[1]);
+  bounds.maxLng = Math.max(bounds.maxLng, coordinates[0]);
+  bounds.maxLat = Math.max(bounds.maxLat, coordinates[1]);
+
+  return bounds;
+}
+
+function getLineBounds(coordinates) {
+  return coordinates.reduce((bounds, coordinatesPair) => expandBounds(bounds, coordinatesPair), createEmptyBounds());
+}
+
+function boundsOverlap(firstBounds, secondBounds) {
+  if (!Number.isFinite(firstBounds?.minLng) || !Number.isFinite(secondBounds?.minLng)) {
+    return false;
+  }
+
+  return !(
+    firstBounds.maxLng < secondBounds.minLng ||
+    secondBounds.maxLng < firstBounds.minLng ||
+    firstBounds.maxLat < secondBounds.minLat ||
+    secondBounds.maxLat < firstBounds.minLat
+  );
+}
+
+function getFeatureBounds(lineStrings) {
+  return lineStrings.reduce((bounds, coordinates) => {
+    const nextBounds = getLineBounds(coordinates);
+
+    if (!Number.isFinite(nextBounds.minLng)) {
+      return bounds;
+    }
+
+    bounds.minLng = Math.min(bounds.minLng, nextBounds.minLng);
+    bounds.minLat = Math.min(bounds.minLat, nextBounds.minLat);
+    bounds.maxLng = Math.max(bounds.maxLng, nextBounds.maxLng);
+    bounds.maxLat = Math.max(bounds.maxLat, nextBounds.maxLat);
+
+    return bounds;
+  }, createEmptyBounds());
+}
+
 /**
  * Extract the coordinate sub-path of a feature between startKm and endKm
  * (inclusive). Handles MultiLineString by measuring distance cumulatively
@@ -232,6 +288,7 @@ export function buildRouteGraph(trailsGeoJson) {
 
   // Step 1: Gather line strings per feature index for repeated access.
   const featureLines = features.map((f) => getLineStrings(f?.geometry));
+  const featureBounds = featureLines.map((lineStrings) => getFeatureBounds(lineStrings));
 
   // Step 2: Find all crossing points between every ordered pair (i, j).
   //         crossingsByTrail[k] collects { distanceFromStartKm, coordinates }
@@ -240,20 +297,39 @@ export function buildRouteGraph(trailsGeoJson) {
 
   for (let i = 0; i < features.length; i += 1) {
     for (let j = i + 1; j < features.length; j += 1) {
+      if (!boundsOverlap(featureBounds[i], featureBounds[j])) {
+        continue;
+      }
+
       let iKm = 0;
 
       featureLines[i].forEach((iCoords) => {
+        const iBounds = getLineBounds(iCoords);
+
         for (let si = 1; si < iCoords.length; si += 1) {
           const iStart = iCoords[si - 1];
           const iEnd = iCoords[si];
           const iSegLen = getDistanceInKilometers(iStart, iEnd);
+          const iSegmentBounds = getLineBounds([iStart, iEnd]);
           let jKm = 0;
 
           featureLines[j].forEach((jCoords) => {
+            const jBounds = getLineBounds(jCoords);
+
+            if (!boundsOverlap(iBounds, jBounds)) {
+              jKm += coordinateLengthKm(jCoords);
+              return;
+            }
+
             for (let sj = 1; sj < jCoords.length; sj += 1) {
               const jStart = jCoords[sj - 1];
               const jEnd = jCoords[sj];
               const jSegLen = getDistanceInKilometers(jStart, jEnd);
+
+              if (!boundsOverlap(iSegmentBounds, getLineBounds([jStart, jEnd]))) {
+                jKm += jSegLen;
+                continue;
+              }
 
               const hit = getSegmentIntersection(iStart, iEnd, jStart, jEnd);
               if (hit) {

@@ -1,8 +1,11 @@
+import { getLoadPerfTimestamp, logLoadPerfSince } from '../../lib/load-perf';
 import { SPORET_LAYER_IDS, fetchSporetGeoJson } from '../../lib/sporet';
 
 const DESTINATION_FIELDS = ['id', 'name', 'prepsymbol', 'is_active'].join(',');
 
 export default async function handler(req, res) {
+  const requestStartedAt = getLoadPerfTimestamp();
+
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
     return res.status(405).json({ error: 'Method not allowed' });
@@ -16,8 +19,10 @@ export default async function handler(req, res) {
     });
 
     res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+    logLoadPerfSince('api /destinations success', requestStartedAt);
     return res.status(200).json(data);
   } catch (err) {
+    logLoadPerfSince('api /destinations failed', requestStartedAt);
     return res.status(500).json({ error: err.message });
   }
 }
