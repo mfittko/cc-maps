@@ -32,10 +32,13 @@ describe('load-perf', () => {
   it('disables load perf logging by default', () => {
     delete process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF;
     delete process.env.DEBUG_LOAD_PERF;
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
 
     expect(isLoadPerfDebugEnabled()).toBe(false);
     expect(getLoadPerfTimestamp()).toBeNull();
     expect(measureLoadPerf('default-off', () => 42)).toBe(42);
+    logLoadPerf('should stay quiet');
+    expect(debugSpy).not.toHaveBeenCalled();
   });
 
   it('supports the server-side debug flag', () => {
@@ -47,6 +50,13 @@ describe('load-perf', () => {
 
     expect(isLoadPerfDebugEnabled()).toBe(true);
     expect(getLoadPerfTimestamp()).toBe(12);
+  });
+
+  it('returns null when enabled without performance timing support', () => {
+    process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF = '1';
+    vi.stubGlobal('performance', undefined);
+
+    expect(getLoadPerfTimestamp()).toBeNull();
   });
 
   it('logs simple milestone messages when enabled', () => {
@@ -68,6 +78,25 @@ describe('load-perf', () => {
     logLoadPerfSince('destinations ready', 10);
 
     expect(debugSpy).toHaveBeenCalledWith('[load-perf] destinations ready: 14.4ms');
+  });
+
+  it('falls back to a plain milestone log without a start timestamp', () => {
+    process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF = '1';
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    logLoadPerfSince('destinations ready', null);
+
+    expect(debugSpy).toHaveBeenCalledWith('[load-perf] destinations ready');
+  });
+
+  it('falls back to a plain milestone log when performance timing is unavailable', () => {
+    process.env.NEXT_PUBLIC_DEBUG_LOAD_PERF = '1';
+    vi.stubGlobal('performance', undefined);
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    logLoadPerfSince('destinations ready', 10);
+
+    expect(debugSpy).toHaveBeenCalledWith('[load-perf] destinations ready');
   });
 
   it('measures sync work when enabled', () => {
