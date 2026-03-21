@@ -11,6 +11,14 @@ import { getAllTrailSegmentLabelsGeoJson } from '../lib/map-domain';
 import { measureRoutePerf } from '../lib/route-perf';
 import type { DestinationSummary, GeoBounds, TrailFeatureCollection } from '../types/geo';
 
+const TRAIL_SEGMENT_LABEL_TEXT_OPACITY = [
+  'step',
+  ['zoom'],
+  ['case', ['coalesce', ['get', 'isPlanned'], false], 1, 0],
+  TRAIL_SEGMENT_LABELS_MIN_ZOOM,
+  1,
+] as const;
+
 interface UseTrailSegmentLabelsArgs {
   mapReady: boolean;
   mapRef: MutableRefObject<any>;
@@ -118,12 +126,7 @@ export function useTrailSegmentLabels({
         'text-halo-color': 'rgba(250, 252, 250, 0.98)',
         'text-halo-width': 4,
         'text-halo-blur': 2,
-        'text-opacity': [
-          'case',
-          ['coalesce', ['get', 'isPlanned'], false],
-          1,
-          ['interpolate', ['linear'], ['zoom'], TRAIL_SEGMENT_LABELS_MIN_ZOOM - 0.25, 0, TRAIL_SEGMENT_LABELS_MIN_ZOOM, 1],
-        ],
+        'text-opacity': TRAIL_SEGMENT_LABEL_TEXT_OPACITY,
       },
     });
 
@@ -148,12 +151,7 @@ export function useTrailSegmentLabels({
         'text-halo-color': 'rgba(250, 252, 250, 0.98)',
         'text-halo-width': 2.75,
         'text-halo-blur': 1,
-        'text-opacity': [
-          'case',
-          ['coalesce', ['get', 'isPlanned'], false],
-          1,
-          ['interpolate', ['linear'], ['zoom'], TRAIL_SEGMENT_LABELS_MIN_ZOOM - 0.25, 0, TRAIL_SEGMENT_LABELS_MIN_ZOOM, 1],
-        ],
+        'text-opacity': TRAIL_SEGMENT_LABEL_TEXT_OPACITY,
       },
     });
 
