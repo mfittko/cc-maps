@@ -178,8 +178,8 @@ struct ContentView: View {
                 Spacer(minLength: 0)
                 locationFollowButton
             }
-            .padding(.top, 30)
-            .padding(.trailing, 16)
+            .padding(.top, 108)
+            .padding(.trailing, 86)
         }
     }
 
