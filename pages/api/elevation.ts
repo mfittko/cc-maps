@@ -1,10 +1,10 @@
-import { getElevationChangeMetrics } from '../../lib/map-domain.js';
+import { getElevationChangeMetrics } from '../../lib/map-domain';
 import {
   DEFAULT_SAMPLE_SPACING_METERS,
   TERRAIN_RGB_TILESET,
   sampleCoordinatesFromGeometry,
   sampleElevationsAlongCoordinates,
-} from '../../lib/terrain-rgb.js';
+} from '../../lib/terrain-rgb';
 
 const MAX_GEOMETRY_COORDINATES = 50000;
 const MAX_SECTION_COUNT = 200;

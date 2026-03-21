@@ -2,14 +2,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildRouteGraph } from '../lib/route-graph.js';
+import { buildRouteGraph } from '../lib/route-graph';
 import {
   createRoutePlan,
   decodeRoutePlanFromUrl,
   encodeRoutePlanToUrl,
   hydrateRoutePlan,
   readStoredRoutePlan,
-} from '../lib/route-plan.js';
+} from '../lib/route-plan';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

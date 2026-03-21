@@ -47,7 +47,7 @@ function collectRouteSegments(routeFeatures) {
   }, []);
 }
 
-export function createGpxFromRouteFeatures(routeFeatures, options = {}) {
+export function createGpxFromRouteFeatures(routeFeatures, options: { name?: string } = {}) {
   const segments = collectRouteSegments(routeFeatures);
 
   if (!segments.length) {

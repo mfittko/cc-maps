@@ -9,7 +9,7 @@ import {
 
 export default function ControlPanel({
   isOverlay = false,
-  onClose,
+  onClose = () => {},
   onOpenInfo,
   trailColorMode,
   onTrailColorModeChange,

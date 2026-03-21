@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 class MockSource {
   constructor(data) {
     this.data = data;

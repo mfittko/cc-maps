@@ -24,15 +24,24 @@ This file gives future coding agents the minimum project context needed to work 
 
 ## Current architecture
 
-- `pages/index.js` composes the map shell, map lifecycle effects, and page-level orchestration.
-- `components/ControlPanel.js` and `components/InfoPanel.js` own the extracted panel presentation.
-- `hooks/useMapPersistence.js` owns URL and local-storage synchronization for destination, terrain, color mode, and map view.
-- `lib/map-domain.js` contains extracted pure map-domain helpers such as distance, destination matching, crossing analysis, and segment label shaping.
-- `lib/map-persistence.js` contains extracted storage and query-parsing helpers plus trail-cache shaping.
-- `pages/api/destinations.js` proxies active destination data from Sporet layer 4.
-- `pages/api/trails.js` validates `destinationid` and proxies trail data from Sporet layer 6.
-- `lib/sporet.js` contains shared layer IDs, integer parsing, the Sporet fetch helper, and style mappings.
-- `pages/_app.js` wires in global styles, Mapbox CSS, and manifest metadata.
+- `pages/index.tsx` composes the homepage orchestration, derived state, and panel rendering.
+- `lib/home-page.ts` contains extracted page-scoped constants and pure helper logic for map styling, trail collection shaping, and route-selection utilities.
+- `components/ControlPanel.tsx`, `components/InfoPanel.tsx`, `components/PlanningPanel.tsx`, and `components/TrailDetailsPanel.tsx` own the extracted panel presentation.
+- `hooks/useMapLifecycle.ts` owns map creation, initial view restoration, and ready/error lifecycle state.
+- `hooks/useDestinationsData.ts` owns destination bootstrap and shaping.
+- `hooks/useAutoDestinationSelection.ts` owns geolocation-driven destination auto-selection.
+- `hooks/useNearbyDestinationIds.ts` owns debounced nearby destination suggestion derivation.
+- `hooks/useRoutePlanSync.ts` owns route hydration plus route/planning URL and storage synchronization.
+- `hooks/useRouteDirectionTracking.ts` owns route-travel direction detection from live progress.
+- `hooks/useInteractionEnvironment.ts` owns the device and pointer-environment detection used by planning and overlay UX.
+- `hooks/useLatestValue.ts` owns the repeated latest-value ref synchronization pattern for async map handlers.
+- `hooks/useMapPersistence.ts` owns URL and local-storage synchronization for destination, terrain, color mode, and map view.
+- `lib/map-domain.ts` contains extracted pure map-domain helpers such as distance, destination matching, crossing analysis, and segment label shaping.
+- `lib/map-persistence.ts` contains extracted storage and query-parsing helpers plus trail-cache shaping.
+- `pages/api/destinations.ts` proxies active destination data from Sporet layer 4.
+- `pages/api/trails.ts` validates `destinationid` and proxies trail data from Sporet layer 6.
+- `lib/sporet.ts` contains shared layer IDs, integer parsing, the Sporet fetch helper, and style mappings.
+- `pages/_app.tsx` wires in global styles, Mapbox CSS, and manifest metadata.
 
 ## Source of truth
 

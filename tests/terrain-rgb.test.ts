@@ -21,7 +21,7 @@ vi.mock('../lib/map-domain.js', () => ({
 }));
 
 import { PNG } from 'pngjs';
-import { getSampledCoordinatesAlongFeature } from '../lib/map-domain.js';
+import { getSampledCoordinatesAlongFeature } from '../lib/map-domain';
 import {
   MAX_TILE_FETCH_CONCURRENCY,
   TILE_SIZE,
@@ -36,7 +36,7 @@ import {
   lngLatToTileCoords,
   sampleCoordinatesFromGeometry,
   sampleElevationsAlongCoordinates,
-} from '../lib/terrain-rgb.js';
+} from '../lib/terrain-rgb';
 
 describe('terrain-rgb helpers', () => {
   beforeEach(() => {

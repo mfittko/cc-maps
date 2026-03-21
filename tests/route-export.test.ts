@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGpxFileName, createGpxFromRouteFeatures } from '../lib/route-export.js';
+import { createGpxFileName, createGpxFromRouteFeatures } from '../lib/route-export';
 
 describe('route-export', () => {
   it('returns an empty string when there are not enough route coordinates', () => {
@@ -124,6 +124,26 @@ describe('route-export', () => {
 
     expect(gpx.match(/<trkseg>/g)).toHaveLength(2);
     expect(gpx.match(/<trkpt /g)).toHaveLength(4);
+  });
+
+  it('deduplicates adjacent repeated coordinates within a route segment', () => {
+    const gpx = createGpxFromRouteFeatures([
+      {
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [10.75, 59.91],
+            [10.75, 59.91],
+            [10.76, 59.91],
+          ],
+        },
+      },
+    ]);
+
+    expect(gpx.match(/<trkseg>/g)).toHaveLength(1);
+    expect(gpx.match(/<trkpt /g)).toHaveLength(2);
+    expect(gpx).toContain('<trkpt lat="59.91" lon="10.75"></trkpt>');
+    expect(gpx).toContain('<trkpt lat="59.91" lon="10.76"></trkpt>');
   });
 
   it('creates a stable download file name', () => {

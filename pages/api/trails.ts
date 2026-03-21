@@ -67,7 +67,7 @@ export default async function handler(req, res) {
     });
   }
 
-  const queryParams = {
+  const queryParams: Record<string, string> = {
     where: destinationId === undefined ? '1=1' : `destinationid=${destinationId}`,
     outFields: TRAIL_FIELDS,
   };

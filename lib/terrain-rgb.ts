@@ -1,5 +1,5 @@
 import { PNG } from 'pngjs';
-import { getSampledCoordinatesAlongFeature } from './map-domain.js';
+import { getSampledCoordinatesAlongFeature } from './map-domain';
 
 export const TERRAIN_RGB_TILESET = 'mapbox.terrain-rgb';
 export const MAPBOX_TILE_API_BASE = 'https://api.mapbox.com/v4';
@@ -80,7 +80,9 @@ export async function fetchTilePixels(x, y, z, token, fetchFn = fetch) {
   const response = await fetchFn(url);
 
   if (!response.ok) {
-    const err = new Error(`Terrain-RGB tile request failed: ${response.status}`);
+    const err: Error & { status?: number } = new Error(
+      `Terrain-RGB tile request failed: ${response.status}`
+    );
 
     err.status = response.status;
     throw err;
