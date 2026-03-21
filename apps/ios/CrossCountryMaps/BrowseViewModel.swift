@@ -26,6 +26,34 @@ enum LoadPhase: Equatable {
     }
 }
 
+enum LocationFollowMode: Equatable {
+    case off
+    case follow
+    case followWithHeading
+
+    var systemImageName: String {
+        switch self {
+        case .off:
+            return "location"
+        case .follow:
+            return "location.fill"
+        case .followWithHeading:
+            return "location.north.line.fill"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .off:
+            return "Enable heading up location follow"
+        case .follow:
+            return "Enable heading up map follow"
+        case .followWithHeading:
+            return "Turn off automatic location follow"
+        }
+    }
+}
+
 protocol BrowseAPIClient {
     func fetchDestinations() async throws -> DestinationFeatureCollection
     func fetchTrails(destinationID: String) async throws -> TrailFeatureCollection
@@ -35,6 +63,7 @@ protocol BrowseAPIClient {
 
 protocol BrowseLocationServing: AnyObject {
     var onLocationUpdate: ((CLLocationCoordinate2D) -> Void)? { get set }
+    var onHeadingUpdate: ((CLLocationDirection?) -> Void)? { get set }
     var onAuthorizationUnavailable: (() -> Void)? { get set }
 
     func start()
@@ -278,6 +307,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var previewTrails: [TrailFeature] = []
     @Published private(set) var nearbyPreviewDestinations: [Destination] = []
     @Published private(set) var currentLocation: CLLocationCoordinate2D?
+    @Published private(set) var currentLocationHeading: CLLocationDirection?
     @Published private(set) var destinationsPhase: LoadPhase = .idle
     @Published private(set) var trailsPhase: LoadPhase = .idle
     @Published private(set) var previewPhase: LoadPhase = .idle
@@ -285,6 +315,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var isManualDestinationSelection = false
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
+    @Published private(set) var locationFollowMode: LocationFollowMode = .off
     @Published private(set) var routePresentationRefreshID = 0
     @Published private(set) var routeDisplaySections: [PlanningSection] = []
     @Published private(set) var routeDisplaySectionNumbersByEdgeID: [String: Int] = [:]
@@ -359,6 +390,12 @@ final class BrowseViewModel: ObservableObject {
             }
         }
 
+        locationService.onHeadingUpdate = { [weak self] heading in
+            Task { @MainActor in
+                self?.currentLocationHeading = heading
+            }
+        }
+
         locationService.onAuthorizationUnavailable = { [weak self] in
             Task { @MainActor in
                 self?.requestError = nil
@@ -388,6 +425,10 @@ final class BrowseViewModel: ObservableObject {
 
     var canEnableAutoLocation: Bool {
         true
+    }
+
+    var isLocationFollowActive: Bool {
+        locationFollowMode != .off
     }
 
     var selectedTrail: TrailFeature? {
@@ -695,6 +736,7 @@ final class BrowseViewModel: ObservableObject {
 
         if manual {
             isManualDestinationSelection = true
+            disableLocationFollowIfNeeded()
         }
 
         if selectedDestinationID == id {
@@ -962,16 +1004,42 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func enableAutoLocation() {
+        setLocationFollowMode(.follow, forceSelectionRefresh: true)
+    }
+
+    func toggleLocationFollow() {
+        switch locationFollowMode {
+        case .off:
+            setLocationFollowMode(.followWithHeading, forceSelectionRefresh: true)
+        case .follow, .followWithHeading:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        }
+    }
+
+    private func setLocationFollowMode(
+        _ mode: LocationFollowMode,
+        forceSelectionRefresh: Bool
+    ) {
         isManualDestinationSelection = false
         shouldPreserveMapRegionForNextAutoLocationSelection = true
+        locationFollowMode = mode
         locationFocusRequestID += 1
         locationService.requestCurrentLocation()
 
         if let currentLocation {
             Task {
-                await handleLocationUpdate(currentLocation, forceSelectionRefresh: true)
+                await handleLocationUpdate(currentLocation, forceSelectionRefresh: forceSelectionRefresh)
             }
         }
+    }
+
+    private func disableLocationFollowIfNeeded(forceFocusRefresh: Bool = false) {
+        guard locationFollowMode != .off || forceFocusRefresh else {
+            return
+        }
+
+        locationFollowMode = .off
+        locationFocusRequestID += 1
     }
 
     func updateVisibleRegion(_ region: MKCoordinateRegion) {

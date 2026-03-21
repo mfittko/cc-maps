@@ -36,8 +36,9 @@ struct ContentView: View {
                         focusedPlannedSectionCoordinates: viewModel.focusedPlannedSectionCoordinates,
                         plannedSectionFocusRequestID: viewModel.plannedSectionFocusRequestID,
                         currentLocation: viewModel.currentLocation,
+                        currentLocationHeading: viewModel.currentLocationHeading,
                         locationFocusRequestID: viewModel.locationFocusRequestID,
-                        isAutoFollowEnabled: !viewModel.isManualDestinationSelection,
+                        locationFollowMode: viewModel.locationFollowMode,
                         onDestinationTap: { destinationID in
                             viewModel.selectDestination(id: destinationID, manual: true)
                         },
@@ -173,9 +174,9 @@ struct ContentView: View {
     @ViewBuilder
     private var mapOverlayControls: some View {
         if viewModel.canEnableAutoLocation {
-            HStack {
+            HStack(spacing: 10) {
                 Spacer(minLength: 0)
-                autoFollowButton
+                locationFollowButton
             }
             .padding(.top, 12)
             .padding(.horizontal, 4)
@@ -289,18 +290,19 @@ struct ContentView: View {
         .accessibilityLabel("Share route link")
     }
 
-    private var autoFollowButton: some View {
+    private var locationFollowButton: some View {
         Button {
-            viewModel.enableAutoLocation()
+            viewModel.toggleLocationFollow()
         } label: {
-            Image(systemName: "location.fill")
+            Image(systemName: viewModel.locationFollowMode.systemImageName)
                 .font(.body.weight(.semibold))
                 .frame(width: 40, height: 40)
                 .background(.thinMaterial, in: Capsule())
-                .foregroundStyle(.blue)
+                .foregroundStyle(viewModel.isLocationFollowActive ? Color.blue : Color.secondary)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Enable automatic location follow")
+        .accessibilityLabel(viewModel.locationFollowMode.accessibilityLabel)
     }
 
     private var closeDestinationOverlayButton: some View {

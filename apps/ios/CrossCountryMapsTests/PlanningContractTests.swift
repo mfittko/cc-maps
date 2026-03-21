@@ -2850,6 +2850,7 @@ private final class BrowseAPISpy: BrowseAPIClient {
 
 private final class LocationServiceSpy: BrowseLocationServing {
     var onLocationUpdate: ((CLLocationCoordinate2D) -> Void)?
+    var onHeadingUpdate: ((CLLocationDirection?) -> Void)?
     var onAuthorizationUnavailable: (() -> Void)?
     func start() {}
     func requestCurrentLocation() {}

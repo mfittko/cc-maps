@@ -20,8 +20,9 @@ struct TrailMapView: UIViewRepresentable {
     let focusedPlannedSectionCoordinates: [CLLocationCoordinate2D]
     let plannedSectionFocusRequestID: Int
     let currentLocation: CLLocationCoordinate2D?
+    let currentLocationHeading: CLLocationDirection?
     let locationFocusRequestID: Int
-    let isAutoFollowEnabled: Bool
+    let locationFollowMode: LocationFollowMode
     let onDestinationTap: (String) -> Void
     let onTrailTap: (TrailInspectionSelection?) -> Void
     let onRegionDidChange: (MKCoordinateRegion) -> Void
@@ -36,7 +37,7 @@ struct TrailMapView: UIViewRepresentable {
         mapView.pointOfInterestFilter = .excludingAll
         mapView.showsCompass = true
         mapView.showsScale = false
-        mapView.showsUserLocation = true
+        mapView.showsUserLocation = false
         mapView.setRegion(
             restoredMapRegion?.coordinateRegion ?? MKCoordinateRegion(
                 center: AppConfig.defaultCenter,
@@ -56,6 +57,7 @@ struct TrailMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         context.coordinator.parent = self
+        context.coordinator.syncCurrentLocationPresentation(on: mapView)
         context.coordinator.syncAnnotations(on: mapView)
         context.coordinator.syncOverlays(on: mapView)
         context.coordinator.syncRoutePresentation(on: mapView)
@@ -87,7 +89,7 @@ struct TrailMapView: UIViewRepresentable {
         if context.coordinator.lastLocationFocusRequestID != locationFocusRequestID {
             context.coordinator.lastLocationFocusRequestID = locationFocusRequestID
             context.coordinator.updateTrackingMode(on: mapView)
-        } else if context.coordinator.lastAutoFollowEnabled != isAutoFollowEnabled {
+        } else if context.coordinator.lastLocationFollowMode != locationFollowMode {
             context.coordinator.updateTrackingMode(on: mapView)
         }
     }
@@ -107,14 +109,91 @@ struct TrailMapView: UIViewRepresentable {
         var lastMapRegionRestoreRequestID = 0
         var lastPlannedSectionFocusRequestID = 0
         var lastLocationFocusRequestID = 0
-        var lastAutoFollowEnabled = false
+        var lastLocationFollowMode: LocationFollowMode = .off
         var shouldSkipNextFitRequest = false
         var cachedSegmentAnnotations: [TrailSegmentAnnotation] = []
         var lastPlannedSectionsSignature = ""
         var cachedPlannedSections: [PlanningSection] = []
+        var lastCurrentLocationCoordinate: CLLocationCoordinate2D?
+        var currentLocationBearing: CLLocationDirection?
+        var currentLocationAnnotation: CurrentLocationAnnotation?
+        var isRouteDirectionRotationActive = false
+        var pendingRouteDirectionRestoreWork: DispatchWorkItem?
+        var lastObservedMapHeading: CLLocationDirection?
 
         init(_ parent: TrailMapView) {
             self.parent = parent
+        }
+
+        func syncCurrentLocationPresentation(on mapView: MKMapView) {
+            let previousLocation = lastCurrentLocationCoordinate
+
+            if let currentLocation = parent.currentLocation {
+                if let heading = normalizedLocationDirection(parent.currentLocationHeading) {
+                    currentLocationBearing = heading
+                } else if let nextBearing = currentLocationMovementBearing(
+                    from: previousLocation,
+                    to: currentLocation,
+                    minimumDistanceMeters: AppConfig.currentLocationHeadingMinimumDistanceMeters
+                ) {
+                    currentLocationBearing = nextBearing
+                }
+
+                lastCurrentLocationCoordinate = currentLocation
+            } else {
+                lastCurrentLocationCoordinate = nil
+                currentLocationBearing = nil
+            }
+
+            if let currentLocation = parent.currentLocation {
+                let annotation = currentLocationAnnotation ?? CurrentLocationAnnotation(coordinate: currentLocation)
+
+                if currentLocationAnnotation == nil {
+                    currentLocationAnnotation = annotation
+                    mapView.addAnnotation(annotation)
+                } else {
+                    annotation.coordinate = currentLocation
+                }
+            } else if let annotation = currentLocationAnnotation {
+                mapView.removeAnnotation(annotation)
+                currentLocationAnnotation = nil
+            }
+
+            refreshCurrentLocationAppearance(on: mapView)
+
+            switch parent.locationFollowMode {
+            case .off:
+                break
+            case .follow:
+                if let currentLocation = parent.currentLocation,
+                   coordinatesDiffer(previousLocation, currentLocation) {
+                    centerMapOnCurrentLocation(currentLocation, on: mapView)
+                }
+            case .followWithHeading:
+                if let currentLocation = parent.currentLocation {
+                    followCurrentLocationWithHeading(
+                        currentLocation,
+                        bearing: currentLocationBearing,
+                        on: mapView,
+                        animated: coordinatesDiffer(previousLocation, currentLocation)
+                    )
+                }
+            }
+        }
+
+        func refreshCurrentLocationAppearance(on mapView: MKMapView) {
+            guard let annotation = currentLocationAnnotation,
+                  let currentLocationView = mapView.view(for: annotation) as? CurrentLocationAnnotationView else {
+                return
+            }
+
+            currentLocationView.configure(
+                bearing: currentLocationDisplayBearing(
+                    locationBearing: currentLocationBearing,
+                    mapCameraHeading: mapView.camera.heading
+                )
+            )
+            bringCurrentLocationToFront(on: mapView)
         }
 
         func syncAnnotations(on mapView: MKMapView) {
@@ -338,22 +417,92 @@ struct TrailMapView: UIViewRepresentable {
         }
 
         func updateTrackingMode(on mapView: MKMapView) {
-            lastAutoFollowEnabled = parent.isAutoFollowEnabled
+            let previousMode = lastLocationFollowMode
+            lastLocationFollowMode = parent.locationFollowMode
 
-            if parent.isAutoFollowEnabled {
-                mapView.setUserTrackingMode(.follow, animated: true)
-
+            switch parent.locationFollowMode {
+            case .off:
+                if previousMode == .followWithHeading {
+                    resetMapHeading(on: mapView)
+                }
+            case .follow:
+                if previousMode == .followWithHeading {
+                    resetMapHeading(on: mapView)
+                }
                 if let currentLocation = parent.currentLocation {
-                    mapView.setRegion(
-                        MKCoordinateRegion(
-                            center: currentLocation,
-                            span: MKCoordinateSpan(latitudeDelta: 0.09, longitudeDelta: 0.09)
-                        ),
+                    centerMapOnCurrentLocation(currentLocation, on: mapView)
+                }
+            case .followWithHeading:
+                if let currentLocation = parent.currentLocation {
+                    followCurrentLocationWithHeading(
+                        currentLocation,
+                        bearing: currentLocationBearing,
+                        on: mapView,
                         animated: true
                     )
                 }
-            } else if mapView.userTrackingMode != .none {
-                mapView.setUserTrackingMode(.none, animated: true)
+            }
+        }
+
+        private func centerMapOnCurrentLocation(_ currentLocation: CLLocationCoordinate2D, on mapView: MKMapView) {
+            mapView.setRegion(
+                MKCoordinateRegion(
+                    center: currentLocation,
+                    span: MKCoordinateSpan(latitudeDelta: 0.09, longitudeDelta: 0.09)
+                ),
+                animated: true
+            )
+        }
+
+        private func followCurrentLocationWithHeading(
+            _ currentLocation: CLLocationCoordinate2D,
+            bearing: CLLocationDirection?,
+            on mapView: MKMapView,
+            animated: Bool
+        ) {
+            guard let normalizedBearing = normalizedLocationDirection(bearing) else {
+                centerMapOnCurrentLocation(currentLocation, on: mapView)
+                return
+            }
+
+            let currentMapHeading = normalizedLocationDirection(mapView.camera.heading) ?? 0
+            let headingDelta = MapHeading.angularDifference(from: currentMapHeading, to: normalizedBearing)
+            let centerDistanceMeters = GeoMath.distanceKilometers(
+                from: mapView.camera.centerCoordinate,
+                to: currentLocation
+            ) * 1000
+
+            guard
+                headingDelta >= AppConfig.currentLocationHeadingCameraUpdateThresholdDegrees ||
+                centerDistanceMeters >= AppConfig.currentLocationCameraRecenterThresholdMeters
+            else {
+                return
+            }
+
+            let camera = mapView.camera
+            camera.centerCoordinate = currentLocation
+            camera.heading = normalizedBearing
+            mapView.setCamera(camera, animated: animated)
+        }
+
+        private func resetMapHeading(on mapView: MKMapView) {
+            let camera = mapView.camera
+            guard abs(camera.heading) > 0.1 else {
+                return
+            }
+
+            camera.heading = 0
+            mapView.setCamera(camera, animated: true)
+        }
+
+        private func coordinatesDiffer(_ lhs: CLLocationCoordinate2D?, _ rhs: CLLocationCoordinate2D?) -> Bool {
+            switch (lhs, rhs) {
+            case (.none, .some), (.some, .none):
+                return true
+            case let (.some(lhs), .some(rhs)):
+                return lhs.latitude != rhs.latitude || lhs.longitude != rhs.longitude
+            case (.none, .none):
+                return false
             }
         }
 
@@ -565,32 +714,36 @@ struct TrailMapView: UIViewRepresentable {
             guard !plannedSections.isEmpty else {
                 return []
             }
-            let spacingKm = 0.35
+
+            let spacingKm = AppConfig.routeSectionArrowSpacingKm
 
             return plannedSections.flatMap { section -> [RouteDirectionAnnotation] in
                 let coordinates = section.coordinates
-                guard coordinates.count >= 2 else { return [] }
+                guard coordinates.count >= 2, spacingKm > 0 else {
+                    return []
+                }
 
                 var annotations: [RouteDirectionAnnotation] = []
                 var traversedKm = 0.0
                 var nextArrowKm = spacingKm
 
-                for i in 1..<coordinates.count {
-                    let prev = coordinates[i - 1]
-                    let curr = coordinates[i]
-                    let segmentKm = GeoMath.distanceKilometers(from: prev, to: curr)
+                for index in 1..<coordinates.count {
+                    let start = coordinates[index - 1]
+                    let end = coordinates[index]
+                    let segmentKm = GeoMath.distanceKilometers(from: start, to: end)
 
                     while nextArrowKm <= traversedKm + segmentKm {
-                        let distIntoSegment = nextArrowKm - traversedKm
-                        let ratio = segmentKm > 0 ? distIntoSegment / segmentKm : 0
-                        let lat = prev.latitude + (curr.latitude - prev.latitude) * ratio
-                        let lng = prev.longitude + (curr.longitude - prev.longitude) * ratio
-                        let bearing = GeoMath.bearing(from: prev, to: curr)
+                        let distanceIntoSegment = nextArrowKm - traversedKm
+                        let ratio = segmentKm > 0 ? distanceIntoSegment / segmentKm : 0
+                        let latitude = start.latitude + (end.latitude - start.latitude) * ratio
+                        let longitude = start.longitude + (end.longitude - start.longitude) * ratio
 
-                        annotations.append(RouteDirectionAnnotation(
-                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng),
-                            bearing: bearing
-                        ))
+                        annotations.append(
+                            RouteDirectionAnnotation(
+                                coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+                                bearing: GeoMath.bearing(from: start, to: end)
+                            )
+                        )
                         nextArrowKm += spacingKm
                     }
 
@@ -679,20 +832,146 @@ struct TrailMapView: UIViewRepresentable {
                     continue
                 }
 
-                let isVisible = segmentAnnotation.kind == .plannedRoute ? true : shouldShowLabels
-                view.setVisibility(isVisible)
+                guard segmentAnnotation.kind == .trailDetail else {
+                    continue
+                }
+
+                view.setVisibility(shouldShowLabels)
             }
+        }
+
+        func refreshRouteDirectionAnnotationAppearance(on mapView: MKMapView, isHidden: Bool) {
+            for annotation in mapView.annotations {
+                guard let directionAnnotation = annotation as? RouteDirectionAnnotation,
+                      let directionView = mapView.view(for: directionAnnotation) as? RouteDirectionAnnotationView else {
+                    continue
+                }
+
+                directionView.configure(
+                    bearing: routeDirectionDisplayBearing(
+                        routeBearing: directionAnnotation.bearing,
+                        mapCameraHeading: mapView.camera.heading
+                    ),
+                    isHidden: isHidden
+                )
+            }
+        }
+
+        private func beginRouteDirectionRotation(on mapView: MKMapView) {
+            pendingRouteDirectionRestoreWork?.cancel()
+            pendingRouteDirectionRestoreWork = nil
+
+            guard !isRouteDirectionRotationActive else {
+                return
+            }
+
+            isRouteDirectionRotationActive = true
+            refreshRouteDirectionAnnotationAppearance(on: mapView, isHidden: true)
+        }
+
+        private func scheduleRouteDirectionRotationRestore(on mapView: MKMapView) {
+            guard isRouteDirectionRotationActive else {
+                return
+            }
+
+            pendingRouteDirectionRestoreWork?.cancel()
+
+            let workItem = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self, let mapView else {
+                    return
+                }
+
+                self.isRouteDirectionRotationActive = false
+                self.refreshRouteDirectionAnnotationAppearance(on: mapView, isHidden: false)
+                self.pendingRouteDirectionRestoreWork = nil
+            }
+
+            pendingRouteDirectionRestoreWork = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + AppConfig.routeDirectionRotationRestoreDelaySeconds,
+                execute: workItem
+            )
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
             syncAnnotations(on: mapView)
+            syncCurrentLocationPresentation(on: mapView)
+            refreshTrailSegmentLabelVisibility(on: mapView)
             let region = mapView.region
             DispatchQueue.main.async {
                 self.parent.onRegionDidChange(region)
             }
         }
 
+        func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
+            refreshCurrentLocationAppearance(on: mapView)
+
+            let currentHeading = normalizedLocationDirection(mapView.camera.heading) ?? 0
+            defer {
+                lastObservedMapHeading = currentHeading
+            }
+
+            guard let previousHeading = lastObservedMapHeading else {
+                return
+            }
+
+            let headingDelta = MapHeading.angularDifference(from: previousHeading, to: currentHeading)
+            guard headingDelta >= AppConfig.routeDirectionRotationDetectionThresholdDegrees else {
+                return
+            }
+
+            beginRouteDirectionRotation(on: mapView)
+            scheduleRouteDirectionRotationRestore(on: mapView)
+        }
+
+        func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
+            for view in views {
+                if view.annotation is CurrentLocationAnnotation {
+                    (view as? CurrentLocationAnnotationView)?.configure(
+                        bearing: currentLocationDisplayBearing(
+                            locationBearing: currentLocationBearing,
+                            mapCameraHeading: mapView.camera.heading
+                        )
+                    )
+                    bringCurrentLocationToFront(on: mapView)
+                }
+
+                if let directionView = view as? RouteDirectionAnnotationView,
+                   let directionAnnotation = view.annotation as? RouteDirectionAnnotation {
+                    directionView.configure(
+                        bearing: routeDirectionDisplayBearing(
+                            routeBearing: directionAnnotation.bearing,
+                            mapCameraHeading: mapView.camera.heading
+                        ),
+                        isHidden: isRouteDirectionRotationActive
+                    )
+                }
+
+                if let segmentView = view as? TrailSegmentAnnotationView,
+                   let segmentAnnotation = view.annotation as? TrailSegmentAnnotation {
+                    let shouldShowLabels = mapView.region.span.latitudeDelta <= AppConfig.trailSegmentLabelsMaxLatitudeDelta
+                    let isVisible = segmentAnnotation.kind == .plannedRoute
+                        ? !isRouteDirectionRotationActive
+                        : shouldShowLabels
+                    segmentView.setVisibility(isVisible)
+                }
+            }
+        }
+
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is CurrentLocationAnnotation {
+                let identifier = "CurrentLocationAnnotation"
+                let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? CurrentLocationAnnotationView ?? CurrentLocationAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+                view.annotation = annotation
+                view.configure(
+                    bearing: currentLocationDisplayBearing(
+                        locationBearing: currentLocationBearing,
+                        mapCameraHeading: mapView.camera.heading
+                    )
+                )
+                return view
+            }
+
             if let destinationAnnotation = annotation as? DestinationAnnotation {
                 let identifier = "DestinationAnnotation"
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
@@ -732,12 +1011,25 @@ struct TrailMapView: UIViewRepresentable {
                 let identifier = "RouteDirectionAnnotation"
                 let view = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? RouteDirectionAnnotationView ?? RouteDirectionAnnotationView(annotation: annotation, reuseIdentifier: identifier)
                 view.annotation = annotation
-                view.configure(bearing: directionAnnotation.bearing)
+                view.configure(
+                    bearing: routeDirectionDisplayBearing(
+                        routeBearing: directionAnnotation.bearing,
+                        mapCameraHeading: mapView.camera.heading
+                    ),
+                    isHidden: isRouteDirectionRotationActive
+                )
                 view.displayPriority = .defaultLow
                 return view
             }
 
             return nil
+        }
+
+        private func bringCurrentLocationToFront(on mapView: MKMapView) {
+            if let annotation = currentLocationAnnotation,
+               let currentLocationView = mapView.view(for: annotation) {
+                mapView.bringSubviewToFront(currentLocationView)
+            }
         }
 
         func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
@@ -806,6 +1098,14 @@ class RouteSectionOverlay: TrailOverlay {
     var isSelectedRouteSection = false
 }
 
+final class CurrentLocationAnnotation: NSObject, MKAnnotation {
+    dynamic var coordinate: CLLocationCoordinate2D
+
+    init(coordinate: CLLocationCoordinate2D) {
+        self.coordinate = coordinate
+    }
+}
+
 final class RouteDirectionAnnotation: NSObject, MKAnnotation {
     dynamic var coordinate: CLLocationCoordinate2D
     let bearing: Double
@@ -841,6 +1141,12 @@ final class RouteDirectionAnnotationView: MKAnnotationView {
         arrowLayer.lineWidth = 1.5
         arrowLayer.lineJoin = .round
         arrowLayer.frame = bounds
+        arrowLayer.actions = [
+            "transform": NSNull(),
+            "hidden": NSNull(),
+            "position": NSNull(),
+            "bounds": NSNull()
+        ]
         layer.addSublayer(arrowLayer)
     }
 
@@ -849,11 +1155,142 @@ final class RouteDirectionAnnotationView: MKAnnotationView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(bearing: Double) {
-        // Triangle points east (0°). Bearing is clockwise from north.
-        // Screen rotation: north=up=-90° in screen coords, so rotate by (bearing - 90°)
-        let radians = (bearing - 90) * .pi / 180
-        arrowLayer.setAffineTransform(CGAffineTransform(rotationAngle: radians))
+    func configure(bearing: Double, isHidden: Bool) {
+        layer.removeAllAnimations()
+        arrowLayer.removeAllAnimations()
+
+        UIView.performWithoutAnimation {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            self.isHidden = isHidden
+
+            // Triangle points east (0°). Bearing is clockwise from north.
+            // Screen rotation: north=up=-90° in screen coords, so rotate by (bearing - 90°)
+            let radians = (bearing - 90) * .pi / 180
+            arrowLayer.setAffineTransform(CGAffineTransform(rotationAngle: radians))
+            CATransaction.commit()
+        }
+    }
+}
+
+final class CurrentLocationAnnotationView: MKAnnotationView {
+    private static let frameSize = CGSize(width: 38, height: 38)
+    private static let bubbleDiameter: CGFloat = 22
+    private let ringView = UIView()
+    private let fillView = UIView()
+    private let directionView = UIView()
+    private let directionShaftLayer = CAShapeLayer()
+    private let directionHeadLayer = CAShapeLayer()
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+
+        canShowCallout = false
+        isUserInteractionEnabled = false
+        collisionMode = .circle
+        centerOffset = .zero
+        displayPriority = .required
+        zPriority = .max
+        selectedZPriority = .max
+        backgroundColor = .clear
+        clipsToBounds = false
+
+        frame = CGRect(origin: .zero, size: Self.frameSize)
+
+        ringView.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+        ringView.layer.shadowColor = UIColor.black.cgColor
+        ringView.layer.shadowOpacity = 0.18
+        addSubview(ringView)
+
+        fillView.backgroundColor = .systemBlue
+        fillView.layer.borderWidth = 1
+        fillView.layer.borderColor = UIColor.systemBlue.withAlphaComponent(0.35).cgColor
+        addSubview(fillView)
+
+        directionView.frame = bounds
+        directionView.backgroundColor = .clear
+        directionShaftLayer.fillColor = UIColor.clear.cgColor
+        directionShaftLayer.strokeColor = UIColor.white.cgColor
+        directionShaftLayer.lineWidth = 2.4
+        directionShaftLayer.lineCap = .round
+        directionShaftLayer.shadowColor = UIColor.systemBlue.cgColor
+        directionShaftLayer.shadowOpacity = 0.55
+        directionShaftLayer.shadowRadius = 1.5
+        directionView.layer.addSublayer(directionShaftLayer)
+
+        directionHeadLayer.fillColor = UIColor.white.cgColor
+        directionHeadLayer.strokeColor = UIColor.systemBlue.cgColor
+        directionHeadLayer.lineWidth = 1.2
+        directionHeadLayer.lineJoin = .round
+        directionView.layer.addSublayer(directionHeadLayer)
+        addSubview(directionView)
+
+        layoutMarker()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        directionView.isHidden = true
+        directionView.transform = .identity
+        layoutMarker()
+    }
+
+    func configure(bearing: CLLocationDirection?) {
+        guard let bearing else {
+            directionView.isHidden = true
+            directionView.transform = .identity
+            return
+        }
+
+        directionView.isHidden = false
+        directionView.transform = CGAffineTransform(rotationAngle: bearing * .pi / 180)
+    }
+
+    private func layoutMarker() {
+        let bubbleDiameter = Self.bubbleDiameter
+        let bubbleOrigin = CGPoint(
+            x: (bounds.width - bubbleDiameter) / 2,
+            y: (bounds.height - bubbleDiameter) / 2
+        )
+        let bubbleRect = CGRect(origin: bubbleOrigin, size: CGSize(width: bubbleDiameter, height: bubbleDiameter))
+
+        ringView.frame = bubbleRect
+        ringView.layer.cornerRadius = bubbleDiameter / 2
+        ringView.layer.shadowRadius = 5
+        ringView.layer.shadowOffset = CGSize(width: 0, height: 2)
+
+        let fillInset: CGFloat = 3.5
+        fillView.frame = bubbleRect.insetBy(dx: fillInset, dy: fillInset)
+        fillView.layer.cornerRadius = fillView.bounds.width / 2
+        fillView.layer.borderWidth = 1
+
+        directionView.frame = bounds
+        directionShaftLayer.frame = directionView.bounds
+        directionHeadLayer.frame = directionView.bounds
+
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        let shaftTopY = bubbleRect.minY + 2
+        let headTipY = bubbleRect.minY - 5.5
+        let headBaseY = bubbleRect.minY + 2.5
+        let headHalfWidth: CGFloat = 4.2
+
+        let shaftPath = UIBezierPath()
+        shaftPath.move(to: center)
+        shaftPath.addLine(to: CGPoint(x: center.x, y: shaftTopY))
+        directionShaftLayer.path = shaftPath.cgPath
+
+        let headPath = UIBezierPath()
+        headPath.move(to: CGPoint(x: center.x, y: headTipY))
+        headPath.addLine(to: CGPoint(x: center.x + headHalfWidth, y: headBaseY))
+        headPath.addLine(to: CGPoint(x: center.x, y: headBaseY - 1.5))
+        headPath.addLine(to: CGPoint(x: center.x - headHalfWidth, y: headBaseY))
+        headPath.close()
+        directionHeadLayer.path = headPath.cgPath
     }
 }
 
@@ -960,6 +1397,52 @@ final class PaddingLabel: UILabel {
         let size = super.intrinsicContentSize
         return CGSize(width: size.width + 16, height: size.height + 8)
     }
+}
+
+func currentLocationMovementBearing(
+    from previousLocation: CLLocationCoordinate2D?,
+    to currentLocation: CLLocationCoordinate2D,
+    minimumDistanceMeters: Double
+) -> CLLocationDirection? {
+    guard let previousLocation else {
+        return nil
+    }
+
+    let distanceMeters = GeoMath.distanceKilometers(from: previousLocation, to: currentLocation) * 1000
+    guard distanceMeters >= minimumDistanceMeters else {
+        return nil
+    }
+
+    let bearing = GeoMath.bearing(from: previousLocation, to: currentLocation)
+    let normalizedBearing = bearing.truncatingRemainder(dividingBy: 360)
+    return normalizedBearing >= 0 ? normalizedBearing : normalizedBearing + 360
+}
+
+func normalizedLocationDirection(_ direction: CLLocationDirection?) -> CLLocationDirection? {
+    guard let direction else {
+        return nil
+    }
+
+    let normalizedDirection = direction.truncatingRemainder(dividingBy: 360)
+    return normalizedDirection >= 0 ? normalizedDirection : normalizedDirection + 360
+}
+
+func currentLocationDisplayBearing(
+    locationBearing: CLLocationDirection?,
+    mapCameraHeading: CLLocationDirection
+) -> CLLocationDirection? {
+    guard let locationBearing else {
+        return nil
+    }
+
+    return normalizedLocationDirection(locationBearing - mapCameraHeading)
+}
+
+func routeDirectionDisplayBearing(
+    routeBearing: CLLocationDirection,
+    mapCameraHeading: CLLocationDirection
+) -> CLLocationDirection {
+    normalizedLocationDirection(routeBearing - mapCameraHeading) ?? routeBearing
 }
 
 private extension UIColor {

@@ -4,6 +4,49 @@ import XCTest
 @testable import CrossCountryMaps
 
 final class BrowseContractTests: XCTestCase {
+    func testCurrentLocationMovementBearingIgnoresTinyLocationChanges() {
+        let previousLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.91393, longitude: 10.75224)
+
+        XCTAssertNil(
+            currentLocationMovementBearing(
+                from: previousLocation,
+                to: currentLocation,
+                minimumDistanceMeters: 8
+            )
+        )
+    }
+
+    func testCurrentLocationMovementBearingNormalizesCompassDirection() {
+        let previousLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.9130, longitude: 10.7522)
+        let bearing = currentLocationMovementBearing(
+            from: previousLocation,
+            to: currentLocation,
+            minimumDistanceMeters: 8
+        )
+
+        XCTAssertNotNil(bearing)
+        XCTAssertEqual(bearing ?? 0, 180, accuracy: 0.5)
+    }
+
+    func testNormalizedLocationDirectionWrapsNegativeValues() {
+        XCTAssertEqual(normalizedLocationDirection(-15) ?? .nan, 345, accuracy: 0.001)
+        XCTAssertEqual(normalizedLocationDirection(370) ?? .nan, 10, accuracy: 0.001)
+    }
+
+    func testAngularHeadingDifferenceUsesShortestArc() {
+        XCTAssertEqual(MapHeading.angularDifference(from: 355, to: 5), 10, accuracy: 0.001)
+        XCTAssertEqual(MapHeading.angularDifference(from: 90, to: 270), 180, accuracy: 0.001)
+        XCTAssertEqual(MapHeading.angularDifference(from: 45, to: 50), 5, accuracy: 0.001)
+    }
+
+    func testRouteDirectionDisplayBearingTracksMapHeading() {
+        XCTAssertEqual(routeDirectionDisplayBearing(routeBearing: 90, mapCameraHeading: 0), 90, accuracy: 0.001)
+        XCTAssertEqual(routeDirectionDisplayBearing(routeBearing: 90, mapCameraHeading: 90), 0, accuracy: 0.001)
+        XCTAssertEqual(routeDirectionDisplayBearing(routeBearing: 20, mapCameraHeading: 350), 30, accuracy: 0.001)
+    }
+
     func testTrailProximityAutoSelectionMatchesSharedFixture() throws {
         let fixture: TrailProximityFixture = try FixtureLoader.decode("trail-proximity-auto-selection.json")
 
@@ -671,6 +714,31 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
+    func testLocationFollowToggleEnablesHeadingUpModeAndTurnsOff() {
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.off)
+
+        viewModel.toggleLocationFollow()
+
+        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.followWithHeading)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+
+        let locationFocusRequestIDBeforeDisable = viewModel.locationFocusRequestID
+
+        viewModel.toggleLocationFollow()
+
+        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.off)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforeDisable + 1)
+    }
+
+    @MainActor
     func testStalePrimaryTrailResponsesDoNotOverwriteLatestSelection() async throws {
         let apiClient = BrowseAPISpy(
             destinationsResponse: [
@@ -1171,9 +1239,9 @@ private final class BrowseSettingsStoreSpy: BrowseSettingsPersisting {
     }
 }
 
-@MainActor
-private final class LocationServiceSpy: @preconcurrency BrowseLocationServing {
+private final class LocationServiceSpy: BrowseLocationServing {
     var onLocationUpdate: ((CLLocationCoordinate2D) -> Void)?
+    var onHeadingUpdate: ((CLLocationDirection?) -> Void)?
     var onAuthorizationUnavailable: (() -> Void)?
     var startCallCount = 0
     var requestCurrentLocationCallCount = 0
@@ -1192,6 +1260,10 @@ private final class LocationServiceSpy: @preconcurrency BrowseLocationServing {
 
     func sendLocation(_ coordinate: CLLocationCoordinate2D) {
         onLocationUpdate?(coordinate)
+    }
+
+    func sendHeading(_ heading: CLLocationDirection?) {
+        onHeadingUpdate?(heading)
     }
 }
 
