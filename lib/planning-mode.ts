@@ -1,4 +1,5 @@
 import { createRoutePlan } from './route-plan';
+import type { RoutePlanGeoJson } from '../types/route';
 
 function getRoutePlanDestinationIds(destinationId, anchorEdgeIds, graph) {
   const nextDestinationIds = [String(destinationId)];
@@ -525,7 +526,7 @@ function buildRouteTraversalFeatures(routePlan, routeGraph) {
   });
 }
 
-export function createRoutePlanGeoJson(routePlan, routeGraph) {
+export function createRoutePlanGeoJson(routePlan, routeGraph): RoutePlanGeoJson {
   const anchorFeatures = (routePlan?.anchorEdgeIds || [])
     .map((edgeId, index) =>
       createLineFeature(routeGraph?.edges?.get(edgeId), {

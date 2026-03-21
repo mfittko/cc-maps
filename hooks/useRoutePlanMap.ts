@@ -10,17 +10,16 @@ import {
   fitMapToGeoJson,
   preventOverlayDoubleClickZoom,
 } from '../lib/home-page';
-import { createRoutePlanGeoJson } from '../lib/planning-mode';
 import { encodeRoutePlanToUrl } from '../lib/route-plan';
 import type { DestinationSummary, ElevationMetrics } from '../types/geo';
-import type { RouteGraph, RoutePlan } from '../types/route';
+import type { RouteGraph, RoutePlan, RoutePlanGeoJson } from '../types/route';
 
 interface UseRoutePlanMapArgs {
   mapReady: boolean;
   mapRef: MutableRefObject<any>;
   mapboxApi: any;
   routePlan: RoutePlan | null;
-  routeGraph: RouteGraph | null;
+  routePlanGeoJson: RoutePlanGeoJson;
   pendingRouteViewportFitRef: MutableRefObject<string>;
   selectedDestinationId: string;
   selectedDestination: DestinationSummary | null;
@@ -44,7 +43,7 @@ export function useRoutePlanMap({
   mapRef,
   mapboxApi,
   routePlan,
-  routeGraph,
+  routePlanGeoJson,
   pendingRouteViewportFitRef,
   selectedDestinationId,
   selectedDestination,
@@ -57,8 +56,6 @@ export function useRoutePlanMap({
     if (!mapReady || !map) {
       return undefined;
     }
-
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
 
     if (map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID)) {
       map.getSource(ROUTE_PLAN_ANCHORS_SOURCE_ID).setData(routePlanGeoJson.anchors);
@@ -134,7 +131,7 @@ export function useRoutePlanMap({
     }
 
     return undefined;
-  }, [mapReady, mapRef, routeGraph, routePlan]);
+  }, [mapReady, mapRef, routePlanGeoJson]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -148,8 +145,6 @@ export function useRoutePlanMap({
     if (!encodedRoutePlan || pendingRouteViewportFitRef.current !== encodedRoutePlan) {
       return;
     }
-
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
 
     if (!routePlanGeoJson.anchors.features.length) {
       return;
@@ -170,13 +165,12 @@ export function useRoutePlanMap({
     mapRef,
     mapboxApi,
     pendingRouteViewportFitRef,
-    routeGraph,
     routePlan,
     selectedDestination,
+    routePlanGeoJson,
   ]);
 
   useEffect(() => {
-    const routePlanGeoJson = createRoutePlanGeoJson(routePlan, routeGraph);
     const routeFeatures = routePlanGeoJson.traversal.features;
     const routeAnchorFeatures = routeFeatures.filter(
       (feature) => feature.properties?.role === 'traversal-anchor'
@@ -226,5 +220,5 @@ export function useRoutePlanMap({
     return () => {
       isCancelled = true;
     };
-  }, [routeGraph, routePlan, selectedDestinationId, setRouteAnchorElevationMetrics, setRouteElevationMetrics]);
+  }, [routePlanGeoJson, selectedDestinationId, setRouteAnchorElevationMetrics, setRouteElevationMetrics]);
 }

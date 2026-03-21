@@ -1,4 +1,10 @@
-import type { TrailFeature, Coordinates, ElevationMetrics } from './geo';
+import type {
+  TrailFeature,
+  TrailFeatureCollection,
+  RouteDirectionFeatureCollection,
+  Coordinates,
+  ElevationMetrics,
+} from './geo';
 
 export interface RoutePlan {
   version: number;
@@ -76,6 +82,12 @@ export interface SelectedRouteInsights {
   routeRemainingKm: number | null;
   sectionTraveledKm: number | null;
   sectionRemainingKm: number | null;
+}
+
+export interface RoutePlanGeoJson {
+  anchors: TrailFeatureCollection;
+  directions: RouteDirectionFeatureCollection;
+  traversal: TrailFeatureCollection;
 }
 
 export type TrailColorMode = 'type' | 'freshness';

@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject } from 'react';
+import { useEffect, useMemo, type MutableRefObject } from 'react';
 import {
   DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
   MIN_SEGMENT_DISTANCE_KM,
@@ -8,17 +8,15 @@ import {
   TRAIL_SEGMENT_LABELS_SOURCE_ID,
 } from '../lib/home-page';
 import { getAllTrailSegmentLabelsGeoJson } from '../lib/map-domain';
+import { measureRoutePerf } from '../lib/route-perf';
 import type { DestinationSummary, TrailFeatureCollection } from '../types/geo';
-import type { RoutePlan } from '../types/route';
 
 interface UseTrailSegmentLabelsArgs {
   mapReady: boolean;
   mapRef: MutableRefObject<any>;
   trailsGeoJson: TrailFeatureCollection | null;
   destinations: DestinationSummary[];
-  isPlanning: boolean;
-  routePlan: RoutePlan | null;
-  routeTraversalGeoJson: TrailFeatureCollection;
+  activeTraversalGeoJson: TrailFeatureCollection | null;
 }
 
 export function useTrailSegmentLabels({
@@ -26,27 +24,28 @@ export function useTrailSegmentLabels({
   mapRef,
   trailsGeoJson,
   destinations,
-  isPlanning,
-  routePlan,
-  routeTraversalGeoJson,
+  activeTraversalGeoJson,
 }: UseTrailSegmentLabelsArgs) {
+  const labelsGeoJson = useMemo(
+    () =>
+      measureRoutePerf('trail segment labels', () =>
+        getAllTrailSegmentLabelsGeoJson(
+          trailsGeoJson,
+          destinations,
+          DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
+          MIN_SEGMENT_DISTANCE_KM,
+          activeTraversalGeoJson
+        )
+      ),
+    [activeTraversalGeoJson, destinations, trailsGeoJson]
+  );
+
   useEffect(() => {
     const map = mapRef.current;
 
     if (!mapReady || !map) {
       return undefined;
     }
-
-    const activeTraversalGeoJson =
-      !isPlanning && routePlan?.anchorEdgeIds?.length ? routeTraversalGeoJson : null;
-
-    const labelsGeoJson = getAllTrailSegmentLabelsGeoJson(
-      trailsGeoJson,
-      destinations,
-      DESTINATION_ENDPOINT_MATCH_THRESHOLD_KM,
-      MIN_SEGMENT_DISTANCE_KM,
-      activeTraversalGeoJson
-    );
 
     if (map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID)) {
       map.getSource(TRAIL_SEGMENT_LABELS_SOURCE_ID).setData(labelsGeoJson);
@@ -118,5 +117,5 @@ export function useTrailSegmentLabels({
     }
 
     return undefined;
-  }, [destinations, isPlanning, mapReady, mapRef, routePlan, routeTraversalGeoJson, trailsGeoJson]);
+  }, [labelsGeoJson, mapReady, mapRef]);
 }

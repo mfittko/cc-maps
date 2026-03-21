@@ -37,12 +37,14 @@ import {
   trailLegendItems,
 } from '../lib/home-page';
 import { getSingleQueryValue } from '../lib/map-persistence';
+import { measureRoutePerf } from '../lib/route-perf';
 import {
   formatDistance,
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
 import {
   getPrimaryParticipantDestinationIds,
+  createRoutePlanGeoJson,
   shouldMergePreviewTrailsIntoRouteGraph,
 } from '../lib/planning-mode';
 import {
@@ -210,19 +212,28 @@ export default function Home() {
       return null;
     }
 
-    return buildRouteGraph(routeGraphTrailsGeoJson);
+    return measureRoutePerf('build route graph', () => buildRouteGraph(routeGraphTrailsGeoJson));
   }, [routeGraphTrailsGeoJson]);
   const routeGraphRef = useLatestValue(routeGraph);
+  const routePlanGeoJson = useMemo(
+    () =>
+      measureRoutePerf('build route plan geojson', () =>
+        createRoutePlanGeoJson(routePlan, routeGraph)
+      ),
+    [routeGraph, routePlan]
+  );
+  const activeTraversalLabelsGeoJson = useMemo(
+    () => (!isPlanning && routePlan?.anchorEdgeIds?.length ? routePlanGeoJson.traversal : null),
+    [isPlanning, routePlan, routePlanGeoJson]
+  );
   const {
-    routeTraversalGeoJson,
     currentRouteProgress,
     isCurrentLocationOnRoute,
     selectedRouteTraversalFeature,
     selectedElevationFeature,
     selectedRouteInsights,
   } = useRouteInsights({
-    routePlan,
-    routeGraph,
+    routeTraversalGeoJson: routePlanGeoJson.traversal,
     currentLocationCoordinates,
     selectedTrailFeature,
     selectedTrailSectionFeature,
@@ -386,7 +397,7 @@ export default function Home() {
     suggestedTrailsGeoJson,
     trailColorMode,
     trailColorModeRef,
-    routeTraversalGeoJson,
+    routeTraversalGeoJson: routePlanGeoJson.traversal,
     isPlanning,
     routePlan,
     skipNextTrailFitRef,
@@ -408,7 +419,7 @@ export default function Home() {
     mapRef,
     mapboxApi,
     routePlan,
-    routeGraph,
+    routePlanGeoJson,
     pendingRouteViewportFitRef,
     selectedDestinationId,
     selectedDestination,
@@ -428,9 +439,7 @@ export default function Home() {
     mapRef,
     trailsGeoJson,
     destinations,
-    isPlanning,
-    routePlan,
-    routeTraversalGeoJson,
+    activeTraversalGeoJson: activeTraversalLabelsGeoJson,
   });
 
   useEffect(() => {

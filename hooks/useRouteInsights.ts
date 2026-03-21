@@ -3,20 +3,16 @@ import {
   CURRENT_LOCATION_TRACK_MATCH_THRESHOLD_KM,
   clampDistance,
 } from '../lib/home-page';
-import {
-  findNearestRouteTraversalFeature,
-  createRoutePlanGeoJson,
-} from '../lib/planning-mode';
+import { findNearestRouteTraversalFeature } from '../lib/planning-mode';
 import {
   getRouteProgressMetrics,
   getTrailSelectionLengthInKilometers,
 } from '../lib/map-domain';
 import type { Coordinates, ElevationMetrics, TrailFeature, TrailFeatureCollection } from '../types/geo';
-import type { RouteGraph, RoutePlan, RouteSummary, RouteTraversalSegment, SelectedRouteInsights } from '../types/route';
+import type { RouteSummary, RouteTraversalSegment, SelectedRouteInsights } from '../types/route';
 
 interface UseRouteInsightsArgs {
-  routePlan: RoutePlan | null;
-  routeGraph: RouteGraph | null;
+  routeTraversalGeoJson: TrailFeatureCollection;
   currentLocationCoordinates: Coordinates | null;
   selectedTrailFeature: TrailFeature | null;
   selectedTrailSectionFeature: TrailFeature | null;
@@ -27,8 +23,7 @@ interface UseRouteInsightsArgs {
 }
 
 export function useRouteInsights({
-  routePlan,
-  routeGraph,
+  routeTraversalGeoJson,
   currentLocationCoordinates,
   selectedTrailFeature,
   selectedTrailSectionFeature,
@@ -37,11 +32,6 @@ export function useRouteInsights({
   isRouteTravelingReverse,
   routeElevationMetrics,
 }: UseRouteInsightsArgs) {
-  const routeTraversalGeoJson = useMemo(
-    () => createRoutePlanGeoJson(routePlan, routeGraph).traversal as TrailFeatureCollection,
-    [routeGraph, routePlan]
-  );
-
   const routeTraversalSegments = useMemo<RouteTraversalSegment[]>(() => {
     let cumulativeDistanceKm = 0;
 
