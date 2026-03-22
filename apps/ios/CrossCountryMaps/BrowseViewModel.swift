@@ -26,6 +26,34 @@ enum LoadPhase: Equatable {
     }
 }
 
+enum LocationFollowMode: Equatable {
+    case off
+    case follow
+    case followWithHeading
+
+    var systemImageName: String {
+        switch self {
+        case .off:
+            return "location"
+        case .follow:
+            return "location.fill"
+        case .followWithHeading:
+            return "location.north.line.fill"
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .off:
+            return "Center map on current location"
+        case .follow:
+            return "Enable heading-up auto rotate"
+        case .followWithHeading:
+            return "Turn off location follow"
+        }
+    }
+}
+
 protocol BrowseAPIClient {
     func fetchDestinations() async throws -> DestinationFeatureCollection
     func fetchTrails(destinationID: String) async throws -> TrailFeatureCollection
@@ -35,6 +63,7 @@ protocol BrowseAPIClient {
 
 protocol BrowseLocationServing: AnyObject {
     var onLocationUpdate: ((CLLocationCoordinate2D) -> Void)? { get set }
+    var onHeadingUpdate: ((CLLocationDirection?) -> Void)? { get set }
     var onAuthorizationUnavailable: (() -> Void)? { get set }
 
     func start()
@@ -278,6 +307,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var previewTrails: [TrailFeature] = []
     @Published private(set) var nearbyPreviewDestinations: [Destination] = []
     @Published private(set) var currentLocation: CLLocationCoordinate2D?
+    @Published private(set) var currentLocationHeading: CLLocationDirection?
     @Published private(set) var destinationsPhase: LoadPhase = .idle
     @Published private(set) var trailsPhase: LoadPhase = .idle
     @Published private(set) var previewPhase: LoadPhase = .idle
@@ -285,6 +315,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var isManualDestinationSelection = false
     @Published private(set) var fitRequestID = 0
     @Published private(set) var locationFocusRequestID = 0
+    @Published private(set) var locationFollowMode: LocationFollowMode = .off
     @Published private(set) var routePresentationRefreshID = 0
     @Published private(set) var routeDisplaySections: [PlanningSection] = []
     @Published private(set) var routeDisplaySectionNumbersByEdgeID: [String: Int] = [:]
@@ -303,8 +334,11 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var watchTransferSendState: WatchRouteTransferSendState = .idle
 
     @Published var selectedTrailID: String?
+    @Published private(set) var selectedTrailSegments: [TrailSegment] = []
     @Published private(set) var selectedTrailSegment: TrailSegment?
     @Published private(set) var selectedRouteDetailSectionEdgeID: String?
+    @Published private(set) var selectedRouteDetailResolvedSectionEdgeID: String?
+    @Published private(set) var selectedRouteDetailContext: RouteAwareTrailDetailContext?
     @Published var visibleRegionCenter: CLLocationCoordinate2D?
 
     let locationService: BrowseLocationServing
@@ -326,6 +360,7 @@ final class BrowseViewModel: ObservableObject {
     private var pendingStoredPlanningModeActive = false
     private var pendingStoredRouteOwnerDestinationID: String?
     private var pendingMapRegionPreservationDestinationID: String?
+    private var selectedTrailSegmentsRefreshID = UUID()
     private var isIgnoringMapRegionUpdatesDuringStartupRestore = false
     private var shouldPreserveMapRegionForNextAutoLocationSelection = false
     private var activeWatchTransferID: String?
@@ -359,6 +394,12 @@ final class BrowseViewModel: ObservableObject {
             }
         }
 
+        locationService.onHeadingUpdate = { [weak self] heading in
+            Task { @MainActor in
+                self?.currentLocationHeading = heading
+            }
+        }
+
         locationService.onAuthorizationUnavailable = { [weak self] in
             Task { @MainActor in
                 self?.requestError = nil
@@ -387,7 +428,11 @@ final class BrowseViewModel: ObservableObject {
     }
 
     var canEnableAutoLocation: Bool {
-        true
+        !isInPlanningMode
+    }
+
+    var isLocationFollowActive: Bool {
+        locationFollowMode != .off
     }
 
     var selectedTrail: TrailFeature? {
@@ -533,31 +578,6 @@ final class BrowseViewModel: ObservableObject {
         watchTransferAvailability == .ready || isWatchTransferTerminal
     }
 
-    var selectedRouteDetailContext: RouteAwareTrailDetailContext? {
-        guard !isInPlanningMode,
-              !routePlan.anchorEdgeIDs.isEmpty,
-              let matchingIndex = matchingPlannedSectionIndex(
-                forSelectedTrailID: selectedTrailID,
-                selectedAnchorEdgeID: selectedRouteDetailSectionEdgeID,
-                selectedSegment: selectedTrailSegment
-              ) else {
-            return nil
-        }
-
-        let summary = routeSummary
-        let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
-        let selectedSection = plannedSections[matchingIndex]
-        let selectedSectionElevation = routeElevation?.sectionElevation(for: selectedSection.edgeID)
-        return RouteAwareTrailDetailContext(
-            selectedSectionNumber: routeDisplaySectionNumbersByEdgeID[selectedSection.edgeID] ?? (matchingIndex + 1),
-            totalSections: summary.sectionCount,
-            totalDistanceKm: summary.totalDistanceKm,
-            ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
-            descentMeters: routeMetrics.map { Double($0.descentMeters) },
-            selectedSectionElevation: selectedSectionElevation
-        )
-    }
-
     func makeRouteExportFile() -> RouteExportFile? {
         guard !plannedSections.isEmpty,
               let destinationName = selectedDestination?.name else {
@@ -695,6 +715,7 @@ final class BrowseViewModel: ObservableObject {
 
         if manual {
             isManualDestinationSelection = true
+            disableLocationFollowIfNeeded()
         }
 
         if selectedDestinationID == id {
@@ -766,14 +787,18 @@ final class BrowseViewModel: ObservableObject {
         selectedTrailID = id
         selectedTrailSegment = id == nil ? nil : segment
         selectedRouteDetailSectionEdgeID = nil
+        refreshSelectedTrailDerivedState(allTrails: primaryTrails + previewTrails)
+        refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
     }
 
     func selectTrail(selection: TrailInspectionSelection?) {
         guard let trailID = selection?.trailID else {
             clearSelectedPlannedSection()
             selectedTrailID = nil
+            selectedTrailSegments = []
             selectedTrailSegment = nil
             selectedRouteDetailSectionEdgeID = nil
+            refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
             return
         }
 
@@ -805,17 +830,22 @@ final class BrowseViewModel: ObservableObject {
             )
         } else {
             selectedTrailID = trailID
+            refreshSelectedTrailDerivedState(allTrails: primaryTrails + previewTrails)
             selectedTrailSegment = selection?.segment
             selectedRouteDetailSectionEdgeID = selection?.anchorEdgeID
+            refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
         }
     }
 
     func enterPlanningMode() {
         selectedTrailID = nil
+        selectedTrailSegments = []
         selectedTrailSegment = nil
         selectedRouteDetailSectionEdgeID = nil
         clearSelectedPlannedSection()
+        disableLocationFollowIfNeeded(forceFocusRefresh: isLocationFollowActive)
         isInPlanningMode = true
+        refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
 
         if !routePlan.isEmpty {
             fitRequestID += 1
@@ -827,6 +857,7 @@ final class BrowseViewModel: ObservableObject {
     func exitPlanningMode() {
         clearSelectedPlannedSection()
         isInPlanningMode = false
+        refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
 
         if !routePlan.isEmpty {
             fitRequestID += 1
@@ -896,7 +927,19 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        disableLocationFollowForMapContextChange()
         fitRequestID += 1
+    }
+
+    func handleUserPanWhileLocationFollowing() {
+        switch locationFollowMode {
+        case .off:
+            return
+        case .follow:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        case .followWithHeading:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        }
     }
 
     func sendRouteToWatch() {
@@ -961,17 +1004,49 @@ final class BrowseViewModel: ObservableObject {
         selectDestination(id: routePlan.destinationId, manual: true)
     }
 
-    func enableAutoLocation() {
+    func toggleLocationFollow() {
+        switch locationFollowMode {
+        case .off:
+            setLocationFollowMode(.follow, forceSelectionRefresh: true)
+        case .follow:
+            setLocationFollowMode(.followWithHeading, forceSelectionRefresh: true)
+        case .followWithHeading:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        }
+    }
+
+    func disableLocationFollowForMapContextChange() {
+        guard locationFollowMode != .off else {
+            return
+        }
+
+        disableLocationFollowIfNeeded(forceFocusRefresh: true)
+    }
+
+    private func setLocationFollowMode(
+        _ mode: LocationFollowMode,
+        forceSelectionRefresh: Bool
+    ) {
         isManualDestinationSelection = false
         shouldPreserveMapRegionForNextAutoLocationSelection = true
+        locationFollowMode = mode
         locationFocusRequestID += 1
         locationService.requestCurrentLocation()
 
         if let currentLocation {
             Task {
-                await handleLocationUpdate(currentLocation, forceSelectionRefresh: true)
+                await handleLocationUpdate(currentLocation, forceSelectionRefresh: forceSelectionRefresh)
             }
         }
+    }
+
+    private func disableLocationFollowIfNeeded(forceFocusRefresh: Bool = false) {
+        guard locationFollowMode != .off || forceFocusRefresh else {
+            return
+        }
+
+        locationFollowMode = .off
+        locationFocusRequestID += 1
     }
 
     func updateVisibleRegion(_ region: MKCoordinateRegion) {
@@ -1173,10 +1248,24 @@ final class BrowseViewModel: ObservableObject {
             maxCount: AppConfig.maxNearbyDestinationPreviews
         ).filter { !lockedPrimaryDestinationIDs.contains($0.id) }
 
-        self.nearbyPreviewDestinations = previewDestinations
+        let nextPreviewDestinationIDs = previewDestinations.map(\.id)
+        let currentPreviewDestinationIDs = nearbyPreviewDestinations.map(\.id)
+        let loadedPreviewDestinationIDs = Set(previewTrails.compactMap(\.destinationId))
+
+        if nearbyPreviewDestinations != previewDestinations {
+            nearbyPreviewDestinations = previewDestinations
+        }
+
+        if nextPreviewDestinationIDs == currentPreviewDestinationIDs,
+           loadedPreviewDestinationIDs == Set(nextPreviewDestinationIDs) {
+            previewPhase = .success
+            return
+        }
 
         guard !previewDestinations.isEmpty else {
-            replaceDisplayedTrails(with: primaryTrails)
+            if !previewTrails.isEmpty {
+                replaceDisplayedTrails(with: primaryTrails)
+            }
             previewPhase = .success
             let trails = primaryTrails
             Task.detached(priority: .utility) {
@@ -1421,9 +1510,17 @@ final class BrowseViewModel: ObservableObject {
             }
         }
 
-        primaryTrails = partitionedTrails.primary
-        previewTrails = partitionedTrails.preview
-        refreshRoutePresentationDerivedState(allTrails: partitionedTrails.primary + partitionedTrails.preview)
+        if primaryTrails != partitionedTrails.primary {
+            primaryTrails = partitionedTrails.primary
+        }
+
+        if previewTrails != partitionedTrails.preview {
+            previewTrails = partitionedTrails.preview
+        }
+
+        let displayedTrails = partitionedTrails.primary + partitionedTrails.preview
+        refreshSelectedTrailDerivedState(allTrails: displayedTrails)
+        refreshRoutePresentationDerivedState(allTrails: displayedTrails)
     }
 
     private func routeDestinationIDs(for anchorEdgeIDs: [String], allTrails: [TrailFeature]) -> [String] {
@@ -1539,6 +1636,35 @@ final class BrowseViewModel: ObservableObject {
         )
     }
 
+    private func refreshSelectedTrailDerivedState(allTrails: [TrailFeature]) {
+        let refreshID = UUID()
+        selectedTrailSegmentsRefreshID = refreshID
+
+        guard let selectedTrailID,
+              let selectedTrail = allTrails.first(where: { $0.id == selectedTrailID }) else {
+            selectedTrailSegments = []
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let segments = GeoMath.trailSegments(
+                trail: selectedTrail,
+                allTrails: allTrails,
+                includeMidpoints: false
+            )
+
+            DispatchQueue.main.async {
+                guard let self,
+                      self.selectedTrailSegmentsRefreshID == refreshID,
+                      self.selectedTrailID == selectedTrailID else {
+                    return
+                }
+
+                self.selectedTrailSegments = segments
+            }
+        }
+    }
+
     private func refreshRoutePresentationDerivedState(allTrails: [TrailFeature]) {
         let nextDisplaySections = GeoMath.displayOrderedPlanningSections(
             for: routePlan.anchorEdgeIDs,
@@ -1559,6 +1685,44 @@ final class BrowseViewModel: ObservableObject {
         if didChange {
             routePresentationRefreshID += 1
         }
+
+        refreshSelectedRouteDetailDerivedState(allTrails: allTrails)
+    }
+
+    private func refreshSelectedRouteDetailDerivedState(allTrails: [TrailFeature]) {
+        guard !isInPlanningMode,
+              !routePlan.anchorEdgeIDs.isEmpty else {
+            selectedRouteDetailContext = nil
+                        selectedRouteDetailResolvedSectionEdgeID = nil
+            return
+        }
+
+        let plannedSections = GeoMath.planningSections(for: routePlan.anchorEdgeIDs, allTrails: allTrails)
+
+        guard let matchingIndex = matchingPlannedSectionIndex(
+            in: plannedSections,
+            forSelectedTrailID: selectedTrailID,
+            selectedAnchorEdgeID: selectedRouteDetailSectionEdgeID,
+            selectedSegment: selectedTrailSegment
+        ) else {
+            selectedRouteDetailContext = nil
+            selectedRouteDetailResolvedSectionEdgeID = nil
+            return
+        }
+
+        let summary = RouteSummary.from(sections: plannedSections, elevationResponse: routeElevation)
+        let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
+        let selectedSection = plannedSections[matchingIndex]
+        selectedRouteDetailResolvedSectionEdgeID = selectedSection.edgeID
+        let selectedSectionElevation = routeElevation?.sectionElevation(for: selectedSection.edgeID)
+        selectedRouteDetailContext = RouteAwareTrailDetailContext(
+            selectedSectionNumber: routeDisplaySectionNumbersByEdgeID[selectedSection.edgeID] ?? (matchingIndex + 1),
+            totalSections: summary.sectionCount,
+            totalDistanceKm: summary.totalDistanceKm,
+            ascentMeters: routeMetrics.map { Double($0.ascentMeters) },
+            descentMeters: routeMetrics.map { Double($0.descentMeters) },
+            selectedSectionElevation: selectedSectionElevation
+        )
     }
 
     private func handleWatchTransferAcknowledgement(_ acknowledgement: WatchRouteTransferAcknowledgement) {
@@ -1601,6 +1765,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func matchingPlannedSectionIndex(
+        in plannedSections: [PlanningSection],
         forSelectedTrailID selectedTrailID: String?,
         selectedAnchorEdgeID: String?,
         selectedSegment: TrailSegment?
@@ -1641,10 +1806,12 @@ final class BrowseViewModel: ObservableObject {
 
         guard !sections.isEmpty else {
             routeElevation = nil
+            refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
             return
         }
 
         routeElevation = nil
+        refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
 
         let anchorEdgeIDs = routePlan.anchorEdgeIDs
         let traversal = sections.map { section in
@@ -1671,12 +1838,14 @@ final class BrowseViewModel: ObservableObject {
                     return
                 }
                 routeElevation = response
+                refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
             } catch {
                 guard selectedDestinationID == destinationID,
                       routePlan.anchorEdgeIDs == anchorEdgeIDs else {
                     return
                 }
                 routeElevation = nil
+                refreshSelectedRouteDetailDerivedState(allTrails: primaryTrails + previewTrails)
             }
         }
     }
