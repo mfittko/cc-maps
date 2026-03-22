@@ -47,6 +47,66 @@ final class BrowseContractTests: XCTestCase {
         XCTAssertEqual(routeDirectionDisplayBearing(routeBearing: 20, mapCameraHeading: 350), 30, accuracy: 0.001)
     }
 
+    func testLocationFollowPanToleranceKeepsFollowNearCurrentLocation() {
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let nearbyMapCenter = CLLocationCoordinate2D(latitude: 59.9140, longitude: 10.7522)
+
+        XCTAssertFalse(
+            shouldCancelLocationFollowAfterPan(
+                locationFollowMode: .follow,
+                currentLocation: currentLocation,
+                mapCenter: nearbyMapCenter,
+                followToleranceMeters: AppConfig.currentLocationFollowPanToleranceMeters,
+                headingFollowToleranceMeters: AppConfig.currentLocationHeadingFollowPanToleranceMeters
+            )
+        )
+    }
+
+    func testLocationFollowPanToleranceCancelsFollowAfterMeaningfulPan() {
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let distantMapCenter = CLLocationCoordinate2D(latitude: 59.9144, longitude: 10.7522)
+
+        XCTAssertTrue(
+            shouldCancelLocationFollowAfterPan(
+                locationFollowMode: .follow,
+                currentLocation: currentLocation,
+                mapCenter: distantMapCenter,
+                followToleranceMeters: AppConfig.currentLocationFollowPanToleranceMeters,
+                headingFollowToleranceMeters: AppConfig.currentLocationHeadingFollowPanToleranceMeters
+            )
+        )
+    }
+
+    func testHeadingFollowPanToleranceAllowsSlightlyLargerMapDrift() {
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let moderateMapCenter = CLLocationCoordinate2D(latitude: 59.91425, longitude: 10.7522)
+
+        XCTAssertFalse(
+            shouldCancelLocationFollowAfterPan(
+                locationFollowMode: .followWithHeading,
+                currentLocation: currentLocation,
+                mapCenter: moderateMapCenter,
+                followToleranceMeters: AppConfig.currentLocationFollowPanToleranceMeters,
+                headingFollowToleranceMeters: AppConfig.currentLocationHeadingFollowPanToleranceMeters
+            )
+        )
+    }
+
+    func testHeadingFollowPanToleranceStillCancelsAfterMeaningfulPan() {
+        let currentLocation = CLLocationCoordinate2D(latitude: 59.9139, longitude: 10.7522)
+        let distantMapCenter = CLLocationCoordinate2D(latitude: 59.9147, longitude: 10.7522)
+
+        XCTAssertTrue(
+            shouldCancelLocationFollowAfterPan(
+                locationFollowMode: .followWithHeading,
+                currentLocation: currentLocation,
+                mapCenter: distantMapCenter,
+                followToleranceMeters: AppConfig.currentLocationFollowPanToleranceMeters,
+                headingFollowToleranceMeters: AppConfig.currentLocationHeadingFollowPanToleranceMeters
+            )
+        )
+    }
+
     func testTrailProximityAutoSelectionMatchesSharedFixture() throws {
         let fixture: TrailProximityFixture = try FixtureLoader.decode("trail-proximity-auto-selection.json")
 
@@ -714,7 +774,7 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
-    func testLocationFollowToggleEnablesHeadingUpModeAndTurnsOff() {
+    func testLocationFollowToggleCyclesThroughCenterFollowHeadingAndOff() {
         let locationService = LocationServiceSpy()
         let viewModel = BrowseViewModel(
             apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
@@ -726,16 +786,155 @@ final class BrowseContractTests: XCTestCase {
 
         viewModel.toggleLocationFollow()
 
-        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.followWithHeading)
+        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.follow)
         XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+
+        viewModel.toggleLocationFollow()
+
+        XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.followWithHeading)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 2)
 
         let locationFocusRequestIDBeforeDisable = viewModel.locationFocusRequestID
 
         viewModel.toggleLocationFollow()
 
         XCTAssertEqual(viewModel.locationFollowMode, LocationFollowMode.off)
-        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
+        XCTAssertEqual(locationService.requestCurrentLocationCallCount, 2)
         XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforeDisable + 1)
+    }
+
+    @MainActor
+    func testPlanningModeDisablesAutoLocationAvailability() {
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        XCTAssertTrue(viewModel.canEnableAutoLocation)
+
+        viewModel.enterPlanningMode()
+
+        XCTAssertFalse(viewModel.canEnableAutoLocation)
+
+        viewModel.exitPlanningMode()
+
+        XCTAssertTrue(viewModel.canEnableAutoLocation)
+    }
+
+    @MainActor
+    func testEnteringPlanningModeTurnsOffLocationFollow() {
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.toggleLocationFollow()
+        viewModel.toggleLocationFollow()
+        XCTAssertEqual(viewModel.locationFollowMode, .followWithHeading)
+
+        let locationFocusRequestIDBeforePlanning = viewModel.locationFocusRequestID
+
+        viewModel.enterPlanningMode()
+
+        XCTAssertEqual(viewModel.locationFollowMode, .off)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforePlanning + 1)
+    }
+
+    @MainActor
+    func testUserMapInteractionDisablesCenterFollowMode() {
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.toggleLocationFollow()
+        XCTAssertEqual(viewModel.locationFollowMode, .follow)
+
+        let locationFocusRequestIDBeforeInteraction = viewModel.locationFocusRequestID
+
+        viewModel.handleUserPanWhileLocationFollowing()
+
+        XCTAssertEqual(viewModel.locationFollowMode, .off)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforeInteraction + 1)
+    }
+
+    @MainActor
+    func testUserMapInteractionDisablesAutoRotateMode() {
+        let locationService = LocationServiceSpy()
+        let viewModel = BrowseViewModel(
+            apiClient: BrowseAPISpy(destinationsResponse: [], trailsByDestination: [:]),
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.toggleLocationFollow()
+        viewModel.toggleLocationFollow()
+        XCTAssertEqual(viewModel.locationFollowMode, .followWithHeading)
+
+        let locationFocusRequestIDBeforeInteraction = viewModel.locationFocusRequestID
+
+        viewModel.handleUserPanWhileLocationFollowing()
+
+        XCTAssertEqual(viewModel.locationFollowMode, .off)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforeInteraction + 1)
+    }
+
+    @MainActor
+    func testFocusingPlannedRouteDisablesAutoRotateMode() async throws {
+        let locationService = LocationServiceSpy()
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: locationService,
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
+        await waitUntil {
+            viewModel.selectedDestinationID == "1" && viewModel.trailsPhase == .success
+        }
+
+        viewModel.enterPlanningMode()
+        viewModel.selectTrail(
+            selection: TrailInspectionSelection(
+                trailID: "101",
+                anchorEdgeID: "101:0",
+                segment: nil
+            )
+        )
+
+        await waitUntil {
+            !viewModel.routePlan.isEmpty
+        }
+
+        viewModel.exitPlanningMode()
+        viewModel.toggleLocationFollow()
+        viewModel.toggleLocationFollow()
+
+        XCTAssertEqual(viewModel.locationFollowMode, .followWithHeading)
+        let locationFocusRequestIDBeforeFocus = viewModel.locationFocusRequestID
+        let fitRequestIDBeforeFocus = viewModel.fitRequestID
+
+        viewModel.focusPlannedRouteIfAvailable()
+
+        XCTAssertEqual(viewModel.locationFollowMode, .off)
+        XCTAssertEqual(viewModel.locationFocusRequestID, locationFocusRequestIDBeforeFocus + 1)
+        XCTAssertEqual(viewModel.fitRequestID, fitRequestIDBeforeFocus + 1)
     }
 
     @MainActor

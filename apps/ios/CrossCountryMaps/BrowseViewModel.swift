@@ -45,11 +45,11 @@ enum LocationFollowMode: Equatable {
     var accessibilityLabel: String {
         switch self {
         case .off:
-            return "Enable heading up location follow"
+            return "Center map on current location"
         case .follow:
-            return "Enable heading up map follow"
+            return "Enable heading-up auto rotate"
         case .followWithHeading:
-            return "Turn off automatic location follow"
+            return "Turn off location follow"
         }
     }
 }
@@ -424,7 +424,7 @@ final class BrowseViewModel: ObservableObject {
     }
 
     var canEnableAutoLocation: Bool {
-        true
+        !isInPlanningMode
     }
 
     var isLocationFollowActive: Bool {
@@ -857,6 +857,7 @@ final class BrowseViewModel: ObservableObject {
         selectedTrailSegment = nil
         selectedRouteDetailSectionEdgeID = nil
         clearSelectedPlannedSection()
+        disableLocationFollowIfNeeded(forceFocusRefresh: isLocationFollowActive)
         isInPlanningMode = true
 
         if !routePlan.isEmpty {
@@ -938,7 +939,19 @@ final class BrowseViewModel: ObservableObject {
             return
         }
 
+        disableLocationFollowForMapContextChange()
         fitRequestID += 1
+    }
+
+    func handleUserPanWhileLocationFollowing() {
+        switch locationFollowMode {
+        case .off:
+            return
+        case .follow:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        case .followWithHeading:
+            disableLocationFollowIfNeeded(forceFocusRefresh: true)
+        }
     }
 
     func sendRouteToWatch() {
@@ -1010,10 +1023,20 @@ final class BrowseViewModel: ObservableObject {
     func toggleLocationFollow() {
         switch locationFollowMode {
         case .off:
+            setLocationFollowMode(.follow, forceSelectionRefresh: true)
+        case .follow:
             setLocationFollowMode(.followWithHeading, forceSelectionRefresh: true)
-        case .follow, .followWithHeading:
+        case .followWithHeading:
             disableLocationFollowIfNeeded(forceFocusRefresh: true)
         }
+    }
+
+    func disableLocationFollowForMapContextChange() {
+        guard locationFollowMode != .off else {
+            return
+        }
+
+        disableLocationFollowIfNeeded(forceFocusRefresh: true)
     }
 
     private func setLocationFollowMode(

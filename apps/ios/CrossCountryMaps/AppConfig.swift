@@ -20,6 +20,12 @@ enum AppConfig {
     static let currentLocationHeadingFilterDegrees = 1.5
     static let currentLocationHeadingCameraUpdateThresholdDegrees = 1.0
     static let currentLocationCameraRecenterThresholdMeters = 3.0
+    static let currentLocationFollowPanToleranceMeters = 25.0
+    static let currentLocationHeadingFollowPanToleranceMeters = 60.0
+    static let currentLocationNavigationCameraDistanceMeters = 2200.0
+    static let currentLocationNavigationCameraDistanceUpdateThresholdMeters = 25.0
+    static let currentLocationHeadingFollowEntryMinimumDistanceDeltaMeters = 120.0
+    static let currentLocationHeadingFollowEntryAnimationDelaySeconds = 0.18
     static let currentLocationMinimumCourseSpeedMetersPerSecond = 0.8
     static let previewRegionRecheckDistanceKm = 0.35
     static let suggestedDestinationRadiusKm = 20.0

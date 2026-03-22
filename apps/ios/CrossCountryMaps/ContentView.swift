@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var isDestinationPickerPresented = false
     @State private var activeShareSheet: ShareSheetPayload?
     @State private var isDestinationOverlayExpanded = true
+    @State private var usesManualDestinationChrome = false
 
     var body: some View {
         NavigationStack {
@@ -40,10 +41,14 @@ struct ContentView: View {
                         locationFocusRequestID: viewModel.locationFocusRequestID,
                         locationFollowMode: viewModel.locationFollowMode,
                         onDestinationTap: { destinationID in
+                            usesManualDestinationChrome = true
                             viewModel.selectDestination(id: destinationID, manual: true)
                         },
                         onTrailTap: { selection in
                             viewModel.selectTrail(selection: selection)
+                        },
+                        onUserPanWhileLocationFollowing: {
+                            viewModel.handleUserPanWhileLocationFollowing()
                         },
                         onRegionDidChange: { region in
                             viewModel.updateVisibleRegion(region)
@@ -74,6 +79,7 @@ struct ContentView: View {
                     destinations: viewModel.destinations,
                     selectedDestinationID: viewModel.selectedDestinationID,
                     onSelect: { destinationID in
+                        usesManualDestinationChrome = true
                         viewModel.selectDestination(id: destinationID, manual: true)
                     }
                 )
@@ -84,7 +90,11 @@ struct ContentView: View {
                 }
             }
             .onChange(of: viewModel.isManualDestinationSelection) { _, isManualSelection in
-                if isManualSelection {
+                if !isManualSelection {
+                    usesManualDestinationChrome = false
+                }
+
+                if isManualSelection && usesManualDestinationChrome {
                     isDestinationOverlayExpanded = true
                 }
             }
@@ -99,7 +109,7 @@ struct ContentView: View {
 
     private var topOverlay: some View {
         Group {
-            if viewModel.isManualDestinationSelection && isDestinationOverlayExpanded {
+            if viewModel.isManualDestinationSelection && usesManualDestinationChrome && isDestinationOverlayExpanded {
                 VStack(alignment: .leading, spacing: 10) {
                     Button {
                         isDestinationPickerPresented = true
@@ -132,6 +142,7 @@ struct ContentView: View {
                             HStack(spacing: 8) {
                                 ForEach(viewModel.nearbyPreviewDestinations) { destination in
                                     Button(destination.name) {
+                                        usesManualDestinationChrome = true
                                         viewModel.selectDestination(id: destination.id, manual: true)
                                     }
                                     .font(.caption.weight(.semibold))
@@ -161,27 +172,43 @@ struct ContentView: View {
                     closeDestinationOverlayButton
                         .padding(12)
                 }
-            } else {
-                HStack(spacing: 8) {
+            } else if viewModel.isManualDestinationSelection && usesManualDestinationChrome {
+                HStack(alignment: .center, spacing: 8) {
                     if viewModel.canEnableAutoLocation {
                         locationFollowButton
                     }
                     manualDestinationMenu
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, 4)
+                .padding(.top, 60)
+                .padding(.leading, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .center, spacing: 8) {
+                    if viewModel.canEnableAutoLocation {
+                        locationFollowButton
+                    }
+                    compactDestinationTogglePill
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, 60)
+                .padding(.leading, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     @ViewBuilder
     private var mapOverlayControls: some View {
-        if viewModel.canEnableAutoLocation && viewModel.isManualDestinationSelection && isDestinationOverlayExpanded {
-            HStack(spacing: 10) {
+        if viewModel.canEnableAutoLocation &&
+            viewModel.isManualDestinationSelection &&
+            usesManualDestinationChrome &&
+            isDestinationOverlayExpanded {
+            HStack {
                 locationFollowButton
                 Spacer(minLength: 0)
             }
-            .padding(.top, 12)
+            .padding(.top, 10)
             .padding(.leading, 4)
         }
     }
@@ -324,15 +351,40 @@ struct ContentView: View {
 
     private var manualDestinationMenu: some View {
         Button {
+            usesManualDestinationChrome = true
             isDestinationOverlayExpanded = true
             isDestinationPickerPresented = true
         } label: {
             Label(viewModel.selectedDestination?.name ?? "Choose", systemImage: "line.3.horizontal.decrease.circle")
                 .font(.caption.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .frame(height: 44)
                 .background(.thinMaterial, in: Capsule())
                 .foregroundStyle(.primary)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open destination selection")
+    }
+
+    private var compactDestinationTogglePill: some View {
+        Button {
+            usesManualDestinationChrome = true
+            isDestinationOverlayExpanded = true
+            isDestinationPickerPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                Text(viewModel.selectedDestination?.name ?? "Choose")
+                    .lineLimit(1)
+
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption.weight(.semibold))
+            .padding(.horizontal, 12)
+            .frame(height: 44)
+            .background(.thinMaterial, in: Capsule())
+            .foregroundStyle(.primary)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open destination selection")

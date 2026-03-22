@@ -25,6 +25,7 @@ struct TrailMapView: UIViewRepresentable {
     let locationFollowMode: LocationFollowMode
     let onDestinationTap: (String) -> Void
     let onTrailTap: (TrailInspectionSelection?) -> Void
+    let onUserPanWhileLocationFollowing: () -> Void
     let onRegionDidChange: (MKCoordinateRegion) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -76,6 +77,13 @@ struct TrailMapView: UIViewRepresentable {
             context.coordinator.focusMap(on: mapView, coordinates: focusedPlannedSectionCoordinates)
         }
 
+        if context.coordinator.lastLocationFocusRequestID != locationFocusRequestID {
+            context.coordinator.lastLocationFocusRequestID = locationFocusRequestID
+            context.coordinator.updateTrackingMode(on: mapView)
+        } else if context.coordinator.lastLocationFollowMode != locationFollowMode {
+            context.coordinator.updateTrackingMode(on: mapView)
+        }
+
         if context.coordinator.lastFitRequestID != fitRequestID {
             context.coordinator.lastFitRequestID = fitRequestID
 
@@ -84,13 +92,6 @@ struct TrailMapView: UIViewRepresentable {
             } else {
                 context.coordinator.fitMapToVisibleContent(on: mapView)
             }
-        }
-
-        if context.coordinator.lastLocationFocusRequestID != locationFocusRequestID {
-            context.coordinator.lastLocationFocusRequestID = locationFocusRequestID
-            context.coordinator.updateTrackingMode(on: mapView)
-        } else if context.coordinator.lastLocationFollowMode != locationFollowMode {
-            context.coordinator.updateTrackingMode(on: mapView)
         }
     }
 
@@ -119,7 +120,10 @@ struct TrailMapView: UIViewRepresentable {
         var currentLocationAnnotation: CurrentLocationAnnotation?
         var isRouteDirectionRotationActive = false
         var pendingRouteDirectionRestoreWork: DispatchWorkItem?
+        var pendingHeadingFollowTransitionWork: DispatchWorkItem?
         var lastObservedMapHeading: CLLocationDirection?
+        var wasUserPanGestureActive = false
+        var shouldSuppressNextTrackingModeCameraReset = false
 
         init(_ parent: TrailMapView) {
             self.parent = parent
@@ -167,7 +171,11 @@ struct TrailMapView: UIViewRepresentable {
             case .follow:
                 if let currentLocation = parent.currentLocation,
                    coordinatesDiffer(previousLocation, currentLocation) {
-                    centerMapOnCurrentLocation(currentLocation, on: mapView)
+                    centerMapOnCurrentLocation(
+                        currentLocation,
+                        on: mapView,
+                        enforceNavigationZoom: false
+                    )
                 }
             case .followWithHeading:
                 if let currentLocation = parent.currentLocation {
@@ -175,7 +183,8 @@ struct TrailMapView: UIViewRepresentable {
                         currentLocation,
                         bearing: currentLocationBearing,
                         on: mapView,
-                        animated: coordinatesDiffer(previousLocation, currentLocation)
+                        animated: coordinatesDiffer(previousLocation, currentLocation),
+                        enforceNavigationZoom: false
                     )
                 }
             }
@@ -419,9 +428,16 @@ struct TrailMapView: UIViewRepresentable {
         func updateTrackingMode(on mapView: MKMapView) {
             let previousMode = lastLocationFollowMode
             lastLocationFollowMode = parent.locationFollowMode
+            pendingHeadingFollowTransitionWork?.cancel()
+            pendingHeadingFollowTransitionWork = nil
 
             switch parent.locationFollowMode {
             case .off:
+                if shouldSuppressNextTrackingModeCameraReset {
+                    shouldSuppressNextTrackingModeCameraReset = false
+                    return
+                }
+
                 if previousMode == .followWithHeading {
                     resetMapHeading(on: mapView)
                 }
@@ -430,38 +446,105 @@ struct TrailMapView: UIViewRepresentable {
                     resetMapHeading(on: mapView)
                 }
                 if let currentLocation = parent.currentLocation {
-                    centerMapOnCurrentLocation(currentLocation, on: mapView)
+                    centerMapOnCurrentLocation(
+                        currentLocation,
+                        on: mapView,
+                        enforceNavigationZoom: true
+                    )
                 }
             case .followWithHeading:
                 if let currentLocation = parent.currentLocation {
-                    followCurrentLocationWithHeading(
+                    transitionIntoHeadingFollowIfNeeded(
                         currentLocation,
                         bearing: currentLocationBearing,
-                        on: mapView,
-                        animated: true
+                        previousMode: previousMode,
+                        on: mapView
                     )
                 }
             }
         }
 
-        private func centerMapOnCurrentLocation(_ currentLocation: CLLocationCoordinate2D, on mapView: MKMapView) {
-            mapView.setRegion(
-                MKCoordinateRegion(
-                    center: currentLocation,
-                    span: MKCoordinateSpan(latitudeDelta: 0.09, longitudeDelta: 0.09)
-                ),
-                animated: true
+        private func transitionIntoHeadingFollowIfNeeded(
+            _ currentLocation: CLLocationCoordinate2D,
+            bearing: CLLocationDirection?,
+            previousMode: LocationFollowMode,
+            on mapView: MKMapView
+        ) {
+            let targetDistance = AppConfig.currentLocationNavigationCameraDistanceMeters
+            let currentDistance = mapView.camera.centerCoordinateDistance
+
+            guard previousMode != .followWithHeading,
+                  currentDistance - targetDistance >= AppConfig.currentLocationHeadingFollowEntryMinimumDistanceDeltaMeters else {
+                followCurrentLocationWithHeading(
+                    currentLocation,
+                    bearing: bearing,
+                    on: mapView,
+                    animated: true,
+                    enforceNavigationZoom: true
+                )
+                return
+            }
+
+            let intermediateDistance = max(targetDistance, (currentDistance + targetDistance) / 2)
+            let zoomCamera = mapView.camera
+            zoomCamera.centerCoordinate = currentLocation
+            zoomCamera.centerCoordinateDistance = intermediateDistance
+            mapView.setCamera(zoomCamera, animated: true)
+
+            var scheduledWorkItem: DispatchWorkItem?
+            let workItem = DispatchWorkItem { [weak self, weak mapView] in
+                guard let self,
+                      let mapView,
+                      let scheduledWorkItem,
+                      !scheduledWorkItem.isCancelled else {
+                    return
+                }
+
+                self.followCurrentLocationWithHeading(
+                    currentLocation,
+                    bearing: bearing,
+                    on: mapView,
+                    animated: true,
+                    enforceNavigationZoom: true
+                )
+                self.pendingHeadingFollowTransitionWork = nil
+            }
+
+            scheduledWorkItem = workItem
+            pendingHeadingFollowTransitionWork = workItem
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + AppConfig.currentLocationHeadingFollowEntryAnimationDelaySeconds,
+                execute: workItem
             )
+        }
+
+        private func centerMapOnCurrentLocation(
+            _ currentLocation: CLLocationCoordinate2D,
+            on mapView: MKMapView,
+            enforceNavigationZoom: Bool
+        ) {
+            let camera = mapView.camera
+            camera.centerCoordinate = currentLocation
+            camera.heading = 0
+            if enforceNavigationZoom {
+                camera.centerCoordinateDistance = AppConfig.currentLocationNavigationCameraDistanceMeters
+            }
+            mapView.setCamera(camera, animated: true)
         }
 
         private func followCurrentLocationWithHeading(
             _ currentLocation: CLLocationCoordinate2D,
             bearing: CLLocationDirection?,
             on mapView: MKMapView,
-            animated: Bool
+            animated: Bool,
+            enforceNavigationZoom: Bool
         ) {
             guard let normalizedBearing = normalizedLocationDirection(bearing) else {
-                centerMapOnCurrentLocation(currentLocation, on: mapView)
+                centerMapOnCurrentLocation(
+                    currentLocation,
+                    on: mapView,
+                    enforceNavigationZoom: enforceNavigationZoom
+                )
                 return
             }
 
@@ -471,10 +554,14 @@ struct TrailMapView: UIViewRepresentable {
                 from: mapView.camera.centerCoordinate,
                 to: currentLocation
             ) * 1000
+            let cameraDistanceDelta = abs(
+                mapView.camera.centerCoordinateDistance - AppConfig.currentLocationNavigationCameraDistanceMeters
+            )
 
             guard
                 headingDelta >= AppConfig.currentLocationHeadingCameraUpdateThresholdDegrees ||
-                centerDistanceMeters >= AppConfig.currentLocationCameraRecenterThresholdMeters
+                centerDistanceMeters >= AppConfig.currentLocationCameraRecenterThresholdMeters ||
+                (enforceNavigationZoom && cameraDistanceDelta >= AppConfig.currentLocationNavigationCameraDistanceUpdateThresholdMeters)
             else {
                 return
             }
@@ -482,6 +569,9 @@ struct TrailMapView: UIViewRepresentable {
             let camera = mapView.camera
             camera.centerCoordinate = currentLocation
             camera.heading = normalizedBearing
+            if enforceNavigationZoom {
+                camera.centerCoordinateDistance = AppConfig.currentLocationNavigationCameraDistanceMeters
+            }
             mapView.setCamera(camera, animated: animated)
         }
 
@@ -894,13 +984,35 @@ struct TrailMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            let shouldCancelLocationFollow = wasUserPanGestureActive && shouldCancelLocationFollowAfterPan(
+                locationFollowMode: parent.locationFollowMode,
+                currentLocation: parent.currentLocation,
+                mapCenter: mapView.region.center,
+                followToleranceMeters: AppConfig.currentLocationFollowPanToleranceMeters,
+                headingFollowToleranceMeters: AppConfig.currentLocationHeadingFollowPanToleranceMeters
+            )
+
+            if shouldCancelLocationFollow {
+                shouldSuppressNextTrackingModeCameraReset = true
+                DispatchQueue.main.async {
+                    self.parent.onUserPanWhileLocationFollowing()
+                }
+            }
+
+            wasUserPanGestureActive = false
             syncAnnotations(on: mapView)
-            syncCurrentLocationPresentation(on: mapView)
+            if !shouldCancelLocationFollow {
+                syncCurrentLocationPresentation(on: mapView)
+            }
             refreshTrailSegmentLabelVisibility(on: mapView)
             let region = mapView.region
             DispatchQueue.main.async {
                 self.parent.onRegionDidChange(region)
             }
+        }
+
+        func mapView(_ mapView: MKMapView, regionWillChangeAnimated animated: Bool) {
+            wasUserPanGestureActive = isUserPanGestureActive(in: mapView)
         }
 
         func mapViewDidChangeVisibleRegion(_ mapView: MKMapView) {
@@ -922,6 +1034,24 @@ struct TrailMapView: UIViewRepresentable {
 
             beginRouteDirectionRotation(on: mapView)
             scheduleRouteDirectionRotationRestore(on: mapView)
+        }
+
+        private func isUserPanGestureActive(in mapView: MKMapView) -> Bool {
+            mapView.subviews
+                .compactMap(\.gestureRecognizers)
+                .flatMap { $0 }
+                .contains { gestureRecognizer in
+                    guard gestureRecognizer is UIPanGestureRecognizer else {
+                        return false
+                    }
+
+                    switch gestureRecognizer.state {
+                    case .began, .changed, .ended:
+                        return true
+                    default:
+                        return false
+                    }
+                }
         }
 
         func mapView(_ mapView: MKMapView, didAdd views: [MKAnnotationView]) {
@@ -1443,6 +1573,36 @@ func routeDirectionDisplayBearing(
     mapCameraHeading: CLLocationDirection
 ) -> CLLocationDirection {
     normalizedLocationDirection(routeBearing - mapCameraHeading) ?? routeBearing
+}
+
+func shouldCancelLocationFollowAfterPan(
+    locationFollowMode: LocationFollowMode,
+    currentLocation: CLLocationCoordinate2D?,
+    mapCenter: CLLocationCoordinate2D,
+    followToleranceMeters: Double,
+    headingFollowToleranceMeters: Double
+) -> Bool {
+    guard locationFollowMode != .off else {
+        return false
+    }
+
+    guard let currentLocation else {
+        return true
+    }
+
+    let centerDistanceMeters = GeoMath.distanceKilometers(from: currentLocation, to: mapCenter) * 1000
+    let toleranceMeters: Double
+
+    switch locationFollowMode {
+    case .off:
+        return false
+    case .follow:
+        toleranceMeters = followToleranceMeters
+    case .followWithHeading:
+        toleranceMeters = headingFollowToleranceMeters
+    }
+
+    return centerDistanceMeters > toleranceMeters
 }
 
 private extension UIColor {
