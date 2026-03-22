@@ -1251,10 +1251,24 @@ final class BrowseViewModel: ObservableObject {
             maxCount: AppConfig.maxNearbyDestinationPreviews
         ).filter { !lockedPrimaryDestinationIDs.contains($0.id) }
 
-        self.nearbyPreviewDestinations = previewDestinations
+        let nextPreviewDestinationIDs = previewDestinations.map(\.id)
+        let currentPreviewDestinationIDs = nearbyPreviewDestinations.map(\.id)
+        let loadedPreviewDestinationIDs = Set(previewTrails.compactMap(\.destinationId))
+
+        if nearbyPreviewDestinations != previewDestinations {
+            nearbyPreviewDestinations = previewDestinations
+        }
+
+        if nextPreviewDestinationIDs == currentPreviewDestinationIDs,
+           loadedPreviewDestinationIDs == Set(nextPreviewDestinationIDs) {
+            previewPhase = .success
+            return
+        }
 
         guard !previewDestinations.isEmpty else {
-            replaceDisplayedTrails(with: primaryTrails)
+            if !previewTrails.isEmpty {
+                replaceDisplayedTrails(with: primaryTrails)
+            }
             previewPhase = .success
             let trails = primaryTrails
             Task.detached(priority: .utility) {
@@ -1499,8 +1513,14 @@ final class BrowseViewModel: ObservableObject {
             }
         }
 
-        primaryTrails = partitionedTrails.primary
-        previewTrails = partitionedTrails.preview
+        if primaryTrails != partitionedTrails.primary {
+            primaryTrails = partitionedTrails.primary
+        }
+
+        if previewTrails != partitionedTrails.preview {
+            previewTrails = partitionedTrails.preview
+        }
+
         let displayedTrails = partitionedTrails.primary + partitionedTrails.preview
         refreshSelectedTrailDerivedState(allTrails: displayedTrails)
         refreshRoutePresentationDerivedState(allTrails: displayedTrails)

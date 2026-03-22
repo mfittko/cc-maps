@@ -1022,6 +1022,51 @@ final class BrowseContractTests: XCTestCase {
     }
 
     @MainActor
+    func testNearbyPreviewRecheckSkipsRefetchWhenPreviewDestinationsAreUnchanged() async throws {
+        let apiClient = BrowseAPISpy(
+            destinationsResponse: [
+                makeDestination(id: "1", name: "Oslo", latitude: 59.9139, longitude: 10.7522),
+                makeDestination(id: "2", name: "Sognsvann", latitude: 59.9944, longitude: 10.6736),
+            ],
+            trailsByDestination: [
+                "1": [try makeTrail(id: 101, destinationId: 1, latitude: 59.9139, longitude: 10.7522)],
+                "2": [try makeTrail(id: 202, destinationId: 2, latitude: 59.9944, longitude: 10.6736)],
+            ]
+        )
+        let viewModel = BrowseViewModel(
+            apiClient: apiClient,
+            locationService: LocationServiceSpy(),
+            timingConfig: .immediate
+        )
+
+        viewModel.start()
+        await waitUntil { !viewModel.destinations.isEmpty }
+        viewModel.selectDestination(id: "1", manual: true)
+
+        await waitUntil {
+            viewModel.previewPhase == .success &&
+            viewModel.previewTrails.map(\.id) == ["202"]
+        }
+
+        let callLogBeforeRecheck = apiClient.callLog
+
+        viewModel.updateVisibleRegion(
+            MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 59.9155, longitude: 10.7505),
+                span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)
+            )
+        )
+
+        await waitUntil {
+            viewModel.previewPhase == .success
+        }
+
+        XCTAssertEqual(viewModel.nearbyPreviewDestinations.map(\.id), ["2"])
+        XCTAssertEqual(viewModel.previewTrails.map(\.id), ["202"])
+        XCTAssertEqual(apiClient.callLog, callLogBeforeRecheck)
+    }
+
+    @MainActor
     func testBrowseSettingsPersistDestinationAndMapRegionChanges() async throws {
         let browseSettingsStore = BrowseSettingsStoreSpy()
         let apiClient = BrowseAPISpy(
