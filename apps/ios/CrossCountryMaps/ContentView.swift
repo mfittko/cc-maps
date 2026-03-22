@@ -245,7 +245,7 @@ struct ContentView: View {
         } else if let trail = viewModel.selectedTrail {
             TrailDetailCard(
                 trail: trail,
-                allTrails: viewModel.primaryTrails + viewModel.previewTrails,
+                trailSegments: viewModel.selectedTrailSegments,
                 selectedSegment: viewModel.selectedTrailSegment,
                 routeContext: viewModel.selectedRouteDetailContext
             ) {
@@ -472,14 +472,10 @@ private struct DestinationPickerSheet: View {
 
 private struct TrailDetailCard: View {
     let trail: TrailFeature
-    let allTrails: [TrailFeature]
+    let trailSegments: [TrailSegment]
     let selectedSegment: TrailSegment?
     let routeContext: RouteAwareTrailDetailContext?
     let onClose: () -> Void
-
-    private var trailSegments: [TrailSegment] {
-        trail.trailSegments(allTrails: allTrails)
-    }
 
     private var sectionCount: Int {
         trailSegments.count
