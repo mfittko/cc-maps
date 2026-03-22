@@ -29,6 +29,7 @@ struct ContentView: View {
                         selectedTrailID: viewModel.selectedTrailID,
                         selectedTrailSegment: viewModel.selectedTrailSegment,
                         selectedRouteDetailSectionEdgeID: viewModel.selectedRouteDetailSectionEdgeID,
+                        selectedRouteDetailResolvedSectionEdgeID: viewModel.selectedRouteDetailResolvedSectionEdgeID,
                         selectedPlannedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                         routeDisplaySections: viewModel.routeDisplaySections,
                         routePresentationRefreshID: viewModel.routePresentationRefreshID,

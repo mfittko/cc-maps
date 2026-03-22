@@ -337,6 +337,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var selectedTrailSegments: [TrailSegment] = []
     @Published private(set) var selectedTrailSegment: TrailSegment?
     @Published private(set) var selectedRouteDetailSectionEdgeID: String?
+    @Published private(set) var selectedRouteDetailResolvedSectionEdgeID: String?
     @Published private(set) var selectedRouteDetailContext: RouteAwareTrailDetailContext?
     @Published var visibleRegionCenter: CLLocationCoordinate2D?
 
@@ -1696,6 +1697,7 @@ final class BrowseViewModel: ObservableObject {
         guard !isInPlanningMode,
               !routePlan.anchorEdgeIDs.isEmpty else {
             selectedRouteDetailContext = nil
+                        selectedRouteDetailResolvedSectionEdgeID = nil
             return
         }
 
@@ -1708,12 +1710,14 @@ final class BrowseViewModel: ObservableObject {
             selectedSegment: selectedTrailSegment
         ) else {
             selectedRouteDetailContext = nil
+            selectedRouteDetailResolvedSectionEdgeID = nil
             return
         }
 
         let summary = RouteSummary.from(sections: plannedSections, elevationResponse: routeElevation)
         let routeMetrics = routeElevation?.route.status == "ok" ? routeElevation?.route.metrics : nil
         let selectedSection = plannedSections[matchingIndex]
+        selectedRouteDetailResolvedSectionEdgeID = selectedSection.edgeID
         let selectedSectionElevation = routeElevation?.sectionElevation(for: selectedSection.edgeID)
         selectedRouteDetailContext = RouteAwareTrailDetailContext(
             selectedSectionNumber: routeDisplaySectionNumbersByEdgeID[selectedSection.edgeID] ?? (matchingIndex + 1),

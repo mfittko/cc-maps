@@ -12,6 +12,7 @@ struct TrailMapView: UIViewRepresentable {
     let selectedTrailID: String?
     let selectedTrailSegment: TrailSegment?
     let selectedRouteDetailSectionEdgeID: String?
+    let selectedRouteDetailResolvedSectionEdgeID: String?
     let selectedPlannedSectionEdgeID: String?
     let routeDisplaySections: [PlanningSection]
     let routePresentationRefreshID: Int
@@ -105,7 +106,7 @@ struct TrailMapView: UIViewRepresentable {
         var lastEmphasisOverlaySignature = ""
         var lastSegmentAnnotationSignature = ""
         var lastRoutePresentationRefreshID = 0
-        var lastSelectedPlannedSectionEdgeID: String?
+        var lastSelectedRouteSectionEdgeID: String?
         var pendingPlanningWork: DispatchWorkItem?
         var lastFitRequestID = 0
         var lastMapRegionRestoreRequestID = 0
@@ -219,6 +220,9 @@ struct TrailMapView: UIViewRepresentable {
                 "preview:\(parent.nearbyPreviewDestinationIDs.sorted().joined(separator: ","))",
                 "trails:\(displayedTrails.map(\.id).joined(separator: ","))",
                 "segment-trail:\(parent.selectedTrailID ?? "")",
+                "route-detail:\(parent.selectedRouteDetailSectionEdgeID ?? "")",
+                "route-detail-resolved:\(parent.selectedRouteDetailResolvedSectionEdgeID ?? "")",
+                "planned-section:\(parent.selectedPlannedSectionEdgeID ?? "")",
                 "segment-visible:\(shouldShowSegmentLabels ? "1" : "0")"
             ].joined(separator: "|")
 
@@ -328,7 +332,7 @@ struct TrailMapView: UIViewRepresentable {
             let plannedSections = parent.routeDisplaySections
 
             guard !plannedSections.isEmpty else {
-                lastSelectedPlannedSectionEdgeID = parent.selectedPlannedSectionEdgeID
+                lastSelectedRouteSectionEdgeID = currentSelectedRouteSectionEdgeID
                 return
             }
 
@@ -339,18 +343,18 @@ struct TrailMapView: UIViewRepresentable {
         }
 
         func syncRouteSelectionStyling(on mapView: MKMapView) {
-            guard lastSelectedPlannedSectionEdgeID != parent.selectedPlannedSectionEdgeID else {
+            guard lastSelectedRouteSectionEdgeID != currentSelectedRouteSectionEdgeID else {
                 return
             }
 
-            lastSelectedPlannedSectionEdgeID = parent.selectedPlannedSectionEdgeID
+            lastSelectedRouteSectionEdgeID = currentSelectedRouteSectionEdgeID
 
             for overlay in mapView.overlays {
                 guard let routeOverlay = overlay as? RouteSectionOverlay else {
                     continue
                 }
 
-                let shouldBeSelected = routeOverlay.edgeID == parent.selectedPlannedSectionEdgeID
+                let shouldBeSelected = routeOverlay.edgeID == currentSelectedRouteSectionEdgeID
                 guard routeOverlay.isSelectedRouteSection != shouldBeSelected else {
                     continue
                 }
@@ -362,6 +366,25 @@ struct TrailMapView: UIViewRepresentable {
                     renderer.setNeedsDisplay()
                 }
             }
+
+            for annotation in mapView.annotations {
+                guard let routeAnnotation = annotation as? TrailSegmentAnnotation,
+                      routeAnnotation.kind == .plannedRoute,
+                      let view = mapView.view(for: routeAnnotation) as? TrailSegmentAnnotationView else {
+                    continue
+                }
+
+                view.configure(
+                    title: routeAnnotation.title ?? "",
+                    distanceKm: routeAnnotation.distanceKm,
+                    kind: routeAnnotation.kind,
+                    isSelected: routeAnnotation.edgeID == currentSelectedRouteSectionEdgeID
+                )
+            }
+        }
+
+        private var currentSelectedRouteSectionEdgeID: String? {
+            parent.selectedPlannedSectionEdgeID ?? parent.selectedRouteDetailResolvedSectionEdgeID ?? parent.selectedRouteDetailSectionEdgeID
         }
 
         func fitMapToVisibleContent(on mapView: MKMapView) {
@@ -803,7 +826,8 @@ struct TrailMapView: UIViewRepresentable {
                     title: "\(index + 1) · \(section.formattedDistanceLabel)",
                     distanceKm: section.distanceKm,
                     trailID: section.trailID,
-                    kind: .plannedRoute
+                    kind: .plannedRoute,
+                    edgeID: section.edgeID
                 )
             }
         }
@@ -1146,7 +1170,8 @@ struct TrailMapView: UIViewRepresentable {
                 view.configure(
                     title: segmentAnnotation.title ?? "",
                     distanceKm: segmentAnnotation.distanceKm,
-                    kind: segmentAnnotation.kind
+                    kind: segmentAnnotation.kind,
+                    isSelected: segmentAnnotation.edgeID == currentSelectedRouteSectionEdgeID
                 )
                 return view
             }
@@ -1471,14 +1496,16 @@ final class TrailSegmentAnnotation: NSObject, MKAnnotation {
     let distanceKm: Double
     let trailID: String
     let kind: SegmentAnnotationKind
+    let edgeID: String?
     dynamic var coordinate: CLLocationCoordinate2D
 
-    init(coordinate: CLLocationCoordinate2D, title: String, distanceKm: Double, trailID: String, kind: SegmentAnnotationKind) {
+    init(coordinate: CLLocationCoordinate2D, title: String, distanceKm: Double, trailID: String, kind: SegmentAnnotationKind, edgeID: String? = nil) {
         self.coordinate = coordinate
         self.title = title
         self.distanceKm = distanceKm
         self.trailID = trailID
         self.kind = kind
+        self.edgeID = edgeID
     }
 
     var signatureComponent: String {
@@ -1512,16 +1539,24 @@ final class TrailSegmentAnnotationView: MKAnnotationView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(title: String, distanceKm: Double, kind: SegmentAnnotationKind) {
+    func configure(title: String, distanceKm: Double, kind: SegmentAnnotationKind, isSelected: Bool) {
         label.text = title
         switch kind {
         case .trailDetail:
             label.textColor = .label
             label.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.92)
+            label.layer.borderColor = UIColor.separator.cgColor
+            label.layer.borderWidth = 1
             displayPriority = MKFeatureDisplayPriority(rawValue: Float(min(750, 200 + distanceKm * 220)))
         case .plannedRoute:
             label.textColor = .white
-            label.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.92)
+            label.backgroundColor = isSelected
+                ? UIColor(red: 0.03, green: 0.36, blue: 0.82, alpha: 1.0)
+                : UIColor.systemBlue.withAlphaComponent(0.92)
+            label.layer.borderColor = (isSelected
+                ? UIColor(red: 0.03, green: 0.36, blue: 0.82, alpha: 1.0)
+                : UIColor(red: 0.03, green: 0.36, blue: 0.82, alpha: 1.0)).cgColor
+            label.layer.borderWidth = isSelected ? 1.5 : 1
             displayPriority = .required
         }
         label.sizeToFit()
