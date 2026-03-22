@@ -1115,8 +1115,8 @@ struct TrailMapView: UIViewRepresentable {
                     )
                 }
 
-                if let segmentView = view as? TrailSegmentAnnotationView,
-                   let segmentAnnotation = view.annotation as? TrailSegmentAnnotation {
+                     if let segmentView = view as? TrailSegmentAnnotationView,
+                         view.annotation is TrailSegmentAnnotation {
                     let shouldShowLabels = mapView.region.span.latitudeDelta <= AppConfig.trailSegmentLabelsMaxLatitudeDelta
                     segmentView.setVisibility(shouldShowLabels)
                 }
