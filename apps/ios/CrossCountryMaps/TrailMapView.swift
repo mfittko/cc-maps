@@ -11,6 +11,7 @@ struct TrailMapView: UIViewRepresentable {
     let isInPlanningMode: Bool
     let selectedTrailID: String?
     let selectedTrailSegment: TrailSegment?
+    let selectedRouteDetailSectionEdgeID: String?
     let selectedPlannedSectionEdgeID: String?
     let routeDisplaySections: [PlanningSection]
     let routePresentationRefreshID: Int
@@ -60,8 +61,8 @@ struct TrailMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.syncCurrentLocationPresentation(on: mapView)
         context.coordinator.syncAnnotations(on: mapView)
-        context.coordinator.syncOverlays(on: mapView)
         context.coordinator.syncRoutePresentation(on: mapView)
+        context.coordinator.syncOverlays(on: mapView)
         context.coordinator.syncRouteSelectionStyling(on: mapView)
 
         if context.coordinator.lastMapRegionRestoreRequestID != mapRegionRestoreRequestID,
@@ -714,11 +715,18 @@ struct TrailMapView: UIViewRepresentable {
                 guard coordinates.count >= 2 else {
                     return []
                 }
+
+                let borderOverlay = SelectedTrailOverlay(coordinates: coordinates, count: coordinates.count)
+                borderOverlay.trailID = selectedTrail.id
+                borderOverlay.groomingColor = UIColor(hex: selectedTrail.groomingColorHex)
+                borderOverlay.isOverPlannedRoute = selectedTrailOverlapsPlannedRoute
+                borderOverlay.isBorderUnderlay = true
+
                 let overlay = SelectedTrailOverlay(coordinates: coordinates, count: coordinates.count)
                 overlay.trailID = selectedTrail.id
                 overlay.groomingColor = UIColor(hex: selectedTrail.groomingColorHex)
                 overlay.isOverPlannedRoute = selectedTrailOverlapsPlannedRoute
-                return [overlay]
+                return [borderOverlay, overlay]
             }
 
             return selectedTrail.coordinateSets.compactMap { coordinates in
@@ -846,6 +854,12 @@ struct TrailMapView: UIViewRepresentable {
 
         func segmentAnnotations(for trails: [TrailFeature], shouldShowLabels: Bool) -> [TrailSegmentAnnotation] {
             guard shouldShowLabels else {
+                cachedSegmentAnnotations = []
+                lastSegmentAnnotationSignature = ""
+                return []
+            }
+
+            guard parent.selectedRouteDetailSectionEdgeID == nil else {
                 cachedSegmentAnnotations = []
                 lastSegmentAnnotationSignature = ""
                 return []
@@ -1189,13 +1203,19 @@ struct TrailMapView: UIViewRepresentable {
                 renderer.strokeColor = plannedOverlay?.isSelectedRouteSection == true
                     ? selectedRouteColor
                     : routeColor
-                renderer.lineWidth = plannedOverlay?.isSelectedRouteSection == true ? 10 : 9
+                renderer.lineWidth = plannedOverlay?.isSelectedRouteSection == true ? 6 : 7
+            } else if let selectedOverlay = overlay as? SelectedTrailOverlay, selectedOverlay.isBorderUnderlay {
+                let emphasisColor = selectedOverlay.isOverPlannedRoute
+                    ? selectedRouteColor
+                    : baseColor.withAlphaComponent(0.98)
+                renderer.strokeColor = emphasisColor.darkened(by: 0.68).withAlphaComponent(1.0)
+                renderer.lineWidth = selectedOverlay.isOverPlannedRoute ? 20 : 17
             } else if let selectedOverlay = overlay as? SelectedTrailOverlay, selectedOverlay.isOverPlannedRoute {
-                renderer.strokeColor = selectedRouteColor.withAlphaComponent(0.9)
-                renderer.lineWidth = 10
+                renderer.strokeColor = selectedRouteColor.withAlphaComponent(0.95)
+                renderer.lineWidth = 5
             } else if overlay is SelectedTrailOverlay {
                 renderer.strokeColor = baseColor.withAlphaComponent(0.98)
-                renderer.lineWidth = 8
+                renderer.lineWidth = 5
             } else if trailOverlay.isPreview || trailOverlay.isDimmed {
                 renderer.strokeColor = baseColor.withAlphaComponent(0.45)
                 renderer.lineWidth = 4
@@ -1220,6 +1240,7 @@ class TrailOverlay: MKPolyline {
 
 class SelectedTrailOverlay: TrailOverlay {
     var isOverPlannedRoute = false
+    var isBorderUnderlay = false
 }
 
 class RouteSectionOverlay: TrailOverlay {
@@ -1497,14 +1518,15 @@ final class TrailSegmentAnnotationView: MKAnnotationView {
         case .trailDetail:
             label.textColor = .label
             label.backgroundColor = UIColor.secondarySystemGroupedBackground.withAlphaComponent(0.92)
+            displayPriority = MKFeatureDisplayPriority(rawValue: Float(min(750, 200 + distanceKm * 220)))
         case .plannedRoute:
             label.textColor = .white
             label.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.92)
+            displayPriority = .required
         }
         label.sizeToFit()
         label.frame = label.bounds
         frame = label.bounds
-        displayPriority = MKFeatureDisplayPriority(rawValue: Float(min(1000, 200 + distanceKm * 280)))
     }
 
     func setVisibility(_ isVisible: Bool) {
@@ -1616,5 +1638,24 @@ private extension UIColor {
         let blue = CGFloat(value & 0xFF) / 255
 
         self.init(red: red, green: green, blue: blue, alpha: 1)
+    }
+
+    func darkened(by amount: CGFloat) -> UIColor {
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return self
+        }
+
+        let clampedAmount = min(max(amount, 0), 1)
+        return UIColor(
+            red: max(red * (1 - clampedAmount), 0),
+            green: max(green * (1 - clampedAmount), 0),
+            blue: max(blue * (1 - clampedAmount), 0),
+            alpha: alpha
+        )
     }
 }

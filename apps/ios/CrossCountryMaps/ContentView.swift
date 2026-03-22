@@ -28,6 +28,7 @@ struct ContentView: View {
                         isInPlanningMode: viewModel.isInPlanningMode,
                         selectedTrailID: viewModel.selectedTrailID,
                         selectedTrailSegment: viewModel.selectedTrailSegment,
+                        selectedRouteDetailSectionEdgeID: viewModel.selectedRouteDetailSectionEdgeID,
                         selectedPlannedSectionEdgeID: viewModel.selectedPlannedSectionEdgeID,
                         routeDisplaySections: viewModel.routeDisplaySections,
                         routePresentationRefreshID: viewModel.routePresentationRefreshID,
