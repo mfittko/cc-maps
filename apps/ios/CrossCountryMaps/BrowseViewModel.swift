@@ -1004,10 +1004,6 @@ final class BrowseViewModel: ObservableObject {
         selectDestination(id: routePlan.destinationId, manual: true)
     }
 
-    func enableAutoLocation() {
-        setLocationFollowMode(.follow, forceSelectionRefresh: true)
-    }
-
     func toggleLocationFollow() {
         switch locationFollowMode {
         case .off:

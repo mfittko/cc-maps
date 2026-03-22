@@ -571,7 +571,7 @@ final class BrowseContractTests: XCTestCase {
         XCTAssertTrue(viewModel.canEnableAutoLocation)
         let locationFocusRequestIDBefore = viewModel.locationFocusRequestID
 
-        viewModel.enableAutoLocation()
+        viewModel.toggleLocationFollow()
 
         XCTAssertFalse(viewModel.isManualDestinationSelection)
         XCTAssertEqual(locationService.requestCurrentLocationCallCount, 1)
@@ -626,7 +626,7 @@ final class BrowseContractTests: XCTestCase {
         XCTAssertTrue(viewModel.canEnableAutoLocation)
         let fitRequestCountBeforeAutoLocation = viewModel.fitRequestID
 
-        viewModel.enableAutoLocation()
+        viewModel.toggleLocationFollow()
 
         await waitUntil {
             !viewModel.isManualDestinationSelection && viewModel.selectedDestinationID == "1"
@@ -711,7 +711,7 @@ final class BrowseContractTests: XCTestCase {
             viewModel.currentLocation?.latitude == 59.9139
         }
 
-        viewModel.enableAutoLocation()
+        viewModel.toggleLocationFollow()
 
         try await Task.sleep(nanoseconds: 50_000_000)
 
@@ -764,7 +764,7 @@ final class BrowseContractTests: XCTestCase {
             viewModel.primaryTrails.map(\.id) == ["202"]
         }
 
-        viewModel.enableAutoLocation()
+        viewModel.toggleLocationFollow()
 
         await waitUntil {
             !viewModel.isManualDestinationSelection && viewModel.selectedDestinationID == "1"
