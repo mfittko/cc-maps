@@ -960,7 +960,7 @@ struct TrailMapView: UIViewRepresentable {
                     continue
                 }
 
-                guard segmentAnnotation.kind == .trailDetail else {
+                guard segmentAnnotation.kind == .trailDetail || segmentAnnotation.kind == .plannedRoute else {
                     continue
                 }
 
@@ -1118,10 +1118,7 @@ struct TrailMapView: UIViewRepresentable {
                 if let segmentView = view as? TrailSegmentAnnotationView,
                    let segmentAnnotation = view.annotation as? TrailSegmentAnnotation {
                     let shouldShowLabels = mapView.region.span.latitudeDelta <= AppConfig.trailSegmentLabelsMaxLatitudeDelta
-                    let isVisible = segmentAnnotation.kind == .plannedRoute
-                        ? !isRouteDirectionRotationActive
-                        : shouldShowLabels
-                    segmentView.setVisibility(isVisible)
+                    segmentView.setVisibility(shouldShowLabels)
                 }
             }
         }
